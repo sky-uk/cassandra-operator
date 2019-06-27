@@ -1,0 +1,27 @@
+apiVersion: core.sky.uk/v1alpha1
+kind: Cassandra
+metadata:
+  name: small-cluster
+  namespace: $TARGET_NAMESPACE
+spec:
+  pod:
+    image: "cassandra:3.11"
+    cpu: "1"
+    memory: 1Gi
+    storageSize: 1Gi
+    bootstrapperImage: $CASSANDRA_BOOTSTRAPPER_IMAGE
+    sidecar: $CASSANDRA_SIDECAR_IMAGE
+  racks:
+    - name: a
+      replicas: 2
+      storageClass: standard-zone-a
+      zone: eu-west-1a
+    - name: b
+      replicas: 2
+      storageClass: standard-zone-b
+      zone: eu-west-1b
+#      TODO requires more nodes when running in dind
+#    - name: c
+#      replicas: 2
+#      storageClass: standard-zone-c
+#      zone: eu-west-1c

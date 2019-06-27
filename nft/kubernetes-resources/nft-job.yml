@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nft
+  namespace: $TARGET_NAMESPACE
+spec:
+  completions: 1
+  parallelism: 1
+  template:
+    spec:
+#      TODO requires more nodes when running in dind
+#      affinity:
+#        podAntiAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#          - labelSelector:
+#              matchExpressions:
+#              - key: sky.uk/cassandra-operator
+#                operator: Exists
+#            topologyKey: kubernetes.io/hostname
+      activeDeadlineSeconds: $ACTIVE_DEADLINE_SECONDS
+      containers:
+      - name: nft
+        image: $NFT_IMAGE
+        imagePullPolicy: Always
+        resources:
+          limits:
+            memory: 4Gi
+          requests:
+            cpu: 0
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: CONTACT_POINTS
+          value: $CONTACT_POINTS
+        - name: TEST_SEGMENT_DURATION
+          value: 1m
+        - name: SLEEP_TIME_SECONDS_BETWEEN_PROFILE
+          value: "30"
+      restartPolicy: Never

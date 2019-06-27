@@ -1,0 +1,72 @@
+keyspace: stress
+
+keyspace_definition: |
+  CREATE KEYSPACE stress WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': '3'}  AND durable_writes = true;
+
+table: mydevice
+
+table_definition: |
+  CREATE TABLE mydevice (
+    userid text,
+    areaid text,
+    deviceid text,
+    createddate timestamp,
+    details text,
+    devicetype text,
+    lastmodifieddate timestamp,
+    lastuseddate timestamp,
+    model text,
+    otherdetails text,
+    name text,
+    platform text,
+    PRIMARY KEY (userid, areaid, deviceid)
+  )
+
+
+columnspec:
+  - name: userid
+    size: gaussian(10..20)
+    population: uniform(1..1000000)
+
+  - name: areaid
+    cluster: uniform(1..2)
+    size: fixed(10)
+
+  - name: deviceid
+    cluster: gaussian(1..4)
+    size: uniform(10..150)
+
+  - name: details
+    size: fixed(1)
+
+  - name: devicetype
+    size: uniform(5..15)
+
+  - name: otherdetails
+    size: fixed(40)
+
+  - name: name
+    size: uniform(15..20)
+
+  - name: platform
+    size: uniform(3..8)
+
+
+insert:
+  partitions: fixed(1)
+
+  select:    uniform(1..2)/2
+
+  batchtype: UNLOGGED
+
+#
+# A list of queries you wish to run against the schema
+#
+queries:
+   alldevices:
+      cql: select * from mydevice where userid=? AND areaid=?;
+      fields: samerow
+
+   singledevice:
+      cql: select * from mydevice where userid=? AND areaid=? AND deviceid=?;
+      fields: samerow
