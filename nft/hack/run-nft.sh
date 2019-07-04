@@ -61,6 +61,33 @@ function waitForJobToComplete {
     echo "Job ${job} is complete"
 }
 
+function waitForDeployment {
+    local count=0
+    local sleepBetweenRetries=2
+    local maxRetry=150 # 5mins max, as corresponds to: maxRetry * sleepBetweenRetries
+    local context=$1
+    local namespace=$2
+    local deployment=$3
+
+    local desiredReplicas=1
+    local updatedReplicas=""
+    local readyReplicas=""
+    until ([[ "$desiredReplicas" = "$updatedReplicas" ]] && [[ "$desiredReplicas" = "$readyReplicas" ]]) || (( "$count" >= "$maxRetry" )); do
+        count=$((count+1))
+        echo "Waiting for ${namespace}.${deployment} to have ${desiredReplicas} updated replicas. Attempt: $count"
+        readyReplicas=$(kubectl --context ${context} -n ${namespace} get deployment ${deployment} -o go-template="{{.status.readyReplicas}}")
+        updatedReplicas=$(kubectl --context ${context} -n ${namespace} get deployment ${deployment} -o go-template="{{.status.updatedReplicas}}")
+
+        sleep ${sleepBetweenRetries}
+    done
+
+    if [[ "$desiredReplicas" != "$updatedReplicas" ]] || [[ "$desiredReplicas" != "$readyReplicas" ]]; then
+        echo "Deployment failed to become ready after ${maxRetry} retries"
+        exit 1
+    fi
+    echo "Deployment is ready"
+}
+
 function createCluster {
     local context=$1
     local namespace=$2
@@ -109,6 +136,24 @@ function runLoadTest {
     waitForJobToComplete ${context} ${namespace} nft
 }
 
+function deployPrometheus {
+    local context=$1
+    local namespace=$2
+    # TODO this would only work locally
+    local externalUrl="http://127.0.0.1:32768/api/v1/namespaces/$namespace/services/prometheus:http/proxy"
+    local tmpDir=$(mktemp -d)
+    trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
+
+    echo "Deploying prometheus"
+
+    k8Resource="prometheus.yml"
+    sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \
+        -e "s@\$PROMETHEUS_EXTERNAL_URL@$externalUrl@g" \
+        ${resourcesDir}/${k8Resource} > ${tmpDir}/${k8Resource}
+    kubectl --context ${context} -n ${namespace} apply -f ${tmpDir}/${k8Resource}
+
+    waitForDeployment ${context} ${namespace} prometheus
+}
 
 usage="Usage: CONTEXT=<context> NAMESPACE=<namespace> CASSANDRA_BOOTSTRAPPER_IMAGE=<boostrapperImage> CASSANDRA_SIDECAR_IMAGE=<sidecarImage> NFT_IMAGE=<nftImage> $0"
 : ${CASSANDRA_BOOTSTRAPPER_IMAGE?${usage}}
@@ -119,9 +164,12 @@ usage="Usage: CONTEXT=<context> NAMESPACE=<namespace> CASSANDRA_BOOTSTRAPPER_IMA
 
 
 echo "Creating the cluster"
-createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
+#createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
 
 echo "Running the load test"
-runLoadTest ${CONTEXT} ${NAMESPACE} ${NFT_IMAGE} small-cluster
+deployPrometheus ${CONTEXT} ${NAMESPACE}
+
+echo "Running the load test"
+#runLoadTest ${CONTEXT} ${NAMESPACE} ${NFT_IMAGE} small-cluster
 
 echo "NFT complete"

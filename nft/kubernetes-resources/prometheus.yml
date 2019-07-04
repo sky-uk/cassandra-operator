@@ -1,0 +1,167 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus
+  namespace: $TARGET_NAMESPACE
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      deployment: prometheus
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        deployment: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - args:
+            - "--config.file=/etc/prometheus/prometheus-nft.yml"
+            - "--web.external-url=$PROMETHEUS_EXTERNAL_URL"
+            - "--web.route-prefix=/"
+            - "--storage.tsdb.retention=15d"
+          env:
+            - name: GODEBUG
+              value: gctrace=1
+          image: prom/prometheus:v2.10.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /-/healthy
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          name: prometheus
+          ports:
+            - containerPort: 9090
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /-/ready
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: "0"
+              memory: 2Gi
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - mountPath: /prometheus
+              name: prometheus-storage
+            - mountPath: /etc/prometheus/
+              name: prometheus-config
+      volumes:
+        - name: prometheus-storage
+          emptyDir: {}
+        - name: prometheus-config
+          configMap:
+              name: prometheus-config
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: prometheus
+  namespace: $TARGET_NAMESPACE
+spec:
+  ports:
+  - name: http
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    app: prometheus
+  sessionAffinity: None
+  type: NodePort
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: $TARGET_NAMESPACE
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: prometheus-config
+  namespace: $TARGET_NAMESPACE
+data:
+  prometheus-nft.yml: |
+    global:
+      # Attach these labels to any time series or alerts when communicating with
+      # external systems (federation, remote storage, Alertmanager).
+      external_labels:
+        monitor: 'prometheus'
+
+    scrape_configs:
+    #- job_name: 'cassandra-operator'
+    #  scrape_interval: 10s
+    #  static_configs:
+    #    - targets: ['$TARGET_NAMESPACE.cassandra-operator.$DOMAIN']
+
+    - job_name: 'cassandra'
+      scrape_interval: 10s
+      honor_labels: true
+      metrics_path: '/metrics'
+      kubernetes_sd_configs:
+       - role: pod
+         namespaces:
+           names: ['$TARGET_NAMESPACE']
+      relabel_configs:
+       - source_labels: [__meta_kubernetes_pod_label_sky_uk_cassandra_operator]
+         regex: .+
+         action: keep
+       - source_labels: [__meta_kubernetes_pod_label_sky_uk_cassandra_operator]
+         action: replace
+         target_label: cassandra_cluster
+       - source_labels: [__address__]
+         regex: (.*):\d+
+         replacement: ${1}:7070
+         target_label: __address__
+       - source_labels: [__meta_kubernetes_namespace]
+         action: replace
+         target_label: namespace
+       - source_labels: [__meta_kubernetes_pod_name]
+         action: replace
+         target_label: pod
+       - source_labels: [__address__]
+         target_label: environment
+         regex: .*
+         replacement: dev
+         action: replace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cassandra-operator
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: $TARGET_NAMESPACE
