@@ -23,9 +23,10 @@ spec:
       containers:
         - args:
             - "--config.file=/etc/prometheus/prometheus-nft.yml"
-            - "--web.external-url=$PROMETHEUS_EXTERNAL_URL"
-            - "--web.route-prefix=/"
             - "--storage.tsdb.retention=15d"
+# allows local access when running in a DinD cluster
+            - "--web.external-url=http://127.0.0.1:32768/api/v1/namespaces/$TARGET_NAMESPACE/services/prometheus:http/proxy"
+            - "--web.route-prefix=/"
           env:
             - name: GODEBUG
               value: gctrace=1
@@ -85,8 +86,7 @@ spec:
     targetPort: 9090
   selector:
     app: prometheus
-  sessionAffinity: None
-  type: NodePort
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: ServiceAccount

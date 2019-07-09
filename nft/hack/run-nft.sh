@@ -136,23 +136,24 @@ function runLoadTest {
     waitForJobToComplete ${context} ${namespace} nft
 }
 
-function deployPrometheus {
+function deployMonitoring {
     local context=$1
     local namespace=$2
-    # TODO this would only work locally
-    local externalUrl="http://127.0.0.1:32768/api/v1/namespaces/$namespace/services/prometheus:http/proxy"
+    local prometheusUrl="http://prometheus.$namespace:9090"
     local tmpDir=$(mktemp -d)
     trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 
-    echo "Deploying prometheus"
-
-    k8Resource="prometheus.yml"
-    sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \
-        -e "s@\$PROMETHEUS_EXTERNAL_URL@$externalUrl@g" \
-        ${resourcesDir}/${k8Resource} > ${tmpDir}/${k8Resource}
+    k8Resources="prometheus.yml grafana.yml"
+    for k8Resource in ${k8Resources}
+    do
+      sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \
+          -e "s@\$PROMETHEUS_INTERNAL_URL@$prometheusUrl@g" \
+          ${resourcesDir}/${k8Resource} > ${tmpDir}/${k8Resource}
     kubectl --context ${context} -n ${namespace} apply -f ${tmpDir}/${k8Resource}
+    done
 
     waitForDeployment ${context} ${namespace} prometheus
+    waitForDeployment ${context} ${namespace} grafana
 }
 
 usage="Usage: CONTEXT=<context> NAMESPACE=<namespace> CASSANDRA_BOOTSTRAPPER_IMAGE=<boostrapperImage> CASSANDRA_SIDECAR_IMAGE=<sidecarImage> NFT_IMAGE=<nftImage> $0"
@@ -162,12 +163,11 @@ usage="Usage: CONTEXT=<context> NAMESPACE=<namespace> CASSANDRA_BOOTSTRAPPER_IMA
 : ${CONTEXT?${usage}}
 : ${NAMESPACE?${usage}}
 
+echo "Deploy monitoring tools"
+deployMonitoring ${CONTEXT} ${NAMESPACE}
 
 echo "Creating the cluster"
-#createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
-
-echo "Running the load test"
-deployPrometheus ${CONTEXT} ${NAMESPACE}
+createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
 
 echo "Running the load test"
 #runLoadTest ${CONTEXT} ${NAMESPACE} ${NFT_IMAGE} small-cluster
