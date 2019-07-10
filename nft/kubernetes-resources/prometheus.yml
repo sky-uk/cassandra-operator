@@ -102,6 +102,8 @@ metadata:
 data:
   prometheus-nft.yml: |
     global:
+      scrape_interval: 10s
+
       # Attach these labels to any time series or alerts when communicating with
       # external systems (federation, remote storage, Alertmanager).
       external_labels:
@@ -109,7 +111,6 @@ data:
 
     scrape_configs:
     - job_name: 'cassandra-operator'
-      scrape_interval: 10s
       kubernetes_sd_configs:
        - role: service
          namespaces:
@@ -120,7 +121,6 @@ data:
         regex: "cassandra-operator"
 
     - job_name: 'node-exporter'
-      scrape_interval: 10s
       kubernetes_sd_configs:
        - role: pod
          namespaces:
@@ -131,7 +131,6 @@ data:
         regex: "node-exporter|kube-rbac-proxy"
 
     - job_name: 'kube-state-metrics'
-      scrape_interval: 10s
       honor_labels: true
       kubernetes_sd_configs:
        - role: service
@@ -146,7 +145,6 @@ data:
         regex: "http-metrics"
 
     - job_name: 'cassandra'
-      scrape_interval: 10s
       honor_labels: true
       kubernetes_sd_configs:
        - role: pod
