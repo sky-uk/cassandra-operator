@@ -143,7 +143,7 @@ function deployMonitoring {
     local tmpDir=$(mktemp -d)
     trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 
-    k8Resources="prometheus.yml grafana.yml kube-state-metrics.yml"
+    k8Resources="prometheus.yml grafana.yml kube-state-metrics.yml node-exporter.yml"
     for k8Resource in ${k8Resources}
     do
       sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \
@@ -154,6 +154,7 @@ function deployMonitoring {
 
     waitForDeployment ${context} ${namespace} prometheus
     waitForDeployment ${context} ${namespace} grafana
+    waitForDeployment ${context} ${namespace} kube-state-metrics
 }
 
 usage="Usage: CONTEXT=<context> NAMESPACE=<namespace> CASSANDRA_BOOTSTRAPPER_IMAGE=<boostrapperImage> CASSANDRA_SIDECAR_IMAGE=<sidecarImage> NFT_IMAGE=<nftImage> $0"
@@ -167,7 +168,7 @@ echo "Deploy monitoring tools"
 deployMonitoring ${CONTEXT} ${NAMESPACE}
 
 echo "Creating the cluster"
-createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
+#createCluster ${CONTEXT} ${NAMESPACE} ${CASSANDRA_BOOTSTRAPPER_IMAGE} ${CASSANDRA_SIDECAR_IMAGE} small-cluster
 
 echo "Running the load test"
 #runLoadTest ${CONTEXT} ${NAMESPACE} ${NFT_IMAGE} small-cluster

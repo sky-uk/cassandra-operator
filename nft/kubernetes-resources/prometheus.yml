@@ -119,10 +119,20 @@ data:
         action: keep
         regex: "cassandra-operator"
 
+    - job_name: 'node-exporter'
+      scrape_interval: 10s
+      kubernetes_sd_configs:
+       - role: pod
+         namespaces:
+           names: ['$TARGET_NAMESPACE']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: keep
+        regex: "node-exporter|kube-rbac-proxy"
+
     - job_name: 'kube-state-metrics'
       scrape_interval: 10s
       honor_labels: true
-      metrics_path: '/metrics'
       kubernetes_sd_configs:
        - role: service
          namespaces:
@@ -138,7 +148,6 @@ data:
     - job_name: 'cassandra'
       scrape_interval: 10s
       honor_labels: true
-      metrics_path: '/metrics'
       kubernetes_sd_configs:
        - role: pod
          namespaces:
