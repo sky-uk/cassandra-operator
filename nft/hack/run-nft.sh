@@ -143,7 +143,7 @@ function deployMonitoring {
     local tmpDir=$(mktemp -d)
     trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 
-    k8Resources="prometheus.yml grafana.yml"
+    k8Resources="prometheus.yml grafana.yml kube-state-metrics.yml"
     for k8Resource in ${k8Resources}
     do
       sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \

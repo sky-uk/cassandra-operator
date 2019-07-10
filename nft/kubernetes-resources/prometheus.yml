@@ -108,10 +108,32 @@ data:
         monitor: 'prometheus'
 
     scrape_configs:
-    #- job_name: 'cassandra-operator'
-    #  scrape_interval: 10s
-    #  static_configs:
-    #    - targets: ['$TARGET_NAMESPACE.cassandra-operator.$DOMAIN']
+    - job_name: 'cassandra-operator'
+      scrape_interval: 10s
+      kubernetes_sd_configs:
+       - role: service
+         namespaces:
+           names: ['$TARGET_NAMESPACE']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: "cassandra-operator"
+
+    - job_name: 'kube-state-metrics'
+      scrape_interval: 10s
+      honor_labels: true
+      metrics_path: '/metrics'
+      kubernetes_sd_configs:
+       - role: service
+         namespaces:
+           names: ['$TARGET_NAMESPACE']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: "kube-state-metrics"
+      - source_labels: [__meta_kubernetes_service_port_name]
+        action: keep
+        regex: "http-metrics"
 
     - job_name: 'cassandra'
       scrape_interval: 10s
