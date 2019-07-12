@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
@@ -45,6 +46,7 @@ type Operator struct {
 	metricsPoller      *metrics.PrometheusMetrics
 	config             *Config
 	eventDispatcher    dispatcher.Dispatcher
+	eventRecorder      record.EventRecorder
 	stopCh             chan struct{}
 }
 
@@ -80,6 +82,7 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 		config:             operatorConfig,
 		clusters:           clusters,
 		eventDispatcher:    dispatcher.New(receiver.Receive, stopCh),
+		eventRecorder:      eventRecorder,
 		stopCh:             stopCh,
 		metricsPoller:      metricsPoller,
 	}
@@ -191,6 +194,7 @@ func (o *Operator) clusterAdded(obj interface{}) {
 	err = validation.ValidateCassandra(clusterDefinition).ToAggregate()
 	if err != nil {
 		logger.WithError(err).Error("validation error")
+		o.eventRecorder.Event(clusterDefinition, v1.EventTypeWarning, cluster.InvalidClusterEvent, err.Error())
 		return
 	}
 	o.eventDispatcher.Dispatch(&dispatcher.Event{Kind: operations.AddCluster, Key: clusterID, Data: clusterDefinition})
@@ -270,9 +274,10 @@ func (o *Operator) clusterUpdated(old interface{}, new interface{}) {
 	v1alpha1helpers.SetDefaultsForCassandra(newCluster)
 	o.adjustUseEmptyDir(newCluster)
 
-	err = validation.ValidateCassandra(newCluster).ToAggregate()
+	err = validation.ValidateCassandraUpdate(oldCluster, newCluster).ToAggregate()
 	if err != nil {
-		logger.WithError(err).Error("validation error (new)")
+		logger.WithError(err).Error("validation error")
+		o.eventRecorder.Event(oldCluster, v1.EventTypeWarning, cluster.InvalidChangeEvent, err.Error())
 		return
 	}
 

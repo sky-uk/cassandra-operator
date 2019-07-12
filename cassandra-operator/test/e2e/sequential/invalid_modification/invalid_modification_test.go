@@ -1,17 +1,18 @@
 package modification
 
 import (
-	"fmt"
+	"testing"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	coreV1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/watch"
+
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
-	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/watch"
-	"testing"
-	"time"
 )
 
 var (
@@ -70,7 +71,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
-			Message:              fmt.Sprintf("Change type 'scale down rack' isn't supported for cluster %s.%s", Namespace, multipleNodeCluster.Name),
+			Message:              "spec.Racks.a.Replicas: Forbidden: This field can not be decremented",
 			LastTimestampCloseTo: &modificationTime,
 		}))
 
@@ -92,7 +93,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
-			Message:              "changing image is forbidden",
+			Message:              "spec.Pod.Image: Forbidden: This field can not be changed",
 			LastTimestampCloseTo: &modificationTime,
 		}))
 		By("not restarting any pods")
@@ -108,10 +109,9 @@ var _ = Context("forbidden cluster modifications", func() {
 		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
-			Message:              fmt.Sprintf("Change type 'delete rack' isn't supported for cluster %s.%s", Namespace, multipleNodeCluster.Name),
+			Message:              "spec.Racks: Forbidden: Rack deletion is not supported",
 			LastTimestampCloseTo: &modificationTime,
 		}))
 
 	})
-
 })

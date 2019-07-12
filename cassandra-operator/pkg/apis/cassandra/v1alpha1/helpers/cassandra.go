@@ -160,3 +160,33 @@ func defaultLivenessProbe() v1alpha1.Probe {
 		TimeoutSeconds:      ptr.Int32(5),
 	}
 }
+
+type MatchedRack struct {
+	Old v1alpha1.Rack
+	New v1alpha1.Rack
+}
+
+func MatchRacks(oldCluster, newCluster *v1alpha1.CassandraSpec) (addedRacks []v1alpha1.Rack, matchedRacks []MatchedRack, removedRacks []v1alpha1.Rack) {
+	for _, oldRack := range oldCluster.Racks {
+		if foundRack, ok := findRack(oldRack, newCluster.Racks); ok {
+			matchedRacks = append(matchedRacks, MatchedRack{Old: oldRack, New: *foundRack})
+		} else {
+			removedRacks = append(removedRacks, oldRack)
+		}
+	}
+	for _, newClusterRack := range newCluster.Racks {
+		if _, ok := findRack(newClusterRack, oldCluster.Racks); !ok {
+			addedRacks = append(addedRacks, newClusterRack)
+		}
+	}
+	return addedRacks, matchedRacks, removedRacks
+}
+
+func findRack(rackToFind v1alpha1.Rack, racks []v1alpha1.Rack) (*v1alpha1.Rack, bool) {
+	for _, rack := range racks {
+		if rack.Name == rackToFind.Name {
+			return &rack, true
+		}
+	}
+	return nil, false
+}

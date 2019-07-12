@@ -322,6 +322,224 @@ var _ = Describe("ValidateCassandra", func() {
 	)
 })
 
+var _ = Describe("ValidateCassandraUpdate", func() {
+	DescribeTable(
+		"allowed changes",
+		func(mutate func(*v1alpha1.Cassandra)) {
+			c1 := aValidCassandra()
+			c2 := c1.DeepCopy()
+			mutate(c2)
+			err := validation.ValidateCassandraUpdate(c1, c2).ToAggregate()
+			Expect(err).ToNot(HaveOccurred())
+		},
+		Entry(
+			"No changes",
+			func(c *v1alpha1.Cassandra) {},
+		),
+		Entry(
+			"Rack Added",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks = append(
+					c.Spec.Racks,
+					v1alpha1.Rack{
+						Zone:         "zone3",
+						StorageClass: "fast",
+						Replicas:     2,
+					},
+				)
+			},
+		),
+		Entry(
+			"Rack scale out",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Replicas += 1
+			},
+		),
+		Entry(
+			"Pod BootstrapperImage changed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.BootstrapperImage = ptr.String("foo/bar:baz")
+			},
+		),
+		Entry(
+			"Pod SidecarImage changed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.SidecarImage = ptr.String("foo/bar:baz")
+			},
+		),
+		Entry(
+			"Pod Memory Increased",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Memory.Add(resource.MustParse("1Mi"))
+			},
+		),
+		Entry(
+			"Pod Memory Decreased",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Memory.Sub(resource.MustParse("1Mi"))
+			},
+		),
+		Entry(
+			"Pod CPU Increased",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.CPU.Add(resource.MustParse("1m"))
+			},
+		),
+		Entry(
+			"Pod CPU Decreased",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.CPU.Sub(resource.MustParse("1m"))
+			},
+		),
+		Entry(
+			"Pod LivenessProbe Changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Pod.LivenessProbe.PeriodSeconds += 1
+			},
+		),
+		Entry(
+			"Pod ReadinessProbe Changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Pod.ReadinessProbe.PeriodSeconds += 1
+			},
+		),
+		Entry(
+			"Snapshot Image Changed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Image = ptr.String("foo/bar:baz")
+			},
+		),
+		Entry(
+			"Snapshot Schedule Changed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Schedule = "* * * * *"
+			},
+		),
+		Entry(
+			"Snapshot Keyspace added",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Keyspaces = append(
+					c.Spec.Snapshot.Keyspaces,
+					"another-keyspace",
+				)
+			},
+		),
+		Entry(
+			"Snapshot Keyspace removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Keyspaces = c.Spec.Snapshot.Keyspaces[:1]
+			},
+		),
+		Entry(
+			"Snapshot TimeoutSeconds changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Snapshot.TimeoutSeconds += 1
+			},
+		),
+		Entry(
+			"RetentionPolicy Enabled changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Snapshot.RetentionPolicy.Enabled = !*c.Spec.Snapshot.RetentionPolicy.Enabled
+			},
+		),
+		Entry(
+			"RetentionPolicy PeriodDays changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays += 1
+			},
+		),
+		Entry(
+			"RetentionPolicy CleanupSchedule changed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.CleanupSchedule = "* * * * *"
+			},
+		),
+		Entry(
+			"RetentionPolicy CleanupTimeoutSeconds changed",
+			func(c *v1alpha1.Cassandra) {
+				*c.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds += 1
+			},
+		),
+	)
+	DescribeTable(
+		"forbidden changes",
+		func(expectedMessage string, mutate func(*v1alpha1.Cassandra)) {
+			c1 := aValidCassandra()
+			c2 := c1.DeepCopy()
+			mutate(c2)
+			errors := validation.ValidateCassandraUpdate(c1, c2)
+			err := errors.ToAggregate()
+			Expect(err).To(HaveOccurred())
+			fmt.Fprintf(GinkgoWriter, "INFO: Error message was: %q\n", err)
+			Expect(err.Error()).To(ContainSubstring(expectedMessage))
+		},
+		Entry(
+			"Invalid new cluster",
+			"spec.Racks: Required value",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks = []v1alpha1.Rack{}
+			},
+		),
+		Entry(
+			"Datacenter",
+			"spec.Datacenter: Forbidden: This field can not be changed: current: \"dc1\", new: \"a-different-datacenter\"",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Datacenter = ptr.String("a-different-datacenter")
+			},
+		),
+		Entry(
+			"Pod.Image",
+			"spec.Pod.Image: Forbidden: This field can not be changed: current: \"cassandra:3.11.4\", new: \"a-different/image:1.2.3\"",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Image = ptr.String("a-different/image:1.2.3")
+			},
+		),
+		Entry(
+			"Pod.StorageSize",
+			"spec.Pod.StorageSize: Forbidden: This field can not be changed: current: 100Gi, new: 101Gi",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.StorageSize.Add(resource.MustParse("1Gi"))
+			},
+		),
+		Entry(
+			"UseEmptyDir",
+			"spec.UseEmptyDir: Forbidden: This field can not be changed: current: false, new: true",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.UseEmptyDir = ptr.Bool(true)
+				c.Spec.Pod.StorageSize.Set(0)
+			},
+		),
+		Entry(
+			"Rack deletion",
+			"spec.Racks: Forbidden: Rack deletion is not supported. Missing Racks: rack2",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks = c.Spec.Racks[:1]
+			},
+		),
+		Entry(
+			"Rack.StorageClass",
+			"spec.Racks.rack1.StorageClass: Forbidden: This field can not be changed: current: fast, new: new-storageclass",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].StorageClass = "new-storageclass"
+			},
+		),
+		Entry(
+			"Rack.Zone",
+			"spec.Racks.rack1.Zone: Forbidden: This field can not be changed: current: zone1, new: new-zone",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Zone = "new-zone"
+			},
+		),
+		Entry(
+			"Rack.Replicas decrease (scale-in)",
+			"spec.Racks.rack1.Replicas: Forbidden: This field can not be decremented (scale-in is not yet supported): current: 2, new: 1",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Replicas -= 1
+			},
+		),
+	)
+})
+
 func aValidCassandra() *v1alpha1.Cassandra {
 	return &v1alpha1.Cassandra{
 		ObjectMeta: metav1.ObjectMeta{
@@ -329,16 +547,24 @@ func aValidCassandra() *v1alpha1.Cassandra {
 			Namespace: "ns1",
 		},
 		Spec: v1alpha1.CassandraSpec{
+			Datacenter:  ptr.String("dc1"),
 			UseEmptyDir: ptr.Bool(false),
 			Racks: []v1alpha1.Rack{
 				{
 					Name:         "rack1",
 					Zone:         "zone1",
 					StorageClass: "fast",
-					Replicas:     1,
+					Replicas:     2,
+				},
+				{
+					Name:         "rack2",
+					Zone:         "zone2",
+					StorageClass: "fast",
+					Replicas:     2,
 				},
 			},
 			Pod: v1alpha1.Pod{
+				Image:       ptr.String("cassandra:3.11.4"),
 				CPU:         resource.MustParse("0"),
 				Memory:      resource.MustParse("1Gi"),
 				StorageSize: resource.MustParse("100Gi"),
@@ -359,8 +585,10 @@ func aValidCassandra() *v1alpha1.Cassandra {
 			},
 			Snapshot: &v1alpha1.Snapshot{
 				Schedule:       "1 23 * * *",
+				Keyspaces:      []string{"keyspace1", "keyspace2"},
 				TimeoutSeconds: ptr.Int32(1),
 				RetentionPolicy: &v1alpha1.RetentionPolicy{
+					Enabled:               ptr.Bool(true),
 					RetentionPeriodDays:   ptr.Int32(1),
 					CleanupTimeoutSeconds: ptr.Int32(0),
 					CleanupSchedule:       "1 23 * * *",

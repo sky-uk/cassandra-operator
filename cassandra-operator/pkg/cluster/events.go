@@ -1,7 +1,7 @@
 package cluster
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedV1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -9,6 +9,8 @@ import (
 )
 
 const (
+	// InvalidClusterEvent describes an event for an invalid cluster
+	InvalidClusterEvent = "InvalidCluster"
 	// InvalidChangeEvent describes an event for an invalid change
 	InvalidChangeEvent = "InvalidChange"
 	// ClusterUpdateEvent describes an event for a cluster update

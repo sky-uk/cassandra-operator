@@ -2,11 +2,14 @@ package validation
 
 import (
 	"fmt"
-
-	"k8s.io/apimachinery/pkg/util/validation/field"
+	"strings"
 
 	"github.com/robfig/cron"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 )
 
 // ValidateCassandra checks that all required fields are supplied and that they have valid values
@@ -212,5 +215,157 @@ func validateSnapshotRetentionPolicy(c *v1alpha1.Cassandra, fldPath *field.Path)
 			),
 		)
 	}
+	return allErrs
+}
+
+// ValidateCassandraUpdate checks that only supported changes have been made to a Cassandra resource.
+// Calls ValidateCassandra to perform structural validation of the new Cassandra object first,
+// to ensure that all fields are have compatible values.
+func ValidateCassandraUpdate(old, new *v1alpha1.Cassandra) field.ErrorList {
+	allErrs := ValidateCassandra(new)
+	if err := allErrs.ToAggregate(); err != nil {
+		return allErrs
+	}
+	fldPath := field.NewPath("spec")
+
+	if *old.Spec.Datacenter != *new.Spec.Datacenter {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("Datacenter"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %q, new: %q",
+					*old.Spec.Datacenter,
+					*new.Spec.Datacenter,
+				),
+			),
+		)
+	}
+	if *old.Spec.UseEmptyDir != *new.Spec.UseEmptyDir {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("UseEmptyDir"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %v, new: %v",
+					*old.Spec.UseEmptyDir,
+					*new.Spec.UseEmptyDir,
+				),
+			),
+		)
+	}
+
+	allErrs = append(
+		allErrs,
+		validatePodUpdate(fldPath.Child("Pod"), &old.Spec.Pod, &new.Spec.Pod)...,
+	)
+
+	_, matchedRacks, removedRacks := v1alpha1helpers.MatchRacks(&old.Spec, &new.Spec)
+
+	removedRackNames := sets.NewString()
+	for _, r := range removedRacks {
+		removedRackNames.Insert(r.Name)
+	}
+	if removedRackNames.Len() > 0 {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("Racks"),
+				fmt.Sprintf(
+					"Rack deletion is not supported. Missing Racks: %s",
+					strings.Join(removedRackNames.List(), ", "),
+				),
+			),
+		)
+	}
+
+	for _, matchedRack := range matchedRacks {
+		allErrs = append(
+			allErrs,
+			validateRackUpdate(
+				fldPath.Child("Racks", matchedRack.Old.Name),
+				&matchedRack.Old,
+				&matchedRack.New,
+			)...,
+		)
+	}
+
+	return allErrs
+}
+
+func validatePodUpdate(fldPath *field.Path, old, new *v1alpha1.Pod) field.ErrorList {
+	var allErrs field.ErrorList
+	if *old.Image != *new.Image {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("Image"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %q, new: %q",
+					*old.Image,
+					*new.Image,
+				),
+			),
+		)
+	}
+	if diff := old.StorageSize.Cmp(new.StorageSize); diff != 0 {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("StorageSize"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %s, new: %s",
+					old.StorageSize.String(),
+					new.StorageSize.String(),
+				),
+			),
+		)
+	}
+	return allErrs
+}
+
+func validateRackUpdate(fldPath *field.Path, old, new *v1alpha1.Rack) field.ErrorList {
+	var allErrs field.ErrorList
+	if new.StorageClass != old.StorageClass {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("StorageClass"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %v, new: %v",
+					old.StorageClass,
+					new.StorageClass,
+				),
+			),
+		)
+	}
+	if new.Zone != old.Zone {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("Zone"),
+				fmt.Sprintf(
+					"This field can not be changed: current: %v, new: %v",
+					old.Zone,
+					new.Zone,
+				),
+			),
+		)
+	}
+
+	if new.Replicas < old.Replicas {
+		allErrs = append(
+			allErrs,
+			field.Forbidden(
+				fldPath.Child("Replicas"),
+				fmt.Sprintf(
+					"This field can not be decremented (scale-in is not yet supported): current: %d, new: %d",
+					old.Replicas,
+					new.Replicas,
+				),
+			),
+		)
+	}
+
 	return allErrs
 }
