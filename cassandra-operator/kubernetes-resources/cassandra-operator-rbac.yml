@@ -11,7 +11,7 @@ rules:
   verbs: ["create", "get", "update", "list"]
 - apiGroups: [""]
   resources: ["secrets", "configmaps", "pods"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["watch"]
@@ -26,7 +26,7 @@ rules:
   verbs: ["create", "list", "delete", "update"]
 - apiGroups: ["core.sky.uk"]
   resources: ["cassandras"]
-  verbs: ["list", "get", "watch"]
+  verbs: ["list", "get", "watch", "update"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

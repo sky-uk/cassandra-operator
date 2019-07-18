@@ -2,8 +2,8 @@ package cluster
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	typedV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 )
@@ -37,8 +37,8 @@ const (
 
 // NewEventRecorder creates an EventRecorder which can be used to record events reflecting the state of operator
 // managed clusters. It correctly does aggregation of repeated events into a count, first timestamp and last timestamp.
-func NewEventRecorder(kubeClientset *kubernetes.Clientset) record.EventRecorder {
+func NewEventRecorder(kubeClientset *kubernetes.Clientset, s *runtime.Scheme) record.EventRecorder {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartRecordingToSink(&typedV1.EventSinkImpl{Interface: kubeClientset.CoreV1().Events(operatorNamespace)})
-	return eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "cassandra-operator"})
+	return eventBroadcaster.NewRecorder(s, v1.EventSource{Component: "cassandra-operator"})
 }

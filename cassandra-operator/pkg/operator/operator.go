@@ -64,7 +64,7 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	clusters := make(map[string]*cluster.Cluster)
 	metricsPoller := metrics.NewMetrics(kubeClientset.CoreV1(), &metrics.Config{RequestTimeout: operatorConfig.MetricRequestDuration})
 
-	eventRecorder := cluster.NewEventRecorder(kubeClientset)
+	eventRecorder := cluster.NewEventRecorder(kubeClientset, nil)
 	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder)
 	receiver := operations.NewEventReceiver(
 		clusters,
