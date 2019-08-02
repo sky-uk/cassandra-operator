@@ -4,11 +4,20 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd -P)"/..
-cd "${REPO_ROOT}"
+scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+projectDir="${scriptDir}/.."
+codeGenDir="${projectDir}/vendor/k8s.io/code-generator"
+basePackage="github.com/sky-uk/cassandra-operator/cassandra-operator"
+groupVersion="cassandra:v1alpha1"
 
-code_path="${REPO_ROOT}/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go"
+# ensure code-generator is available in vendor directory
+# https://github.com/kubernetes/code-generator/issues/57#issuecomment-498310800
+cd ${projectDir}
+go mod vendor
 
-output="$(mktemp -d)"
-controller-gen object:headerFile=./hack/empty-boilerplate.txt  paths=./pkg/apis/... output:object:dir="${output}"
-cp "${output}"/zz_generated.deepcopy.go "${code_path}"
+chmod +x ${codeGenDir}/generate-groups.sh
+
+${codeGenDir}/generate-groups.sh all \
+  ${basePackage}/pkg/client ${basePackage}/pkg/apis \
+  ${groupVersion} \
+  --go-header-file ${scriptDir}/empty-boilerplate.txt

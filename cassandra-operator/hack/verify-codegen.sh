@@ -23,9 +23,11 @@ cd "${tmp}"
 "./hack/update-codegen.sh"
 
 echo "diffing against freshly generated codegen (${tmp})"
-ret=0
-diff -Naupr "${REPO_ROOT}/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go" "${tmp}/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go" || ret=$?
-if [[ $ret -eq 0 ]]
+deepCopyDiff=0
+diff -Naupr "${REPO_ROOT}/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go" "${tmp}/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go" || deepCopyDiff=$?
+clientDiff=0
+diff -Naupr "${REPO_ROOT}/pkg/client" "${tmp}/pkg/client" || clientDiff=$?
+if [[ ${deepCopyDiff} -eq 0 ]] || [[ ${clientDiff} -eq 0 ]]
 then
   echo "${REPO_ROOT} up to date."
 else

@@ -92,15 +92,17 @@ you should look for an issue with a `good first issue` or `bug` label.
 
 Certain dependencies are picky about using exact combinations of package
 versions (in particular, `k8s.io/client-go` and `k8s.io/apimachinery`).
+See https://github.com/kubernetes/client-go/blob/master/INSTALL.md#go-modules
 
 The `cassandra-operator/hack/pin-dependency.sh` script is useful for managing
 and pinning these versions when the time comes to update them.
 
-For example, to pin both of these:
+For example, to pin code-generator dependencies:
 
 ```bash
-./hack/pin-dependency.sh k8s.io/apimachinery kubernetes-1.15.0-alpha.0
-./hack/pin-dependency.sh k8s.io/client-go v11.0.0
+./hack/pin-dependency.sh k8s.io/code-generator kubernetes-1.15.0-alpha.1
+./hack/pin-dependency.sh k8s.io/client-go kubernetes-1.15.0-alpha.1
+./hack/pin-dependency.sh k8s.io/apimachinery kubernetes-1.15.0-alpha.1
 ```
 
 ## Releasing

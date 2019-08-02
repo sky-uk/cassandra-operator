@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 .PHONY: all clean install check build fmt vet lint validate-licences test e2e-te setup go-build go-install docker-image push-image release check-style \
 	validate-crds generate-crds \
-	validate-types generate-types
+	validate-codegen generate-codegen
 
 # Default context is running locally against a dind cluster
 KUBE_CONTEXT ?= dind
@@ -29,7 +29,7 @@ include $(projectDir)/../MakefileDocker
 
 all: clean install check
 
-build: go-build check-style validate-licences validate-crds validate-types docker-image
+build: go-build check-style validate-licences validate-crds validate-codegen docker-image
 
 install: build go-install push-image
 
@@ -145,12 +145,12 @@ clean: common-docker-clean
 	rm $(shell go env GOPATH)/bin/cassandra-operator || true
 	rm -rfv $(buildDir)
 
-generate-types: setup
-	@echo "== generate-types"
+generate-codegen: setup
+	@echo "== generate-codegen"
 	$(projectDir)/hack/update-codegen.sh
 
-validate-types: setup
-	@echo "== validate-types"
+validate-codegen: setup
+	@echo "== validate-codegen"
 	$(projectDir)/hack/verify-codegen.sh
 
 generate-crds: setup

@@ -11,4 +11,5 @@ import (
 	_ "golang.org/x/lint/golint"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "sigs.k8s.io/controller-tools/cmd/controller-gen"
+	_ "k8s.io/code-generator"
 )
