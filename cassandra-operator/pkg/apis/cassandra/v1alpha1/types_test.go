@@ -21,7 +21,7 @@ var _ = Describe("Cassandra Types", func() {
 	Context("Pod", func() {
 
 		DescribeTable("equality",
-			equalityCheck,
+			podEqualityCheck,
 			Entry("if all fields are equal", func(pod *Pod) {}),
 			Entry("when cpu value is the same but using a different amount", func(pod *Pod) { pod.CPU = resource.MustParse("1") }),
 			Entry("when memory value is the same but using a different amount", func(pod *Pod) { pod.Memory = resource.MustParse("2048Mi") }),
@@ -29,7 +29,7 @@ var _ = Describe("Cassandra Types", func() {
 		)
 
 		DescribeTable("inequality",
-			inEqualityCheck,
+			podInequalityCheck,
 			Entry("when one pod has a nil bootstrap image", func(pod *Pod) { pod.BootstrapperImage = nil }),
 			Entry("when pods have different bootstrap images", func(pod *Pod) { pod.BootstrapperImage = ptr.String("another image") }),
 			Entry("when one pod has a nil sidecar image", func(pod *Pod) { pod.SidecarImage = nil }),
@@ -63,18 +63,165 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one readiness probe has a nil period", func(pod *Pod) { pod.ReadinessProbe.PeriodSeconds = nil }),
 		)
 	})
+
+	Context("Rack", func() {
+		DescribeTable("equality",
+			rackEqualityCheck,
+			Entry("if all fields are equal", func(rack *Rack) {}),
+		)
+		DescribeTable("inequality",
+			rackInequalityCheck,
+			Entry("when one rack has a different name", func(rack *Rack) { rack.Name = "otherName" }),
+			Entry("when one rack has a different zone", func(rack *Rack) { rack.Zone = "otherZone" }),
+			Entry("when one rack has a different storage class", func(rack *Rack) { rack.StorageClass = "other Storage class" }),
+			Entry("when one rack has a different number of replicas", func(rack *Rack) { rack.Replicas = 10 }),
+		)
+	})
+
+	Context("Snapshot", func() {
+		DescribeTable("equality",
+			snapshotEqualityCheck,
+			Entry("if all fields are equal", func(snapshot *Snapshot) {}),
+			Entry("when the keyspaces are in different order", func(snapshot *Snapshot) { snapshot.Keyspaces = []string{"k2", "k1"} }),
+		)
+		DescribeTable("inequality",
+			snapshotInequalityCheck,
+			Entry("when one snapshot has a different image", func(snapshot *Snapshot) { snapshot.Image = ptr.String("otherImage") }),
+			Entry("when one snapshot has a different schedule", func(snapshot *Snapshot) { snapshot.Schedule = "other Schedule" }),
+			Entry("when one snapshot has different keyspaces", func(snapshot *Snapshot) { snapshot.Keyspaces = []string{"k1"} }),
+			Entry("when one snapshot has no keyspaces", func(snapshot *Snapshot) { snapshot.Keyspaces = nil }),
+			Entry("when one snapshot has an empty keyspaces list", func(snapshot *Snapshot) { snapshot.Keyspaces = []string{} }),
+			Entry("when one snapshot has a different timeout", func(snapshot *Snapshot) { snapshot.TimeoutSeconds = ptr.Int32(1) }),
+			Entry("when one snapshot has no timeout", func(snapshot *Snapshot) { snapshot.TimeoutSeconds = nil }),
+			Entry("when one snapshot has retention policy", func(snapshot *Snapshot) { snapshot.RetentionPolicy = nil }),
+			Entry("when one snapshot has retention policy disabled", func(snapshot *Snapshot) { snapshot.RetentionPolicy.Enabled = ptr.Bool(false) }),
+			Entry("when one snapshot has a different cleanup schedule", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupSchedule = "other schedule" }),
+			Entry("when one snapshot has no cleanup timeout", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(1) }),
+			Entry("when one snapshot has a different cleanup timeout", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupTimeoutSeconds = nil }),
+			Entry("when one snapshot has no retention period", func(snapshot *Snapshot) { snapshot.RetentionPolicy.RetentionPeriodDays = ptr.Int32(1) }),
+			Entry("when one snapshot has a different retention period", func(snapshot *Snapshot) { snapshot.RetentionPolicy.RetentionPeriodDays = nil }),
+		)
+	})
+
+	Context("CassandraSpec", func() {
+		DescribeTable("equality",
+			cassandraEqualityCheck,
+			Entry("if all fields are equal", func(cass *CassandraSpec) {}),
+			Entry("when the racks are in a different order", func(cass *CassandraSpec) { cass.Racks = []Rack{*rackSpec("b"), *rackSpec("a")} }),
+		)
+		DescribeTable("inequality",
+			cassandraInequalityCheck,
+			Entry("when one cassandra has a different datacenter", func(cass *CassandraSpec) { cass.Datacenter = ptr.String("otherDc") }),
+			Entry("when one cassandra has empty dir enabled", func(cass *CassandraSpec) { cass.UseEmptyDir = ptr.Bool(true) }),
+			Entry("when one cassandra has no racks", func(cass *CassandraSpec) { cass.Racks = nil }),
+			Entry("when one cassandra has an empty racks list", func(cass *CassandraSpec) { cass.Racks = []Rack{} }),
+			Entry("when one cassandra has a different number of racks", func(cass *CassandraSpec) { cass.Racks = []Rack{*rackSpec("a")} }),
+			Entry("when one cassandra has a no snapshot", func(cass *CassandraSpec) { cass.Snapshot = nil }),
+			Entry("when one cassandra has a different schedule", func(cass *CassandraSpec) { cass.Snapshot.Schedule = "1 2 3 4" }),
+			Entry("when one cassandra has a different pod spec", func(cass *CassandraSpec) { cass.Pod.CPU = resource.MustParse("30") }),
+		)
+	})
 })
 
-func equalityCheck(applyChange func(pod *Pod)) {
-	comparisonCheck(applyChange, podsEqual)
+func cassandraEqualityCheck(mutate func(cassandra *CassandraSpec)) {
+	cassandrasAreEqual := func(cassandra, otherCass *CassandraSpec) bool {
+		return cassandra.Equal(*otherCass) && otherCass.Equal(*cassandra)
+	}
+	cassandraComparisonCheck(mutate, cassandrasAreEqual)
 }
 
-func inEqualityCheck(applyChange func(pod *Pod)) {
-	comparisonCheck(applyChange, podsNotEqual)
+func cassandraInequalityCheck(mutate func(cassandra *CassandraSpec)) {
+	cassandrasNotEqual := func(cassandra, otherCass *CassandraSpec) bool {
+		return !cassandra.Equal(*otherCass) && !otherCass.Equal(*cassandra)
+	}
+	cassandraComparisonCheck(mutate, cassandrasNotEqual)
 }
 
-func comparisonCheck(applyChange func(pod *Pod), expectCheck func(pod, otherPod *Pod) bool) {
-	pod1 := &Pod{
+func cassandraComparisonCheck(mutate func(cassandra *CassandraSpec), expectCheck func(cassandra, otherCassandraSpec *CassandraSpec) bool) {
+	cassandra1 := &CassandraSpec{
+		Datacenter:  ptr.String("dc"),
+		UseEmptyDir: ptr.Bool(false),
+		Pod:         *podSpec(),
+		Racks:       []Rack{*rackSpec("a"), *rackSpec("b")},
+		Snapshot:    snapshotSpec(),
+	}
+	cassandra2 := cassandra1.DeepCopy()
+
+	mutate(cassandra1)
+
+	Expect(expectCheck(cassandra1, cassandra2)).To(BeTrue())
+}
+
+func snapshotEqualityCheck(mutate func(snapshot *Snapshot)) {
+	snapshotsEqual := func(snapshot, otherRack *Snapshot) bool {
+		return snapshot.Equal(*otherRack) && otherRack.Equal(*snapshot)
+	}
+	snapshotComparisonCheck(mutate, snapshotsEqual)
+}
+
+func snapshotInequalityCheck(mutate func(snapshot *Snapshot)) {
+	snapshotsNotEqual := func(snapshot, otherRack *Snapshot) bool {
+		return !snapshot.Equal(*otherRack) && !otherRack.Equal(*snapshot)
+	}
+	snapshotComparisonCheck(mutate, snapshotsNotEqual)
+}
+
+func snapshotComparisonCheck(mutate func(snapshot *Snapshot), expectCheck func(snapshot, otherSnapshot *Snapshot) bool) {
+	snapshot1 := snapshotSpec()
+	snapshot2 := snapshot1.DeepCopy()
+
+	mutate(snapshot1)
+
+	Expect(expectCheck(snapshot1, snapshot2)).To(BeTrue())
+}
+
+func rackEqualityCheck(mutate func(rack *Rack)) {
+	racksEqual := func(rack, otherRack *Rack) bool {
+		return rack.Equal(*otherRack) && otherRack.Equal(*rack)
+	}
+	rackComparisonCheck(mutate, racksEqual)
+}
+
+func rackInequalityCheck(mutate func(rack *Rack)) {
+	racksNotEqual := func(rack, otherRack *Rack) bool {
+		return !rack.Equal(*otherRack) && !otherRack.Equal(*rack)
+	}
+	rackComparisonCheck(mutate, racksNotEqual)
+}
+
+func rackComparisonCheck(mutate func(rack *Rack), expectCheck func(rack, otherRack *Rack) bool) {
+	rack1 := rackSpec("a")
+	rack2 := rack1.DeepCopy()
+
+	mutate(rack1)
+
+	Expect(expectCheck(rack1, rack2)).To(BeTrue())
+}
+func podEqualityCheck(mutate func(pod *Pod)) {
+	podsEqual := func(pod, otherPod *Pod) bool {
+		return pod.Equal(*otherPod) && otherPod.Equal(*pod)
+	}
+	podComparisonCheck(mutate, podsEqual)
+}
+
+func podInequalityCheck(mutate func(pod *Pod)) {
+	podsNotEqual := func(pod, otherPod *Pod) bool {
+		return !pod.Equal(*otherPod) && !otherPod.Equal(*pod)
+	}
+	podComparisonCheck(mutate, podsNotEqual)
+}
+
+func podComparisonCheck(mutate func(pod *Pod), expectCheck func(pod, otherPod *Pod) bool) {
+	pod1 := podSpec()
+	pod2 := pod1.DeepCopy()
+
+	mutate(pod1)
+
+	Expect(expectCheck(pod1, pod2)).To(BeTrue())
+}
+
+func podSpec() *Pod {
+	return &Pod{
 		BootstrapperImage: ptr.String("BootstrapperImage"),
 		SidecarImage:      ptr.String("SidecarImage"),
 		Image:             ptr.String("Image"),
@@ -96,17 +243,28 @@ func comparisonCheck(applyChange func(pod *Pod), expectCheck func(pod, otherPod 
 			TimeoutSeconds:      ptr.Int32(5),
 		},
 	}
-	pod2 := pod1.DeepCopy()
-
-	applyChange(pod1)
-
-	Expect(expectCheck(pod1, pod2)).To(BeTrue())
 }
 
-func podsEqual(pod, otherPod *Pod) bool {
-	return pod.Equal(*otherPod) && otherPod.Equal(*pod)
+func rackSpec(name string) *Rack {
+	return &Rack{
+		Name:         name,
+		Zone:         "storage Zone",
+		StorageClass: "storage Class",
+		Replicas:     1,
+	}
 }
 
-func podsNotEqual(pod, otherPod *Pod) bool {
-	return !pod.Equal(*otherPod) && !otherPod.Equal(*pod)
+func snapshotSpec() *Snapshot {
+	return &Snapshot{
+		Image:          ptr.String("SnapshotImage"),
+		Schedule:       "* * * * *",
+		Keyspaces:      []string{"k1", "k2"},
+		TimeoutSeconds: ptr.Int32(62),
+		RetentionPolicy: &RetentionPolicy{
+			Enabled:               ptr.Bool(true),
+			RetentionPeriodDays:   ptr.Int32(30),
+			CleanupTimeoutSeconds: ptr.Int32(30),
+			CleanupSchedule:       "* * * * *",
+		},
+	}
 }

@@ -2,7 +2,9 @@ package v1alpha1
 
 import (
 	"fmt"
+	"github.com/google/go-cmp/cmp"
 	"reflect"
+	"sort"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -177,7 +179,41 @@ func (c *Cassandra) CustomConfigMapName() string {
 	return fmt.Sprintf("%s-config", c.Name)
 }
 
-// Equal checks equality of two Pods. This is useful for testing with cmp.Equal
+// Equal checks equality of two CassandraSpecs. This is useful for checking equality with cmp.Equal
+func (cs CassandraSpec) Equal(other CassandraSpec) bool {
+	return reflect.DeepEqual(cs.Datacenter, other.Datacenter) &&
+		reflect.DeepEqual(cs.UseEmptyDir, other.UseEmptyDir) &&
+		cmp.Equal(sortedRacks(cs.Racks), sortedRacks(other.Racks)) &&
+		cmp.Equal(cs.Pod, other.Pod) &&
+		cmp.Equal(cs.Snapshot, other.Snapshot)
+}
+
+// Equal checks equality of two Snapshots. This is useful for testing with cmp.Equal
+func (s Snapshot) Equal(other Snapshot) bool {
+	return reflect.DeepEqual(s.Image, other.Image) &&
+		reflect.DeepEqual(s.TimeoutSeconds, other.TimeoutSeconds) &&
+		reflect.DeepEqual(sortedStrings(s.Keyspaces), sortedStrings(other.Keyspaces)) &&
+		s.Schedule == other.Schedule &&
+		cmp.Equal(s.RetentionPolicy, other.RetentionPolicy)
+}
+
+// Equal checks equality of two RetentionPolicy. This is useful for checking equality with cmp.Equal
+func (rp RetentionPolicy) Equal(other RetentionPolicy) bool {
+	return reflect.DeepEqual(rp.Enabled, other.Enabled) &&
+		reflect.DeepEqual(rp.CleanupTimeoutSeconds, other.CleanupTimeoutSeconds) &&
+		reflect.DeepEqual(rp.CleanupSchedule, other.CleanupSchedule) &&
+		reflect.DeepEqual(rp.RetentionPeriodDays, other.RetentionPeriodDays)
+}
+
+// Equal checks equality of two Racks. This is useful for testing checking equality cmp.Equal
+func (r Rack) Equal(other Rack) bool {
+	return r.Name == other.Name &&
+		r.Zone == other.Zone &&
+		r.StorageClass == other.StorageClass &&
+		r.Replicas == other.Replicas
+}
+
+// Equal checks equality of two Pods. This is useful for checking equality with cmp.Equal
 func (p Pod) Equal(other Pod) bool {
 	return reflect.DeepEqual(p.BootstrapperImage, other.BootstrapperImage) &&
 		reflect.DeepEqual(p.SidecarImage, other.SidecarImage) &&
@@ -187,4 +223,16 @@ func (p Pod) Equal(other Pod) bool {
 		p.StorageSize.Cmp(other.StorageSize) == 0 &&
 		p.Memory.Cmp(other.Memory) == 0 &&
 		p.CPU.Cmp(other.CPU) == 0
+}
+
+func sortedRacks(racks []Rack) []Rack {
+	sort.SliceStable(racks, func(i, j int) bool {
+		return racks[i].Name > racks[j].Name
+	})
+	return racks
+}
+
+func sortedStrings(strings []string) []string {
+	sort.Strings(strings)
+	return strings
 }
