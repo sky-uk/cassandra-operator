@@ -39,7 +39,7 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 	}
 	emptyDirCluster = &TestCluster{
 		Name:  emptyDirClusterName,
-		Racks: []v1alpha1.Rack{Rack("a", 1)},
+		Racks: []v1alpha1.Rack{RackWithEmptyDir("a", 1)},
 	}
 	return
 }

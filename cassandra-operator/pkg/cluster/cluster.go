@@ -142,36 +142,8 @@ func (c *Cluster) createStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 						c.createCassandraContainer(rack, customConfigMap),
 						c.createCassandraSidecarContainer(rack),
 					},
-					Volumes: c.createPodVolumes(customConfigMap),
-					Affinity: &v1.Affinity{
-						PodAntiAffinity: &v1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-								{
-									LabelSelector: &metav1.LabelSelector{
-										MatchLabels: map[string]string{
-											OperatorLabel: c.definition.Name,
-										},
-									},
-									TopologyKey: "kubernetes.io/hostname",
-								},
-							},
-						},
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{
-									{
-										MatchExpressions: []v1.NodeSelectorRequirement{
-											{
-												Key:      "failure-domain.beta.kubernetes.io/zone",
-												Operator: v1.NodeSelectorOpIn,
-												Values:   []string{rack.Zone},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+					Volumes:  c.createPodVolumes(customConfigMap),
+					Affinity: c.createAffinityRules(rack),
 				},
 			},
 			VolumeClaimTemplates: c.createCassandraDataPersistentVolumeClaimForRack(rack),
@@ -183,6 +155,41 @@ func (c *Cluster) createStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 	}
 
 	return sts
+}
+
+func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
+	affinity := v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							OperatorLabel: c.definition.Name,
+						},
+					},
+					TopologyKey: "kubernetes.io/hostname",
+				},
+			},
+		},
+	}
+	if !*c.definition.Spec.UseEmptyDir {
+		affinity.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "failure-domain.beta.kubernetes.io/zone",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{rack.Zone},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	return &affinity
 }
 
 // CreateService creates a headless service for the supplied cluster definition.

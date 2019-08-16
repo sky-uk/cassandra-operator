@@ -70,7 +70,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			// when
 			registerResourcesUsed(1)
 			AClusterWithName(clusterName).
-				AndRacks([]v1alpha1.Rack{Rack("a", 1)}).
+				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
 					Image:     &CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
@@ -136,7 +136,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			// given
 			registerResourcesUsed(1)
 			AClusterWithName(clusterName).
-				AndRacks([]v1alpha1.Rack{Rack("a", 1)}).
+				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				UsingEmptyDir().
 				Exists()
 
@@ -191,7 +191,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			// given
 			registerResourcesUsed(1)
 			AClusterWithName(clusterName).
-				AndRacks([]v1alpha1.Rack{Rack("a", 1)}).
+				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
 					Image:     &CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
@@ -244,7 +244,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			// given
 			registerResourcesUsed(1)
 			AClusterWithName(clusterName).
-				AndRacks([]v1alpha1.Rack{Rack("a", 1)}).
+				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
 					Image:     &CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",

@@ -223,6 +223,38 @@ var _ = Describe("creation of stateful sets", func() {
 		Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("extra-lib", "/extra-lib")))
 	})
 
+	It("should define zone specific affinity rules if useEmptyDir is not set", func() {
+		// given
+		cluster, err := ACluster(clusterDef)
+		Expect(err).ToNot(HaveOccurred())
+
+		// when
+		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+
+		// then
+		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
+		Expect(nodeAffinity).NotTo(BeNil())
+		nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+		Expect(nodeSelectorTerms).To(HaveLen(1))
+		matchExpr := nodeSelectorTerms[0].MatchExpressions[0]
+		Expect(matchExpr.Key).To(Equal("failure-domain.beta.kubernetes.io/zone"))
+		Expect(matchExpr.Values).To(ConsistOf([]string{cluster.Racks()[0].Zone}))
+	})
+
+	It("should not define zone specific affinity rules if useEmptyDir is set", func() {
+		// given
+		clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
+		cluster, err := ACluster(clusterDef)
+		Expect(err).ToNot(HaveOccurred())
+
+		// when
+		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+
+		// then
+		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
+		Expect(nodeAffinity).To(BeNil())
+	})
+
 	Context("a cluster with a custom configMap is created", func() {
 		It("should mount the configuration volume in the init-config container", func() {
 			// given

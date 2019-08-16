@@ -1,7 +1,6 @@
 package validation_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -46,22 +45,6 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Snapshot.RetentionPolicy = nil
 			},
 		),
-		Entry(
-			"Rack.StorageClass may have a value when UseEmptyDir=true",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(true)
-				c.Spec.Pod.StorageSize.Set(0)
-				c.Spec.Racks[0].StorageClass = "fast1"
-			},
-		),
-		Entry(
-			"Rack.Zone may have a value when UseEmptyDir=true",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(true)
-				c.Spec.Pod.StorageSize.Set(0)
-				c.Spec.Racks[0].Zone = "zone1"
-			},
-		),
 	)
 
 	DescribeTable(
@@ -71,7 +54,6 @@ var _ = Describe("ValidateCassandra", func() {
 			mutate(c)
 			err := validation.ValidateCassandra(c).ToAggregate()
 			Expect(err).To(HaveOccurred())
-			fmt.Fprintf(GinkgoWriter, "INFO: Error message was: %q\n", err)
 			Expect(err.Error()).To(Equal(expectedMessage))
 		},
 		Entry(
@@ -126,15 +108,6 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Pod.StorageSize.Set(0)
 			},
 		),
-		Entry(
-			"Pod.StorageSize must be 0 when UseEmptyDir=true",
-			"spec.Pod.StorageSize: Invalid value: \"1\": must be 0 when spec.useEmptyDir is true",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(true)
-				c.Spec.Pod.StorageSize.Set(1)
-			},
-		),
-
 		Entry(
 			"LivenessProbe.FailureThreshold must be positive",
 			"spec.Pod.LivenessProbe.FailureThreshold: Invalid value: -1: must be >= 1",
@@ -320,6 +293,40 @@ var _ = Describe("ValidateCassandra", func() {
 			},
 		),
 	)
+	DescribeTable(
+		"failure cases when usingEmpty",
+		func(expectedMessage string, mutate func(*v1alpha1.Cassandra)) {
+			c := aValidCassandraUsingEmptyDir()
+			mutate(c)
+			err := validation.ValidateCassandra(c).ToAggregate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal(expectedMessage))
+		},
+		Entry(
+			"Rack.StorageClass must be empty when UseEmptyDir=true",
+			"spec.Racks.rack1.StorageClass: Invalid value: \"standard-class\": must be set to \"\" when spec.useEmptyDir is true",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.UseEmptyDir = ptr.Bool(true)
+				c.Spec.Racks[0].StorageClass = "standard-class"
+			},
+		),
+		Entry(
+			"Rack.Zone must not be empty when UseEmptyDir=false",
+			"spec.Racks.rack1.Zone: Invalid value: \"eu-west1-a\": must be set to \"\" when spec.useEmptyDir is true",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.UseEmptyDir = ptr.Bool(true)
+				c.Spec.Racks[0].Zone = "eu-west1-a"
+			},
+		),
+		Entry(
+			"Pod.StorageSize must be 0 when UseEmptyDir=true",
+			"spec.Pod.StorageSize: Invalid value: \"1\": must be 0 when spec.useEmptyDir is true",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.UseEmptyDir = ptr.Bool(true)
+				c.Spec.Pod.StorageSize.Set(1)
+			},
+		),
+	)
 })
 
 var _ = Describe("ValidateCassandraUpdate", func() {
@@ -470,7 +477,6 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			errors := validation.ValidateCassandraUpdate(c1, c2)
 			err := errors.ToAggregate()
 			Expect(err).To(HaveOccurred())
-			fmt.Fprintf(GinkgoWriter, "INFO: Error message was: %q\n", err)
 			Expect(err.Error()).To(ContainSubstring(expectedMessage))
 		},
 		Entry(
@@ -506,7 +512,7 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			"spec.UseEmptyDir: Forbidden: This field can not be changed: current: false, new: true",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.UseEmptyDir = ptr.Bool(true)
-				c.Spec.Pod.StorageSize.Set(0)
+				makeCompatibleWithUsingEmptyDir(c)
 			},
 		),
 		Entry(
@@ -539,6 +545,20 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 		),
 	)
 })
+
+func aValidCassandraUsingEmptyDir() *v1alpha1.Cassandra {
+	cassandra := aValidCassandra().DeepCopy()
+	makeCompatibleWithUsingEmptyDir(cassandra)
+	return cassandra
+}
+
+func makeCompatibleWithUsingEmptyDir(cassandra *v1alpha1.Cassandra) {
+	cassandra.Spec.Pod.StorageSize = resource.Quantity{}
+	for i := range cassandra.Spec.Racks {
+		cassandra.Spec.Racks[i].StorageClass = ""
+		cassandra.Spec.Racks[i].Zone = ""
+	}
+}
 
 func aValidCassandra() *v1alpha1.Cassandra {
 	return &v1alpha1.Cassandra{

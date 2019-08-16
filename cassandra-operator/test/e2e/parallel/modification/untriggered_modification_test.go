@@ -35,7 +35,7 @@ var _ = Context("Cluster untriggered modifications", func() {
 	It("should report a node as down in metrics when it is offline", func() {
 		// given
 		registerResourcesUsed(2)
-		racks := []v1alpha1.Rack{Rack("a", 1), Rack("b", 1)}
+		racks := []v1alpha1.Rack{RackWithEmptyDir("a", 1), RackWithEmptyDir("b", 1)}
 		AClusterWithName(clusterName).AndRacks(racks).UsingEmptyDir().Exists()
 
 		// when

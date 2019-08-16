@@ -56,6 +56,13 @@ func Rack(rackName string, replicas int32) v1alpha1.Rack {
 	}
 }
 
+func RackWithEmptyDir(rackName string, replicas int32) v1alpha1.Rack {
+	return v1alpha1.Rack{
+		Name:     rackName,
+		Replicas: replicas,
+	}
+}
+
 func SnapshotSchedule(cron string) *v1alpha1.Snapshot {
 	return &v1alpha1.Snapshot{
 		Image:    &CassandraSnapshotImageName,

@@ -132,7 +132,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		// given
 		registerResourcesUsed(3)
 		AClusterWithName(clusterName).
-			AndRacks([]v1alpha1.Rack{Rack("a", 1), Rack("b", 1)}).
+			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1), RackWithEmptyDir("b", 1)}).
 			UsingEmptyDir().Exists()
 
 		// when
@@ -155,11 +155,11 @@ var _ = Context("Allowable cluster modifications", func() {
 	It("should create a new stateful set when a new rack is added to the cluster definition", func() {
 		// given
 		registerResourcesUsed(2)
-		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{Rack("a", 1)}).UsingEmptyDir().Exists()
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
 		rackAHash := clusterConfigHashForRack(clusterName, "a")
 
 		// when
-		ANewRackIsAddedForCluster(Namespace, clusterName, Rack("b", 1))
+		ANewRackIsAddedForCluster(Namespace, clusterName, RackWithEmptyDir("b", 1))
 
 		// then
 		By("adding a new rack to the cluster")
@@ -299,7 +299,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			AClusterWithName(clusterName).WithoutRacks().UsingEmptyDir().WithoutCustomConfig().IsDefined()
 
 			// when
-			ANewRackIsAddedForCluster(Namespace, clusterName, Rack("a", 1))
+			ANewRackIsAddedForCluster(Namespace, clusterName, RackWithEmptyDir("a", 1))
 
 			// then
 			Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))

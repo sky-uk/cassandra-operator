@@ -56,12 +56,32 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 				),
 			)
 		}
+		if rack.StorageClass != "" && useEmptyDir {
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					fldPath.Child("StorageClass"),
+					rack.StorageClass,
+					"must be set to \"\" when spec.useEmptyDir is true",
+				),
+			)
+		}
 		if rack.Zone == "" && !useEmptyDir {
 			allErrs = append(
 				allErrs,
 				field.Required(
 					fldPath.Child("Zone"),
 					"because spec.useEmptyDir is false",
+				),
+			)
+		}
+		if rack.Zone != "" && useEmptyDir {
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					fldPath.Child("Zone"),
+					rack.Zone,
+					"must be set to \"\" when spec.useEmptyDir is true",
 				),
 			)
 		}

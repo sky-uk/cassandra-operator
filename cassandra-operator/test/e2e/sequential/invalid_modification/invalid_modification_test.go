@@ -28,7 +28,7 @@ func TestInvalidModification(t *testing.T) {
 func defineCluster(multipleNodeClusterName string) *TestCluster {
 	return &TestCluster{
 		Name:  multipleNodeClusterName,
-		Racks: []v1alpha1.Rack{Rack("a", 2), Rack("b", 1)},
+		Racks: []v1alpha1.Rack{RackWithEmptyDir("a", 2), RackWithEmptyDir("b", 1)},
 	}
 }
 

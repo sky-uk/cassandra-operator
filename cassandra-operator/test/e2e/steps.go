@@ -72,8 +72,9 @@ func (c *ClusterBuilder) IsDefined() {
 	c.clusterSpec.Snapshot = c.snapshot
 
 	if c.useEmptyDir {
-		c.clusterSpec.Pod.StorageSize = resource.MustParse("0")
 		c.clusterSpec.UseEmptyDir = ptr.Bool(true)
+		// void values that do not apply
+		c.clusterSpec.Pod.StorageSize = resource.MustParse("0")
 	}
 
 	if !c.withoutCustomConfig {

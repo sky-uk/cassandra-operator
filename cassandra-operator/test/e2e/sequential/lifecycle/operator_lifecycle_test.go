@@ -36,7 +36,7 @@ var _ = Context("When an operator is restarted", func() {
 	BeforeEach(func() {
 		testStartTime = time.Now()
 		clusterName = AClusterName()
-		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{Rack("a", 1)}).UsingEmptyDir().Exists()
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
 	})
 
 	JustAfterEach(func() {
