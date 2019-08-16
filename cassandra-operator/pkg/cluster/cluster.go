@@ -525,21 +525,6 @@ func (c *Cluster) createConfigMapVolume(configMap *v1.ConfigMap) v1.Volume {
 	}
 }
 
-func createProbe(probe *v1alpha1.Probe, command ...string) *v1.Probe {
-	return &v1.Probe{
-		Handler: v1.Handler{
-			Exec: &v1.ExecAction{
-				Command: command,
-			},
-		},
-		InitialDelaySeconds: *probe.InitialDelaySeconds,
-		PeriodSeconds:       *probe.PeriodSeconds,
-		TimeoutSeconds:      *probe.TimeoutSeconds,
-		FailureThreshold:    *probe.FailureThreshold,
-		SuccessThreshold:    *probe.SuccessThreshold,
-	}
-}
-
 func createHTTPProbe(probe *v1alpha1.Probe, path string, port int) *v1.Probe {
 	return &v1.Probe{
 		Handler: v1.Handler{
@@ -563,13 +548,35 @@ func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.Statefu
 	}
 	statefulSet.Spec.Template.Annotations[ConfigHashAnnotation] = hash.ConfigMapHash(customConfigMap)
 
-	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, c.createConfigMapVolume(customConfigMap))
+	if !c.hasConfigMapVolume(statefulSet) {
+		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, c.createConfigMapVolume(customConfigMap))
+	}
+
 	for i := range statefulSet.Spec.Template.Spec.InitContainers {
-		if statefulSet.Spec.Template.Spec.InitContainers[i].Name == cassandraBootstrapperContainerName {
+		if statefulSet.Spec.Template.Spec.InitContainers[i].Name == cassandraBootstrapperContainerName &&
+			!c.hasConfigMapVolumeMount(&statefulSet.Spec.Template.Spec.InitContainers[i]) {
 			statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts, c.createCustomConfigVolumeMount())
 		}
 	}
 	return nil
+}
+
+func (c *Cluster) hasConfigMapVolumeMount(container *v1.Container) bool {
+	for _, mount := range container.VolumeMounts {
+		if mount.Name == c.customConfigMapVolumeName() {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cluster) hasConfigMapVolume(statefulSet *appsv1.StatefulSet) bool {
+	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
+		if volume.Name == c.customConfigMapVolumeName() {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveCustomConfigVolumeFromStatefulSet updates the provided statefulset to unmount the configmap as a volume

@@ -446,6 +446,25 @@ var _ = Describe("modification of stateful sets", func() {
 			// then
 			Expect(statefulSet.Spec.Template.Annotations[ConfigHashAnnotation]).ToNot(BeEmpty())
 		})
+
+		It("should do nothing when the configMap volume already exists", func() {
+			// given
+			cluster, err := ACluster(clusterDef)
+			Expect(err).ToNot(HaveOccurred())
+			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+
+			// when
+			err = cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
+			Expect(err).ToNot(HaveOccurred())
+
+			// then
+			Expect(statefulSet.Spec.Template.Spec.Volumes).To(HaveLen(3))
+			Expect(statefulSet.Spec.Template.Spec.Volumes).To(haveExactly(1, matchingConfigMap("cassandra-custom-config-mycluster", "mycluster-config")))
+
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].VolumeMounts).To(HaveLen(3))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].VolumeMounts).To(haveExactly(1, matchingVolumeMount("cassandra-custom-config-mycluster", "/custom-config")))
+
+		})
 	})
 
 	Context("the custom configMap is removed", func() {
