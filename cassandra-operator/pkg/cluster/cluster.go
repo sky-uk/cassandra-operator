@@ -64,26 +64,15 @@ type Cluster struct {
 }
 
 // New creates a new cluster definition from the supplied Cassandra definition
-func New(clusterDefinition *v1alpha1.Cassandra) (*Cluster, error) {
+func New(clusterDefinition *v1alpha1.Cassandra) *Cluster {
 	cluster := &Cluster{}
-	if err := CopyInto(cluster, clusterDefinition); err != nil {
-		return nil, err
-	}
-	return cluster, nil
-}
-
-// NewWithoutValidation creates a new cluster definition from the supplied Cassandra definition without performing validation
-func NewWithoutValidation(clusterDefinition *v1alpha1.Cassandra) *Cluster {
-	cluster := &Cluster{
-		definition: clusterDefinition,
-	}
+	CopyInto(cluster, clusterDefinition)
 	return cluster
 }
 
 // CopyInto copies a Cassandra cluster definition into the internal cluster data structure supplied.
-func CopyInto(cluster *Cluster, clusterDefinition *v1alpha1.Cassandra) error {
+func CopyInto(cluster *Cluster, clusterDefinition *v1alpha1.Cassandra) {
 	cluster.definition = clusterDefinition.DeepCopy()
-	return nil
 }
 
 // Definition returns a copy of the definition of the cluster. Any modifications made to this will be ignored.
@@ -111,7 +100,8 @@ func (c *Cluster) Racks() []v1alpha1.Rack {
 	return c.definition.Spec.Racks
 }
 
-func (c *Cluster) createStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) *appsv1.StatefulSet {
+// CreateStatefulSetForRack creates a StatefulSet based on the rack details
+func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) *appsv1.StatefulSet {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: c.objectMetadataWithOwner(c.definition.RackName(rack), RackLabel, rack.Name),
 		Spec: appsv1.StatefulSetSpec{
@@ -233,22 +223,28 @@ func (c *Cluster) CreateSnapshotJob() *v1beta1.CronJob {
 
 // CreateSnapshotContainer creates the container used to trigger the snapshot creation
 func (c *Cluster) CreateSnapshotContainer(snapshot *v1alpha1.Snapshot) *v1.Container {
-	backupCommand := []string{"/cassandra-snapshot", "create",
-		"-n", c.Namespace(),
-		"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, c.Name(), "app", c.Name()),
-	}
-	timeoutDuration := durationSeconds(snapshot.TimeoutSeconds)
-	backupCommand = append(backupCommand, "-t", timeoutDuration.String())
-	if len(snapshot.Keyspaces) > 0 {
-		backupCommand = append(backupCommand, "-k")
-		backupCommand = append(backupCommand, strings.Join(snapshot.Keyspaces, ","))
-	}
-
 	return &v1.Container{
 		Name:    c.definition.SnapshotJobName(),
 		Image:   *c.definition.Spec.Snapshot.Image,
-		Command: backupCommand,
+		Command: c.snapshotCommand(),
 	}
+}
+
+func (c *Cluster) snapshotCommand() []string {
+	if c.definition.Spec.Snapshot == nil {
+		return []string{}
+	}
+	backupCommand := []string{"/cassandra-snapshot", "create",
+		"-n", c.definition.Namespace,
+		"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, c.definition.Name, "app", c.definition.Name),
+	}
+	timeoutDuration := durationSeconds(c.definition.Spec.Snapshot.TimeoutSeconds)
+	backupCommand = append(backupCommand, "-t", timeoutDuration.String())
+	if len(c.definition.Spec.Snapshot.Keyspaces) > 0 {
+		backupCommand = append(backupCommand, "-k")
+		backupCommand = append(backupCommand, strings.Join(c.definition.Spec.Snapshot.Keyspaces, ","))
+	}
+	return backupCommand
 }
 
 // CreateSnapshotCleanupJob creates a cronjob to trigger the snapshot cleanup
@@ -268,22 +264,26 @@ func (c *Cluster) CreateSnapshotCleanupJob() *v1beta1.CronJob {
 
 // CreateSnapshotCleanupContainer creates the container that will execute the snapshot cleanup command
 func (c *Cluster) CreateSnapshotCleanupContainer(snapshot *v1alpha1.Snapshot) *v1.Container {
+	return &v1.Container{
+		Name:    c.definition.SnapshotCleanupJobName(),
+		Image:   *c.definition.Spec.Snapshot.Image,
+		Command: c.snapshotCleanupCommand(),
+	}
+}
+
+func (c *Cluster) snapshotCleanupCommand() []string {
+	if c.definition.Spec.Snapshot == nil || !v1alpha1helpers.HasRetentionPolicyEnabled(c.definition.Spec.Snapshot) {
+		return []string{}
+	}
 	cleanupCommand := []string{"/cassandra-snapshot", "cleanup",
 		"-n", c.Namespace(),
 		"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, c.Name(), "app", c.Name()),
 	}
-
-	retentionPeriodDuration := durationDays(snapshot.RetentionPolicy.RetentionPeriodDays)
+	retentionPeriodDuration := durationDays(c.definition.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays)
 	cleanupCommand = append(cleanupCommand, "-r", retentionPeriodDuration.String())
-
-	cleanupTimeoutDuration := durationSeconds(snapshot.RetentionPolicy.CleanupTimeoutSeconds)
+	cleanupTimeoutDuration := durationSeconds(c.definition.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds)
 	cleanupCommand = append(cleanupCommand, "-t", cleanupTimeoutDuration.String())
-
-	return &v1.Container{
-		Name:    c.definition.SnapshotCleanupJobName(),
-		Image:   *c.definition.Spec.Snapshot.Image,
-		Command: cleanupCommand,
-	}
+	return cleanupCommand
 }
 
 func (c *Cluster) createCronJob(objectName, serviceAccountName, schedule string, container *v1.Container) *v1beta1.CronJob {
@@ -663,14 +663,6 @@ func ConfigMapBelongsToAManagedCluster(managedClusters map[string]*Cluster, conf
 // LooksLikeACassandraConfigMap determines whether the supplied ConfigMap could belong to a managed cluster
 func LooksLikeACassandraConfigMap(configMap *v1.ConfigMap) bool {
 	return strings.HasSuffix(configMap.Name, "-config")
-}
-
-// QualifiedClusterNameFor returns the fully qualified name of the cluster that should be associated to the supplied configMap
-func QualifiedClusterNameFor(configMap *v1.ConfigMap) (string, error) {
-	if !LooksLikeACassandraConfigMap(configMap) {
-		return "", fmt.Errorf("configMap name %s does not follow the naming convention for a cluster", configMap.Name)
-	}
-	return fmt.Sprintf("%s.%s", configMap.Namespace, strings.Replace(configMap.Name, "-config", "", -1)), nil
 }
 
 func durationDays(days *int32) time.Duration {

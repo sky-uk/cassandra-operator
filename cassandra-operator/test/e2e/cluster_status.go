@@ -68,9 +68,13 @@ func HeadlessServiceForCluster(namespace, clusterName string) func() (*labelledR
 }
 
 func PodsForCluster(namespace, clusterName string) func() ([]*labelledResource, error) {
+	return podsWithLabel(namespace, fmt.Sprintf("app=%s", clusterName))
+}
+
+func podsWithLabel(namespace, label string) func() ([]*labelledResource, error) {
 	return func() ([]*labelledResource, error) {
 		podInterface := KubeClientset.CoreV1().Pods(namespace)
-		podList, err := podInterface.List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", clusterName)})
+		podList, err := podInterface.List(metaV1.ListOptions{LabelSelector: label})
 		if err != nil {
 			return nil, err
 		}
@@ -95,6 +99,17 @@ func CronJobsForCluster(namespace, clusterName string) func() ([]*labelledResour
 			labelledResources = append(labelledResources, &labelledResource{item})
 		}
 		return labelledResources, nil
+	}
+}
+
+func CronJob(namespace, jobName string) func() (*labelledResource, error) {
+	return func() (*labelledResource, error) {
+		job, err := KubeClientset.BatchV1beta1().CronJobs(namespace).Get(jobName, metaV1.GetOptions{})
+		if err != nil {
+			return nil, errorUnlessNotFound(err)
+		}
+
+		return &labelledResource{job}, nil
 	}
 }
 
@@ -148,16 +163,6 @@ func PodReadinessStatus(namespace, podName string) func() (bool, error) {
 
 		}
 		return true, nil
-	}
-}
-
-func PodExists(namespace, podName string) func() (bool, error) {
-	return func() (bool, error) {
-		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{FieldSelector: fmt.Sprintf("metadata.name=%s", podName)})
-		if err != nil {
-			return false, err
-		}
-		return len(pods.Items) == 1, nil
 	}
 }
 

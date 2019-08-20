@@ -672,3 +672,31 @@ func (m *haveScheduleOptions) job(actual interface{}) batch.CronJob {
 	lr := actual.(*labelledResource)
 	return lr.Resource.(batch.CronJob)
 }
+
+//
+// BeCreatedAfter matcher
+//
+func BeCreatedAfter(targetTime time.Time) types.GomegaMatcher {
+	return &beCreatedAfter{targetTime: targetTime}
+}
+
+type beCreatedAfter struct {
+	targetTime time.Time
+}
+
+func (m *beCreatedAfter) Match(actual interface{}) (success bool, err error) {
+	return m.job(actual).CreationTimestamp.After(m.targetTime), nil
+}
+
+func (m *beCreatedAfter) FailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected job creation time to be after %s. Actual creation time: %s", m.targetTime, m.job(actual).CreationTimestamp)
+}
+
+func (m *beCreatedAfter) NegatedFailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected job creation time not to be after %s. Actual creation time: %s", m.targetTime, m.job(actual).CreationTimestamp)
+}
+
+func (m *beCreatedAfter) job(actual interface{}) batch.CronJob {
+	lr := actual.(*labelledResource)
+	return lr.Resource.(batch.CronJob)
+}

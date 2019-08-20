@@ -125,7 +125,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		)))
 
 		By("restarting one stateful set at a time")
-		Expect(podEvents.PodsRecreatedOneAfterTheOther(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
+		Expect(podEvents.PodsNotDownAtTheSameTime(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
 	})
 
 	It("should allow the number of pods per rack to be scaled up", func() {
@@ -217,7 +217,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			Eventually(PodReadinessStatus(Namespace, PodName(clusterName, "b", 0)), NodeRestartDuration, CheckInterval).Should(BeTrue())
 
 			By("restarting one statefulset at a time")
-			Expect(podEvents.PodsRecreatedOneAfterTheOther(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
+			Expect(podEvents.PodsNotDownAtTheSameTime(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
 		})
 
 		It("should trigger a rolling restarts of the cluster stateful set when a custom config file is added", func() {
@@ -253,7 +253,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			Eventually(PodReadinessStatus(Namespace, PodName(clusterName, "b", 0)), NodeRestartDuration, CheckInterval).Should(BeTrue())
 
 			By("restarting one statefulset at a time")
-			Expect(podEvents.PodsRecreatedOneAfterTheOther(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
+			Expect(podEvents.PodsNotDownAtTheSameTime(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
 		})
 
 		It("should trigger a rolling restarts of the cluster stateful set when the custom config file is deleted", func() {
@@ -289,7 +289,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			Eventually(PodReadinessStatus(Namespace, PodName(clusterName, "b", 0)), NodeRestartDuration, CheckInterval).Should(BeTrue())
 
 			By("restarting one stateful set at a time")
-			Expect(podEvents.PodsRecreatedOneAfterTheOther(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
+			Expect(podEvents.PodsNotDownAtTheSameTime(PodName(clusterName, "a", 0), PodName(clusterName, "b", 0))).To(BeTrue())
 		})
 
 		It("should allow the cluster to be created once the invalid spec has been corrected", func() {

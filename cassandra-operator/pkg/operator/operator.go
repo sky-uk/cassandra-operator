@@ -67,7 +67,6 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	eventRecorder := cluster.NewEventRecorder(kubeClientset, nil)
 	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder)
 	receiver := operations.NewEventReceiver(
-		clusters,
 		clusterAccessor,
 		metricsPoller,
 		eventRecorder,

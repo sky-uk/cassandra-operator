@@ -10,28 +10,19 @@ import (
 
 // DeleteClusterOperation describes what the operator does when deleting a cluster
 type DeleteClusterOperation struct {
-	clusterAccessor   *cluster.Accessor
-	clusters          map[string]*cluster.Cluster
-	clusterDefinition *v1alpha1.Cassandra
-	metricsPoller     *metrics.PrometheusMetrics
+	clusterAccessor *cluster.Accessor
+	cassandra       *v1alpha1.Cassandra
+	metricsPoller   *metrics.PrometheusMetrics
 }
 
 // Execute performs the operation
 func (o *DeleteClusterOperation) Execute() {
-	log.Infof("Cassandra cluster definition deleted for cluster: %s.%s", o.clusterDefinition.Namespace, o.clusterDefinition.Name)
+	log.Infof("Cassandra cluster definition deleted for cluster: %s.%s", o.cassandra.Namespace, o.cassandra.Name)
 
-	var c *cluster.Cluster
-	var ok bool
-	if c, ok = o.clusters[fmt.Sprintf("%s.%s", o.clusterDefinition.Namespace, o.clusterDefinition.Name)]; !ok {
-		log.Warnf("No record found of deleted cluster %s.%s", o.clusterDefinition.Namespace, o.clusterDefinition.Name)
-		return
-	}
-
-	delete(o.clusters, c.QualifiedName())
-	c.Online = false
+	c := cluster.New(o.cassandra)
 	o.metricsPoller.DeleteMetrics(c)
 }
 
 func (o *DeleteClusterOperation) String() string {
-	return fmt.Sprintf("delete cluster %s", o.clusterDefinition.QualifiedName())
+	return fmt.Sprintf("delete cluster %s", o.cassandra.QualifiedName())
 }

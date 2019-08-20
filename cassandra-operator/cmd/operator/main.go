@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"k8s.io/api/batch/v1beta1"
 	"net/http"
 	"os"
 	"strings"
@@ -19,8 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -39,7 +38,7 @@ var (
 	metricRequestTimeout time.Duration
 	logLevel             string
 	allowEmptyDir        bool
-	clusters             map[string]*cluster.Cluster
+	clusters             map[types.NamespacedName]*v1alpha1.Cassandra
 	receiver             *operations.Receiver
 
 	rootCmd = &cobra.Command{
@@ -50,7 +49,6 @@ var (
 	}
 
 	scheme = runtime.NewScheme()
-	log    = logf.Log.WithName("cassandra-operator")
 )
 
 func init() {
@@ -63,7 +61,7 @@ func init() {
 		panic(err)
 	}
 
-	clusters = make(map[string]*cluster.Cluster)
+	clusters = make(map[types.NamespacedName]*v1alpha1.Cassandra)
 
 	rootCmd.PersistentFlags().DurationVar(&metricPollInterval, "metric-poll-interval", 5*time.Second, "Poll interval between cassandra nodes metrics retrieval")
 	rootCmd.PersistentFlags().DurationVar(&metricRequestTimeout, "metric-request-timeout", 2*time.Second, "Time limit for cassandra node metrics requests")
@@ -87,24 +85,27 @@ func handleArgs(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid metric-poll-interval, it must be a positive integer")
 	}
 
-	_, err := logr.ParseLevel(logLevel)
+	level, err := logr.ParseLevel(logLevel)
 	if err != nil {
 		return fmt.Errorf("invalid log-level")
 	}
+	logr.SetLevel(level)
 
 	return nil
 }
 
 func startOperator(_ *cobra.Command, _ []string) error {
-	logf.SetLogger(zap.Logger(false))
-	entryLog := log.WithName("entrypoint")
+	entryLog := logr.WithFields(
+		logr.Fields{
+			"logger": "main.go",
+		},
+	)
 
 	kubeConfig := config.GetConfigOrDie()
 
 	kubeClientset, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
-		entryLog.Error(err, "Unable to obtain clientset")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to obtain clientset: %v", err)
 	}
 
 	cassandraClientset := versioned.NewForConfigOrDie(kubeConfig)
@@ -113,15 +114,14 @@ func startOperator(_ *cobra.Command, _ []string) error {
 	if ns == "" {
 		entryLog.Info("Operator listening for changes in any namespace")
 	} else {
-		entryLog.Info("Operator listening for changes in namespace", "namespace", ns)
+		entryLog.Infof("Operator listening for changes in namespace: %s", ns)
 	}
 
 	// Setup a Manager
-	entryLog.Info("setting up manager")
+	entryLog.Info("Setting up manager")
 	mgr, err := manager.New(kubeConfig, manager.Options{Scheme: scheme, Namespace: ns})
 	if err != nil {
-		entryLog.Error(err, "unable to set up overall controller manager")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to set up overall controller manager: %v", err)
 	}
 
 	eventRecorder := cluster.NewEventRecorder(kubeClientset, scheme)
@@ -131,7 +131,6 @@ func startOperator(_ *cobra.Command, _ []string) error {
 	startServer(metricsPoller)
 
 	receiver = operations.NewEventReceiver(
-		clusters,
 		clusterAccessor,
 		metricsPoller,
 		eventRecorder,
@@ -142,38 +141,26 @@ func startOperator(_ *cobra.Command, _ []string) error {
 	// Setup a new controller to reconcile ReplicaSets
 	entryLog.Info("Setting up controller")
 	c, err := controller.New("cassandra", mgr, controller.Options{
-		Reconciler: &reconcileCassandra{
-			client:             mgr.GetClient(),
-			log:                log.WithName("reconciler"),
-			eventDispatcher:    dispatcher.New(receiver.Receive, stopCh),
-			eventRecorder:      eventRecorder,
-			previousCassandras: map[string]*v1alpha1.Cassandra{},
-			previousConfigMaps: map[string]*corev1.ConfigMap{},
-		},
+		Reconciler: NewReconciler(clusters, mgr.GetClient(), eventRecorder, dispatcher.New(receiver.Receive, stopCh)),
 	})
 	if err != nil {
-		entryLog.Error(err, "unable to set up individual controller")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to set up Cassandra reconciler controller: %v", err)
 	}
 
 	// Watch Cassandras and enqueue Cassandra object key
 	if err := c.Watch(&source.Kind{Type: &v1alpha1.Cassandra{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		entryLog.Error(err, "unable to watch Cassandras")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to watch Cassandras: %v", err)
 	}
 
 	// Watch StatefulSets and enqueue owning Cassandra key
-	if err := c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}},
-		&handler.EnqueueRequestForOwner{OwnerType: &v1alpha1.Cassandra{}, IsController: true}); err != nil {
-		entryLog.Error(err, "unable to watch StatefulSets")
-		os.Exit(1)
+	enqueueRequestsForObjectsOwnedByCassandra := &handler.EnqueueRequestForOwner{OwnerType: &v1alpha1.Cassandra{}, IsController: true}
+	if err := c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+		entryLog.Fatalf("Unable to watch StatefulSets: %v", err)
 	}
 
-	// Watch Pods and enqueue owning Cassandra key
-	if err := c.Watch(&source.Kind{Type: &corev1.Pod{}},
-		&handler.EnqueueRequestForOwner{OwnerType: &v1alpha1.Cassandra{}, IsController: true}); err != nil {
-		entryLog.Error(err, "unable to watch Pods")
-		os.Exit(1)
+	// Watch CronJobs and enqueue owning Cassandra key
+	if err := c.Watch(&source.Kind{Type: &v1beta1.CronJob{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+		entryLog.Fatalf("Unable to watch CronJobs: %v", err)
 	}
 
 	// Watch ConfigMaps and enqueue a likely cluster
@@ -194,24 +181,22 @@ func startOperator(_ *cobra.Command, _ []string) error {
 					}},
 				}
 			}),
-		})
-
+		},
+	)
 	if err != nil {
-		entryLog.Error(err, "unable to watch ConfigMaps")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to watch ConfigMaps: %v", err)
 	}
 
-	entryLog.Info("starting manager")
+	entryLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		entryLog.Error(err, "unable to run manager")
-		os.Exit(1)
+		entryLog.Fatalf("Unable to run manager: %v", err)
 	}
 
 	return nil
 }
 
 func startServer(metricsPoller *metrics.PrometheusMetrics) {
-	entryLog := log.WithName("metrics")
+	entryLog := logr.WithField("name", "metrics")
 
 	startMetricPolling(metricsPoller)
 	statusCheck := newStatusCheck()
@@ -226,14 +211,12 @@ func startServer(metricsPoller *metrics.PrometheusMetrics) {
 }
 
 func startMetricPolling(metricsPoller *metrics.PrometheusMetrics) {
-	entryLog := log.WithName("metrics")
+	entryLog := logr.WithField("name", "metrics")
 	go func() {
 		for {
 			for _, c := range clusters {
-				if c.Online {
-					entryLog.Info("Sending request for metrics", "cluster", c.QualifiedName())
-					receiver.Receive(&dispatcher.Event{Kind: operations.GatherMetrics, Key: c.QualifiedName(), Data: c})
-				}
+				entryLog.Info("Sending request for metrics", "cluster", c.QualifiedName())
+				receiver.Receive(&dispatcher.Event{Kind: operations.GatherMetrics, Key: c.QualifiedName(), Data: c})
 			}
 			time.Sleep(metricPollInterval)
 		}

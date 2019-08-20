@@ -35,9 +35,14 @@ type ClusterUpdate struct {
 	NewCluster *v1alpha1.Cassandra
 }
 
+// ConfigMapChange encapsulates ConfigMap changes for the desired Cassandra cluster
+type ConfigMapChange struct {
+	ConfigMap *v1.ConfigMap
+	Cassandra *v1alpha1.Cassandra
+}
+
 // Receiver receives events dispatched by the operator
 type Receiver struct {
-	clusters            map[string]*cluster.Cluster
 	clusterAccessor     *cluster.Accessor
 	statefulSetAccessor *statefulSetAccessor
 	metricsPoller       *metrics.PrometheusMetrics
@@ -46,7 +51,7 @@ type Receiver struct {
 }
 
 // NewEventReceiver creates a new Receiver
-func NewEventReceiver(clusters map[string]*cluster.Cluster, clusterAccessor *cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
+func NewEventReceiver(clusterAccessor *cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
 	adj, err := adjuster.New()
 	if err != nil {
 		log.Fatalf("unable to initialise Adjuster: %v", err)
@@ -54,7 +59,6 @@ func NewEventReceiver(clusters map[string]*cluster.Cluster, clusterAccessor *clu
 
 	statefulsetAccessor := &statefulSetAccessor{clusterAccessor: clusterAccessor}
 	return &Receiver{
-		clusters:            clusters, // TODO I think too many components have access to this map and it may cause concurrency problems. We may be better off making this global state with access regulated via mutexes.
 		clusterAccessor:     clusterAccessor,
 		statefulSetAccessor: statefulsetAccessor,
 		eventRecorder:       eventRecorder,
@@ -90,22 +94,16 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 	case UpdateCluster:
 		return r.operationsForUpdateCluster(event.Data.(ClusterUpdate))
 	case GatherMetrics:
-		return []Operation{r.newGatherMetrics(event.Data.(*cluster.Cluster))}
+		return []Operation{r.newGatherMetrics(event.Data.(*v1alpha1.Cassandra))}
 	case UpdateCustomConfig:
-		configMap := event.Data.(*v1.ConfigMap)
-		if c := r.clusterForConfigMap(configMap); c != nil {
-			return []Operation{r.newUpdateCustomConfig(c, configMap)}
-		}
+		configMapChange := event.Data.(ConfigMapChange)
+		return []Operation{r.newUpdateCustomConfig(configMapChange.Cassandra, configMapChange.ConfigMap)}
 	case AddCustomConfig:
-		configMap := event.Data.(*v1.ConfigMap)
-		if c := r.clusterForConfigMap(configMap); c != nil {
-			return []Operation{r.newAddCustomConfig(c, configMap)}
-		}
+		configMapChange := event.Data.(ConfigMapChange)
+		return []Operation{r.newAddCustomConfig(configMapChange.Cassandra, configMapChange.ConfigMap)}
 	case DeleteCustomConfig:
-		configMap := event.Data.(*v1.ConfigMap)
-		if c := r.clusterForConfigMap(configMap); c != nil {
-			return []Operation{r.newDeleteCustomConfig(c, configMap)}
-		}
+		configMapChange := event.Data.(ConfigMapChange)
+		return []Operation{r.newDeleteCustomConfig(configMapChange.Cassandra)}
 	default:
 		log.Errorf("Event type %s is not supported", event.Kind)
 	}
@@ -140,14 +138,7 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 	oldCluster := clusterUpdate.OldCluster
 	newCluster := clusterUpdate.NewCluster
 
-	var c *cluster.Cluster
-	var ok bool
-	if c, ok = r.clusters[newCluster.QualifiedName()]; !ok {
-		log.Warnf("No record found for cluster %s.%s. Will attempt to create it.", newCluster.Namespace, newCluster.Name)
-		return r.operationsForAddCluster(newCluster)
-	}
-
-	operations = append(operations, r.newUpdateCluster(c, clusterUpdate))
+	operations = append(operations, r.newUpdateCluster(clusterUpdate))
 	if newCluster.Spec.Snapshot == nil && oldCluster.Spec.Snapshot != nil {
 		operations = append(operations, r.newDeleteSnapshot(clusterUpdate.NewCluster))
 		if v1alpha1helpers.HasRetentionPolicyEnabled(oldCluster.Spec.Snapshot) {
@@ -158,10 +149,10 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 			operations = append(operations, r.newDeleteSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 		if v1alpha1helpers.SnapshotPropertiesUpdated(oldCluster.Spec.Snapshot, newCluster.Spec.Snapshot) {
-			operations = append(operations, r.newUpdateSnapshot(c, newCluster.Spec.Snapshot))
+			operations = append(operations, r.newUpdateSnapshot(newCluster))
 		}
 		if v1alpha1helpers.SnapshotCleanupPropertiesUpdated(oldCluster.Spec.Snapshot, newCluster.Spec.Snapshot) {
-			operations = append(operations, r.newUpdateSnapshotCleanup(c, newCluster.Spec.Snapshot))
+			operations = append(operations, r.newUpdateSnapshotCleanup(newCluster))
 		}
 	} else if newCluster.Spec.Snapshot != nil && oldCluster.Spec.Snapshot == nil {
 		operations = append(operations, r.newAddSnapshot(clusterUpdate.NewCluster))
@@ -170,19 +161,4 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 		}
 	}
 	return operations
-}
-
-func (r *Receiver) clusterForConfigMap(configMap *v1.ConfigMap) *cluster.Cluster {
-	clusterName, err := cluster.QualifiedClusterNameFor(configMap)
-	if err != nil {
-		log.Warn(err)
-		return nil
-	}
-
-	c, ok := r.clusters[clusterName]
-	if !ok {
-		log.Warnf("Custom config %s.%s does not have a related cluster. Managed clusters %v", configMap.Namespace, configMap.Name, r.clusters)
-		return nil
-	}
-	return c
 }

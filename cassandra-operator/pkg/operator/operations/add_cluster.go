@@ -11,31 +11,25 @@ import (
 // AddClusterOperation describes what the operator does when creating a cluster
 type AddClusterOperation struct {
 	clusterAccessor     *cluster.Accessor
-	clusters            map[string]*cluster.Cluster
 	statefulSetAccessor *statefulSetAccessor
-	clusterDefinition   *v1alpha1.Cassandra
+	cassandra           *v1alpha1.Cassandra
 }
 
 // Execute performs the operation
 func (o *AddClusterOperation) Execute() {
-	log.Infof("New Cassandra cluster definition added: %s.%s", o.clusterDefinition.Namespace, o.clusterDefinition.Name)
-	configMap := o.clusterAccessor.FindCustomConfigMap(o.clusterDefinition.Namespace, o.clusterDefinition.Name)
+	log.Infof("New Cassandra cluster definition added: %s.%s", o.cassandra.Namespace, o.cassandra.Name)
+	configMap := o.clusterAccessor.FindCustomConfigMap(o.cassandra.Namespace, o.cassandra.Name)
 	if configMap != nil {
-		log.Infof("Found custom config map for cluster %s.%s", o.clusterDefinition.Namespace, o.clusterDefinition.Name)
+		log.Infof("Found custom config map for cluster %s.%s", o.cassandra.Namespace, o.cassandra.Name)
 	}
 
-	c, err := cluster.New(o.clusterDefinition)
-	if err != nil {
-		log.Errorf("Unable to create cluster %s.%s: %v", o.clusterDefinition.Namespace, o.clusterDefinition.Name, err)
-		return
-	}
-	o.clusters[c.QualifiedName()] = c
+	c := cluster.New(o.cassandra)
 
 	foundResources := o.clusterAccessor.FindExistingResourcesFor(c)
 	if len(foundResources) > 0 {
 		log.Infof("Resources already found for cluster %s, not attempting to recreate: %s", c.QualifiedName(), strings.Join(foundResources, ","))
 	} else {
-		_, err = o.clusterAccessor.CreateServiceForCluster(c)
+		_, err := o.clusterAccessor.CreateServiceForCluster(c)
 		if err != nil {
 			log.Errorf("Error while creating headless service for cluster %s: %v", c.QualifiedName(), err)
 			return
@@ -48,10 +42,8 @@ func (o *AddClusterOperation) Execute() {
 			return
 		}
 	}
-
-	c.Online = true
 }
 
 func (o *AddClusterOperation) String() string {
-	return fmt.Sprintf("add cluster %s", o.clusterDefinition.QualifiedName())
+	return fmt.Sprintf("add cluster %s", o.cassandra.QualifiedName())
 }

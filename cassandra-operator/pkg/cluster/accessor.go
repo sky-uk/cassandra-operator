@@ -57,7 +57,7 @@ func (h *Accessor) FindCustomConfigMap(namespace, clusterName string) *v1.Config
 
 // CreateStatefulSetForRack creates a StatefulSet for a given within the supplied cluster definition
 func (h *Accessor) CreateStatefulSetForRack(c *Cluster, rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) (*v1beta2.StatefulSet, error) {
-	return h.kubeClientset.AppsV1beta2().StatefulSets(c.Namespace()).Create(c.createStatefulSetForRack(rack, customConfigMap))
+	return h.kubeClientset.AppsV1beta2().StatefulSets(c.Namespace()).Create(c.CreateStatefulSetForRack(rack, customConfigMap))
 }
 
 // PatchStatefulSet applies a patch to a stateful set corresponding to the supplied rack in the supplied cluster

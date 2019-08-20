@@ -48,21 +48,6 @@ var _ = Describe("identification of custom config maps", func() {
 
 		Expect(ConfigMapBelongsToAManagedCluster(clusters, &configMap)).To(BeFalse())
 	})
-
-	It("should derive the name of a cluster from a config map name", func() {
-		configMap := v1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config", Namespace: "the-namespace"}}
-		clusterName, err := QualifiedClusterNameFor(&configMap)
-
-		Expect(err).ToNot(HaveOccurred())
-		Expect(clusterName).To(Equal("the-namespace.cluster1"))
-	})
-
-	It("should fail to derive the name of a cluster from a config map which does not fit the naming convention", func() {
-		configMap := v1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-something-else", Namespace: "the-namespace"}}
-		_, err := QualifiedClusterNameFor(&configMap)
-
-		Expect(err).To(HaveOccurred())
-	})
 })
 
 var _ = Describe("creation of stateful sets", func() {
@@ -106,11 +91,10 @@ var _ = Describe("creation of stateful sets", func() {
 
 	It("should add init containers for config initialisation and bootstrapping", func() {
 		// given
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 
 		// then
 		Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
@@ -131,39 +115,35 @@ var _ = Describe("creation of stateful sets", func() {
 
 	It("should create the bootstrapper init container with the specified image if one is given", func() {
 		clusterDef.Spec.Pod.BootstrapperImage = ptr.String("somerepo/abootstapperimage:v1")
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.createStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(Equal("somerepo/abootstapperimage:v1"))
 	})
 
 	It("should define environment variables for pod memory and cpu in bootstrapper init-container", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.createStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 		Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(v1.EnvVar{Name: "POD_CPU_MILLICORES", Value: "100"}))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(v1.EnvVar{Name: "POD_MEMORY_BYTES", Value: strconv.Itoa(1024 * 1024 * 1024)}))
 	})
 
 	It("should define environment variable for extra classpath in main container", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.createStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
 	})
 
 	It("should define emptyDir volumes for configuration and extra libraries", func() {
 		// given
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 		// then
 		volumes := statefulSet.Spec.Template.Spec.Volumes
@@ -174,11 +154,10 @@ var _ = Describe("creation of stateful sets", func() {
 
 	It("should mount a persistent volume claim into the main container if useEmptyDir is not set", func() {
 		// given
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 		// then
 		Expect(statefulSet.Spec.Template.Spec.Volumes).To(haveExactly(0, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
@@ -192,11 +171,10 @@ var _ = Describe("creation of stateful sets", func() {
 		// given
 		clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
 		clusterDef.Spec.Pod.StorageSize = resource.MustParse("0")
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 		// then
 		volumes := statefulSet.Spec.Template.Spec.Volumes
@@ -210,11 +188,10 @@ var _ = Describe("creation of stateful sets", func() {
 
 	It("should mount the configuration and extra-lib volumes in the main container", func() {
 		// given
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 		// then
 		mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
@@ -225,11 +202,10 @@ var _ = Describe("creation of stateful sets", func() {
 
 	It("should define zone specific affinity rules if useEmptyDir is not set", func() {
 		// given
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 		// then
 		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
@@ -244,11 +220,10 @@ var _ = Describe("creation of stateful sets", func() {
 	It("should not define zone specific affinity rules if useEmptyDir is set", func() {
 		// given
 		clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
-		cluster, err := ACluster(clusterDef)
-		Expect(err).ToNot(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		// when
-		statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 		// then
 		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
@@ -258,11 +233,10 @@ var _ = Describe("creation of stateful sets", func() {
 	Context("a cluster with a custom configMap is created", func() {
 		It("should mount the configuration volume in the init-config container", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
+			cluster := ACluster(clusterDef)
 
 			// when
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// then
 			initConfigContainerVolumeMounts := statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts
@@ -272,11 +246,10 @@ var _ = Describe("creation of stateful sets", func() {
 
 		It("should mount the configMap, configuration and extra-lib volumes in the bootstrap container", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
+			cluster := ACluster(clusterDef)
 
 			// when
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// then
 			volumes := statefulSet.Spec.Template.Spec.Volumes
@@ -294,11 +267,10 @@ var _ = Describe("creation of stateful sets", func() {
 	Context("a cluster without a custom configMap is created", func() {
 		It("should not create the volume configMap and its corresponding mount in the bootstrap container", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
+			cluster := ACluster(clusterDef)
 
 			// when
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			Expect(statefulSet.Spec.Template.Spec.Volumes).To(HaveLen(2))
 
@@ -312,9 +284,8 @@ var _ = Describe("creation of stateful sets", func() {
 	Context("sidecar container", func() {
 		It("configure the environment variables required by the cassandra-sidecar server", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			actualEnv := statefulSet.Spec.Template.Spec.Containers[1].Env
@@ -334,9 +305,8 @@ var _ = Describe("creation of stateful sets", func() {
 		It("should use the maxSidecarCPURequest if that is lower than Cassandra.Spec.Pod.CPU", func() {
 			// given
 			clusterDef.Spec.Pod.CPU = resource.MustParse("2")
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
@@ -348,9 +318,8 @@ var _ = Describe("creation of stateful sets", func() {
 		It("should allow CPU bursting configurations", func() {
 			// given
 			clusterDef.Spec.Pod.CPU = resource.MustParse("0")
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
@@ -362,9 +331,8 @@ var _ = Describe("creation of stateful sets", func() {
 		It("should use the maxSidecarMemoryRequest if that is lower than Cassandra.Spec.Pod.Memory", func() {
 			// given
 			clusterDef.Spec.Pod.Memory = resource.MustParse("1Ti")
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
@@ -376,9 +344,8 @@ var _ = Describe("creation of stateful sets", func() {
 		It("should allow Memory bursting configurations", func() {
 			// given
 			clusterDef.Spec.Pod.Memory = resource.MustParse("1")
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
@@ -417,12 +384,11 @@ var _ = Describe("modification of stateful sets", func() {
 	Context("the custom configMap is added", func() {
 		It("should add the configMap volume and its corresponding mount to the cassandra-bootstrapper init-container", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			err = cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
+			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
 			Expect(err).ToNot(HaveOccurred())
 
 			// then
@@ -435,12 +401,11 @@ var _ = Describe("modification of stateful sets", func() {
 
 		It("should add a config map hash annotation to the pod spec", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], nil)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			err = cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
+			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
 			Expect(err).ToNot(HaveOccurred())
 
 			// then
@@ -449,12 +414,11 @@ var _ = Describe("modification of stateful sets", func() {
 
 		It("should do nothing when the configMap volume already exists", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err = cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
+			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
 			Expect(err).ToNot(HaveOccurred())
 
 			// then
@@ -470,12 +434,11 @@ var _ = Describe("modification of stateful sets", func() {
 	Context("the custom configMap is removed", func() {
 		It("should remove the configMap volume and its corresponding mount in the cassandra-bootstrapper init-container", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err = cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
+			err := cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			// then
@@ -487,12 +450,11 @@ var _ = Describe("modification of stateful sets", func() {
 
 		It("should remove the config map hash annotation from the pod spec", func() {
 			// given
-			cluster, err := ACluster(clusterDef)
-			Expect(err).ToNot(HaveOccurred())
-			statefulSet := cluster.createStatefulSetForRack(&cluster.Racks()[0], configMap)
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err = cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
+			err := cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			// then
@@ -526,8 +488,7 @@ var _ = Describe("creation of snapshot job", func() {
 	})
 
 	It("should create a cronjob named after the cluster that will trigger at the specified schedule", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 		Expect(cronJob.Name).To(Equal(fmt.Sprintf("%s-snapshot", clusterDef.Name)))
@@ -541,8 +502,7 @@ var _ = Describe("creation of snapshot job", func() {
 	})
 
 	It("should create a cronjob with its associated job named after the cluster in the same namespace", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 		backupJob := cronJob.Spec.JobTemplate
@@ -563,8 +523,7 @@ var _ = Describe("creation of snapshot job", func() {
 	})
 
 	It("should create a cronjob that will trigger a snapshot creation for the whole cluster when no keyspace specified", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 		Expect(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -582,8 +541,7 @@ var _ = Describe("creation of snapshot job", func() {
 
 	It("should create a cronjob that will trigger a snapshot creation for the specified keyspaces", func() {
 		clusterDef.Spec.Snapshot.Keyspaces = []string{"keyspace1", "keyspace50"}
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 		Expect(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -601,8 +559,7 @@ var _ = Describe("creation of snapshot job", func() {
 	})
 
 	It("should create a cronjob which pod will restart in case of failure", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 
@@ -612,8 +569,7 @@ var _ = Describe("creation of snapshot job", func() {
 
 	It("should not create a snapshot job if none is specified in the cluster spec", func() {
 		clusterDef.Spec.Snapshot = nil
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 
@@ -623,8 +579,7 @@ var _ = Describe("creation of snapshot job", func() {
 	It("should create a cronjob which pod is using the specified snapshot image", func() {
 		img := "somerepo/snapshot:v1"
 		clusterDef.Spec.Snapshot.Image = &img
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
 
@@ -668,8 +623,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 
 	It("should not create a cleanup job if no retention policy is specified in the cluster spec", func() {
 		clusterDef.Spec.Snapshot.RetentionPolicy = nil
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 
@@ -678,8 +632,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 
 	It("should not create a cleanup job if the retention policy is disabled in the cluster spec", func() {
 		clusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 
@@ -687,8 +640,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 	})
 
 	It("should create a cronjob named after the cluster that will trigger at the specified schedule", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 		Expect(cronJob.Name).To(Equal(fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)))
@@ -701,8 +653,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 	})
 
 	It("should create a cronjob with its associated job named after the cluster in the same namespace", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 		cleanupJob := cronJob.Spec.JobTemplate
@@ -723,8 +674,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 	})
 
 	It("should create a cronjob that will trigger a snapshot cleanup", func() {
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 		Expect(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -744,8 +694,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 	It("should create a cronjob which pod is using the specified snapshot image", func() {
 		img := "somerepo/snapshot:v1"
 		clusterDef.Spec.Snapshot.Image = &img
-		cluster, err := ACluster(clusterDef)
-		Expect(err).NotTo(HaveOccurred())
+		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotCleanupJob()
 
@@ -755,7 +704,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 
 })
 
-func ACluster(clusterDef *v1alpha1.Cassandra) (*Cluster, error) {
+func ACluster(clusterDef *v1alpha1.Cassandra) *Cluster {
 	v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
 	return New(clusterDef)
 }

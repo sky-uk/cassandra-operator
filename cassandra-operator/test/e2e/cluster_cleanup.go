@@ -13,8 +13,16 @@ import (
 )
 
 func DeleteCassandraResourcesInNamespace(namespace string) {
+	cassandras, err := CassandraDefinitions(namespace)
+	if err != nil {
+		log.Infof("Error while searching for cassandras in namespace %s: %v", namespace, err)
+	}
+
+	// delete cluster definitions first, to stop the operator from trying to reconcile the state
+	for _, cassandra := range cassandras {
+		deleteClusterDefinitionsWatchedByOperator(namespace, cassandra.Name)
+	}
 	deleteCassandraResourcesWithLabel(namespace, cluster.OperatorLabel)
-	deleteClusterDefinitionsWatchedByOperator(namespace, "")
 	gomega.Eventually(cassandraPodsInNamespace(namespace), 240*time.Second, time.Second).Should(gomega.BeZero())
 }
 
@@ -29,14 +37,15 @@ func deleteCassandraCustomConfigurationConfigMap(namespace, clusterName string) 
 }
 
 func deleteCassandraResourcesForCluster(namespace, clusterName string) {
-	// delete cluster definitions last, so cassandra-operator is not used to delete test clusters as it watches this resource
-	// always do it so new redeployment of cassandra-operator won't try bootstrapping clusters for left-over cluster definitions
-	defer deleteClusterDefinitionsWatchedByOperator(namespace, clusterName)
+	// delete cluster definitions first, to stop the operator from trying to reconcile the state
+	// and bring back the delete resources
+	deleteClusterDefinitionsWatchedByOperator(namespace, clusterName)
 	deleteCassandraResourcesWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
 }
 
 func deleteCassandraResourcesWithLabel(namespace, label string) {
 	deleteStatefulSetsWithLabel(namespace, label)
+	deletePodsWithLabels(namespace, label)
 	deletePvcsWithLabel(namespace, label)
 	deleteServicesWithLabel(namespace, label)
 	deleteConfigMapsWithLabel(namespace, label)
@@ -45,27 +54,11 @@ func deleteCassandraResourcesWithLabel(namespace, label string) {
 }
 
 func deleteClusterDefinitionsWatchedByOperator(namespace, clusterName string) {
-	var cassandrasToDelete []string
-	if clusterName == "" {
-		cassandras, err := CassandraDefinitions(namespace)
-		if err != nil {
-			log.Infof("Error while searching for cassandras in namespace %s: %v", namespace, err)
-		}
-
-		for _, cassandra := range cassandras {
-			cassandrasToDelete = append(cassandrasToDelete, cassandra.Name)
-		}
-	} else {
-		cassandrasToDelete = append(cassandrasToDelete, clusterName)
-	}
-
-	log.Infof("Deleting cassandra definitions in namespace %s: %v", namespace, cassandrasToDelete)
-	for _, cassandraToDelete := range cassandrasToDelete {
-		// orphans or foreground policies result in an additional unneeded cluster update event, instead of just the delete cluster event
-		propagationPolicy := metaV1.DeletePropagationBackground
-		if err := CassandraClientset.CoreV1alpha1().Cassandras(namespace).Delete(cassandraToDelete, &metaV1.DeleteOptions{PropagationPolicy: &propagationPolicy}); err != nil {
-			log.Infof("Error while deleting cassandra resources in namespace %s: %v", namespace, err)
-		}
+	log.Infof("Deleting cassandra definition in namespace %s: %v", namespace, clusterName)
+	// orphans or foreground policies result in an additional unneeded cluster update event, instead of just the delete cluster event
+	propagationPolicy := metaV1.DeletePropagationBackground
+	if err := CassandraClientset.CoreV1alpha1().Cassandras(namespace).Delete(clusterName, &metaV1.DeleteOptions{PropagationPolicy: &propagationPolicy}); err != nil {
+		log.Infof("Error while deleting cassandra resources in namespace %s: %v", namespace, err)
 	}
 }
 
@@ -90,6 +83,23 @@ func deleteStatefulSetsWithLabel(namespace, label string) {
 	}
 	gomega.Eventually(statefulSetsWithLabel(namespace, label), durationSecondsPerItem(ssToDelete, 60), time.Second).
 		Should(gomega.HaveLen(0), fmt.Sprintf("When deleting statefulsets: %v", ssToDelete))
+}
+
+func deletePodsWithLabels(namespace, label string) {
+	client := KubeClientset.CoreV1().Pods(namespace)
+	podList, err := client.List(metaV1.ListOptions{LabelSelector: label})
+	if err != nil {
+		log.Infof("Error while searching for stateful set in namespace %s, with label %s: %v", namespace, label, err)
+	}
+
+	deleteImmediately := int64(0)
+	if err := client.DeleteCollection(
+		&metaV1.DeleteOptions{GracePeriodSeconds: &deleteImmediately},
+		metaV1.ListOptions{LabelSelector: label}); err != nil {
+		log.Infof("Unable to delete pods in namespace %s, with label %s: %v", namespace, label, err)
+	}
+	gomega.Eventually(podsWithLabel(namespace, label), time.Duration(len(podList.Items)*60)*time.Second, time.Second).
+		Should(gomega.HaveLen(0), fmt.Sprintf("When deleting pods: %v", podList.Items))
 }
 
 func deletePvcsWithLabel(namespace, label string) {

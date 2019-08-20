@@ -11,20 +11,14 @@ import (
 
 // AddSnapshotOperation describes what the operator does when a snapshot schedule is added for a cluster
 type AddSnapshotOperation struct {
-	clusterDefinition *v1alpha1.Cassandra
-	clusterAccessor   *cluster.Accessor
-	eventRecorder     record.EventRecorder
+	cassandra       *v1alpha1.Cassandra
+	clusterAccessor *cluster.Accessor
+	eventRecorder   record.EventRecorder
 }
 
 // Execute performs the operation
 func (o *AddSnapshotOperation) Execute() {
-	c, err := cluster.New(o.clusterDefinition)
-	if err != nil {
-		log.Errorf("Unable to create cluster object %s.%s: %v", o.clusterDefinition.Namespace, o.clusterDefinition.Name, err)
-		return
-	}
-
-	o.addSnapshotJob(c)
+	o.addSnapshotJob(cluster.New(o.cassandra))
 }
 
 func (o *AddSnapshotOperation) addSnapshotJob(c *cluster.Cluster) {
@@ -37,5 +31,5 @@ func (o *AddSnapshotOperation) addSnapshotJob(c *cluster.Cluster) {
 }
 
 func (o *AddSnapshotOperation) String() string {
-	return fmt.Sprintf("add snapshot schedule for cluster %s", o.clusterDefinition.QualifiedName())
+	return fmt.Sprintf("add snapshot schedule for cluster %s", o.cassandra.QualifiedName())
 }

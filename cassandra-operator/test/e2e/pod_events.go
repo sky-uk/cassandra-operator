@@ -57,24 +57,43 @@ func watchEvents(watcher watch.Interface, events eventLog) {
 	}
 }
 
-func (e *PodEventLog) PodsRecreatedOneAfterTheOther(pods ...string) (bool, error) {
-	for i := 0; i < len(pods)-1; i++ {
-		firstPod := pods[i]
-		secondPod := pods[i+1]
+// The basic idea is to validate no 2 pods were down at the same time.
+// It doesn't matter which pod was first deleted.
+// If a pod was deleted before the other pod, it should have been (re)created before the other pod is deleted.
+// If that's not the case then 2 pods were down at one moment in time, which is the error case.
+func (e *PodEventLog) PodsNotDownAtTheSameTime(pod, otherPod string) (bool, error) {
+	lastCreationTimeForPod, err := e.lastCreationTimeForPod(pod)
+	if err != nil {
+		return false, err
+	}
+	deletionTimeForPod, err := e.deletionTimeForPod(pod)
+	if err != nil {
+		return false, err
+	}
+	lastCreationTimeForOtherPod, err := e.lastCreationTimeForPod(otherPod)
+	if err != nil {
+		return false, err
+	}
+	deletionTimeForOtherPod, err := e.deletionTimeForPod(otherPod)
+	if err != nil {
+		return false, err
+	}
 
-		lastCreationTimeForFirstPod, err := e.lastCreationTimeForPod(firstPod)
-		if err != nil {
-			return false, err
-		}
-
-		deletionTimeForSecondPod, err := e.deletionTimeForPod(secondPod)
-		if err != nil {
-			return false, err
-		}
-
-		if deletionTimeForSecondPod.Before(lastCreationTimeForFirstPod) {
-			return false, fmt.Errorf("second pod was deleted before first pod was recreated. Second pod deleted at: %v, first pod last created at: %v", deletionTimeForSecondPod, lastCreationTimeForFirstPod)
-		}
+	if deletionTimeForPod.Before(deletionTimeForOtherPod) && !lastCreationTimeForPod.Before(deletionTimeForOtherPod) {
+		return false, fmt.Errorf(
+			"pod %s was deleted before pod %s was recreated. \nPod %s (re)started at %v and deleted at: %v.\nPod %s (re)started at %v and deleted at: %v",
+			pod, otherPod,
+			pod, lastCreationTimeForPod, deletionTimeForPod,
+			otherPod, lastCreationTimeForOtherPod, deletionTimeForOtherPod,
+		)
+	}
+	if deletionTimeForOtherPod.Before(deletionTimeForPod) && !lastCreationTimeForOtherPod.Before(deletionTimeForPod) {
+		return false, fmt.Errorf(
+			"pod %s was deleted before pod %s was recreated. \nPod %s (re)started at %v and deleted at: %v.\nPod %s (re)started at %v and deleted at: %v",
+			otherPod, pod,
+			otherPod, lastCreationTimeForOtherPod, deletionTimeForOtherPod,
+			pod, lastCreationTimeForPod, deletionTimeForPod,
+		)
 	}
 	return true, nil
 }

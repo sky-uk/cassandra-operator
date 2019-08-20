@@ -152,3 +152,22 @@ trigger an unnecessary rolling restart. Further, this design also ensures that i
 severe enough to cause Cassandra to fail to start, the rollout will stop at the first instance.
 
 If the `ConfigMap` is removed the associated label is also removed.
+
+# Reconciliation
+
+Reconciliation is the process that keeps the Kubernetes resources created by the operator in sync with the intended state,
+where the intended state in our case is defined by a Cassandra resource.
+The operator watches for changes made to a `Cassandra` resource, and also to all resources associated with it,
+such as `StatefulSet`, `Service` and `Cronjob`. 
+
+When a change is made, a reconciliation process is triggered where the current state is compared to the desired state
+and the delta applied in one or more changes to the Kubernetes cluster.
+
+At a high level, the sequence of events is as follows:
+
+- the operator watches resources
+- on change, a reconcile request is sent to the `reconciler` that process them one at a time
+- the `reconciler` reconstructs the current state by interrogating the api server
+- current and desired states are compared to determine the type of changes to apply
+- for each change a corresponding event is `dispatched` asynchronously
+- the event is then processed by the `receiver` which calculates the delta and applies the changes

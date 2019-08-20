@@ -11,20 +11,14 @@ import (
 
 // AddSnapshotCleanupOperation describes what the operator does when a snapshot cleanup definition is added
 type AddSnapshotCleanupOperation struct {
-	clusterDefinition *v1alpha1.Cassandra
-	clusterAccessor   *cluster.Accessor
-	eventRecorder     record.EventRecorder
+	cassandra       *v1alpha1.Cassandra
+	clusterAccessor *cluster.Accessor
+	eventRecorder   record.EventRecorder
 }
 
 // Execute performs the operation
 func (o *AddSnapshotCleanupOperation) Execute() {
-	c, err := cluster.New(o.clusterDefinition)
-	if err != nil {
-		log.Errorf("Unable to create cluster object %s.%s: %v", o.clusterDefinition.Namespace, o.clusterDefinition.Name, err)
-		return
-	}
-
-	o.addSnapshotCleanupJob(c)
+	o.addSnapshotCleanupJob(cluster.New(o.cassandra))
 }
 
 func (o *AddSnapshotCleanupOperation) addSnapshotCleanupJob(c *cluster.Cluster) {
@@ -37,5 +31,5 @@ func (o *AddSnapshotCleanupOperation) addSnapshotCleanupJob(c *cluster.Cluster) 
 }
 
 func (o *AddSnapshotCleanupOperation) String() string {
-	return fmt.Sprintf("add snapshot cleanup schedule for cluster %s", o.clusterDefinition.QualifiedName())
+	return fmt.Sprintf("add snapshot cleanup schedule for cluster %s", o.cassandra.QualifiedName())
 }

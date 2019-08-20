@@ -2,7 +2,6 @@ package operations
 
 import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"k8s.io/api/core/v1"
 )
 
@@ -17,18 +16,16 @@ type Operation interface {
 func (r *Receiver) newAddCluster(cassandra *v1alpha1.Cassandra) Operation {
 	return &AddClusterOperation{
 		clusterAccessor:     r.clusterAccessor,
-		clusters:            r.clusters,
 		statefulSetAccessor: r.statefulSetAccessor,
-		clusterDefinition:   cassandra,
+		cassandra:           cassandra,
 	}
 }
 
 func (r *Receiver) newDeleteCluster(cassandra *v1alpha1.Cassandra) Operation {
 	return &DeleteClusterOperation{
-		clusterAccessor:   r.clusterAccessor,
-		clusters:          r.clusters,
-		clusterDefinition: cassandra,
-		metricsPoller:     r.metricsPoller,
+		clusterAccessor: r.clusterAccessor,
+		cassandra:       cassandra,
+		metricsPoller:   r.metricsPoller,
 	}
 }
 
@@ -50,23 +47,22 @@ func (r *Receiver) newDeleteSnapshotCleanup(cassandra *v1alpha1.Cassandra) Opera
 
 func (r *Receiver) newAddSnapshot(cassandra *v1alpha1.Cassandra) Operation {
 	return &AddSnapshotOperation{
-		clusterDefinition: cassandra,
-		clusterAccessor:   r.clusterAccessor,
-		eventRecorder:     r.eventRecorder,
+		cassandra:       cassandra,
+		clusterAccessor: r.clusterAccessor,
+		eventRecorder:   r.eventRecorder,
 	}
 }
 
 func (r *Receiver) newAddSnapshotCleanup(cassandra *v1alpha1.Cassandra) Operation {
 	return &AddSnapshotCleanupOperation{
-		clusterDefinition: cassandra,
-		clusterAccessor:   r.clusterAccessor,
-		eventRecorder:     r.eventRecorder,
+		cassandra:       cassandra,
+		clusterAccessor: r.clusterAccessor,
+		eventRecorder:   r.eventRecorder,
 	}
 }
 
-func (r *Receiver) newUpdateCluster(c *cluster.Cluster, update ClusterUpdate) Operation {
+func (r *Receiver) newUpdateCluster(update ClusterUpdate) Operation {
 	return &UpdateClusterOperation{
-		cluster:             c,
 		adjuster:            r.adjuster,
 		eventRecorder:       r.eventRecorder,
 		statefulSetAccessor: r.statefulSetAccessor,
@@ -75,31 +71,29 @@ func (r *Receiver) newUpdateCluster(c *cluster.Cluster, update ClusterUpdate) Op
 	}
 }
 
-func (r *Receiver) newUpdateSnapshot(c *cluster.Cluster, newSnapshot *v1alpha1.Snapshot) Operation {
+func (r *Receiver) newUpdateSnapshot(cassandra *v1alpha1.Cassandra) Operation {
 	return &UpdateSnapshotOperation{
-		cluster:         c,
-		newSnapshot:     newSnapshot,
+		cassandra:       cassandra,
 		clusterAccessor: r.clusterAccessor,
 		eventRecorder:   r.eventRecorder,
 	}
 }
 
-func (r *Receiver) newUpdateSnapshotCleanup(c *cluster.Cluster, newSnapshot *v1alpha1.Snapshot) Operation {
+func (r *Receiver) newUpdateSnapshotCleanup(cassandra *v1alpha1.Cassandra) Operation {
 	return &UpdateSnapshotCleanupOperation{
-		cluster:         c,
-		newSnapshot:     newSnapshot,
+		cassandra:       cassandra,
 		clusterAccessor: r.clusterAccessor,
 		eventRecorder:   r.eventRecorder,
 	}
 }
 
-func (r *Receiver) newGatherMetrics(c *cluster.Cluster) Operation {
-	return &GatherMetricsOperation{metricsPoller: r.metricsPoller, cluster: c}
+func (r *Receiver) newGatherMetrics(cassandra *v1alpha1.Cassandra) Operation {
+	return &GatherMetricsOperation{metricsPoller: r.metricsPoller, cassandra: cassandra}
 }
 
-func (r *Receiver) newUpdateCustomConfig(cluster *cluster.Cluster, configMap *v1.ConfigMap) Operation {
+func (r *Receiver) newUpdateCustomConfig(cassandra *v1alpha1.Cassandra, configMap *v1.ConfigMap) Operation {
 	return &UpdateCustomConfigOperation{
-		cluster:             cluster,
+		cassandra:           cassandra,
 		configMap:           configMap,
 		eventRecorder:       r.eventRecorder,
 		statefulSetAccessor: r.statefulSetAccessor,
@@ -107,9 +101,9 @@ func (r *Receiver) newUpdateCustomConfig(cluster *cluster.Cluster, configMap *v1
 	}
 }
 
-func (r *Receiver) newAddCustomConfig(cluster *cluster.Cluster, configMap *v1.ConfigMap) Operation {
+func (r *Receiver) newAddCustomConfig(cassandra *v1alpha1.Cassandra, configMap *v1.ConfigMap) Operation {
 	return &AddCustomConfigOperation{
-		cluster:             cluster,
+		cassandra:           cassandra,
 		configMap:           configMap,
 		eventRecorder:       r.eventRecorder,
 		statefulSetAccessor: r.statefulSetAccessor,
@@ -117,10 +111,9 @@ func (r *Receiver) newAddCustomConfig(cluster *cluster.Cluster, configMap *v1.Co
 	}
 }
 
-func (r *Receiver) newDeleteCustomConfig(cluster *cluster.Cluster, configMap *v1.ConfigMap) Operation {
+func (r *Receiver) newDeleteCustomConfig(cassandra *v1alpha1.Cassandra) Operation {
 	return &DeleteCustomConfigOperation{
-		cluster:             cluster,
-		configMap:           configMap,
+		cassandra:           cassandra,
 		eventRecorder:       r.eventRecorder,
 		statefulSetAccessor: r.statefulSetAccessor,
 	}

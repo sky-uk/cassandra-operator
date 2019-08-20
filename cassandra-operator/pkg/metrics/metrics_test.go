@@ -403,7 +403,5 @@ func aCluster(clusterName, namespace string) *cluster.Cluster {
 		},
 	}
 	v1alpha1helpers.SetDefaultsForCassandra(&clusterDef)
-	theCluster, err := cluster.New(&clusterDef)
-	Expect(err).ToNot(HaveOccurred())
-	return theCluster
+	return cluster.New(&clusterDef)
 }

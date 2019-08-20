@@ -74,7 +74,7 @@ func start(_ *cobra.Command, _ []string) error {
 		},
 	)
 	nt := metrics.NewNodetool(
-		cluster.NewWithoutValidation(
+		cluster.New(
 			&v1alpha1.Cassandra{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,

@@ -12,18 +12,16 @@ import (
 
 // UpdateSnapshotCleanupOperation describes what the operator does when the retention policy is updated for a cluster
 type UpdateSnapshotCleanupOperation struct {
-	cluster         *cluster.Cluster
+	cassandra       *v1alpha1.Cassandra
 	clusterAccessor *cluster.Accessor
-	newSnapshot     *v1alpha1.Snapshot
 	eventRecorder   record.EventRecorder
 }
 
 // Execute performs the operation
 func (o *UpdateSnapshotCleanupOperation) Execute() {
-	cassandra := o.cluster.Definition()
-	job, err := o.clusterAccessor.FindCronJobForCluster(cassandra, fmt.Sprintf("app=%s", cassandra.SnapshotCleanupJobName()))
+	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotCleanupJobName()))
 	if err != nil {
-		log.Errorf("Error while retrieving snapshot cleanup job for cluster %s: %v", cassandra.QualifiedName(), err)
+		log.Errorf("Error while retrieving snapshot cleanup job for cluster %s: %v", o.cassandra.QualifiedName(), err)
 	}
 
 	if job != nil {
@@ -32,16 +30,17 @@ func (o *UpdateSnapshotCleanupOperation) Execute() {
 }
 
 func (o *UpdateSnapshotCleanupOperation) updateSnapshotCleanupJob(job *v1beta1.CronJob) {
-	job.Spec.Schedule = o.newSnapshot.RetentionPolicy.CleanupSchedule
-	job.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *o.cluster.CreateSnapshotCleanupContainer(o.newSnapshot)
+	c := cluster.New(o.cassandra)
+	job.Spec.Schedule = o.cassandra.Spec.Snapshot.RetentionPolicy.CleanupSchedule
+	job.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotCleanupContainer(o.cassandra.Spec.Snapshot)
 	err := o.clusterAccessor.UpdateCronJob(job)
 	if err != nil {
-		log.Errorf("Error while updating snapshot cleanup job %s for cluster %s: %v", job.Name, o.cluster.QualifiedName(), err)
+		log.Errorf("Error while updating snapshot cleanup job %s for cluster %s: %v", job.Name, o.cassandra.QualifiedName(), err)
 		return
 	}
-	o.eventRecorder.Eventf(o.cluster.Definition(), v1.EventTypeNormal, cluster.ClusterSnapshotCleanupModificationEvent, "Snapshot cleanup modified for cluster %s", o.cluster.QualifiedName())
+	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterSnapshotCleanupModificationEvent, "Snapshot cleanup modified for cluster %s", o.cassandra.QualifiedName())
 }
 
 func (o *UpdateSnapshotCleanupOperation) String() string {
-	return fmt.Sprintf("update snapshot cleanup schedule for cluster %s", o.cluster.QualifiedName())
+	return fmt.Sprintf("update snapshot cleanup schedule for cluster %s", o.cassandra.QualifiedName())
 }

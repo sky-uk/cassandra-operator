@@ -5,6 +5,7 @@ import (
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator"
@@ -12,7 +13,8 @@ import (
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
 	"io"
 	"io/ioutil"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"net/http"
 	"testing"
@@ -36,7 +38,6 @@ var _ = Context("When an operator is restarted", func() {
 	BeforeEach(func() {
 		testStartTime = time.Now()
 		clusterName = AClusterName()
-		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
 	})
 
 	JustAfterEach(func() {
@@ -49,20 +50,52 @@ var _ = Context("When an operator is restarted", func() {
 		DeleteCassandraResourcesForClusters(Namespace, clusterName)
 	})
 
-	It("should detect a cluster exists if pods are the only resources which still exist for it", func() {
+	It("should detect a cluster exists", func() {
 		// given
-		serviceDoesNotExistFor(clusterName)
-		statefulSetsDoNotExistFor(clusterName)
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
 
 		// when
 		theOperatorIsRestarted()
 
 		// then
-		metricsAreReportedForCluster(clusterName)
+		By("exposing metrics for the cluster")
+		Eventually(OperatorMetrics(Namespace), NodeStartDuration, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			ClusterSizeMetric(Namespace, clusterName, 1),
+			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
+		}))
+	})
 
-		// and
-		Expect(HeadlessServiceForCluster(Namespace, clusterName)()).To(BeNil())
-		Expect(StatefulSetsForCluster(Namespace, clusterName)()).To(BeNil())
+	It("should apply both cluster and custom config changes made while the operator was down", func() {
+		// given
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{Rack("a", 1)}).Exists()
+
+		// when
+		theOperatorIsScaledDown()
+		TheRackReplicationIsChangedTo(Namespace, clusterName, "a", 2)
+		TheCustomConfigIsDeletedForCluster(Namespace, clusterName)
+		theOperatorIsScaledUp()
+
+		// then
+		By("creating a new pod within the cluster rack")
+		Eventually(RacksForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(And(
+			HaveLen(1),
+			HaveKeyWithValue("a", []string{PodName(clusterName, "a", 0), PodName(clusterName, "a", 1)}),
+		))
+
+		By("applying the config changes to each pod")
+		Eventually(PodsForCluster(Namespace, clusterName), 2*NodeRestartDuration, CheckInterval).Should(Each(And(
+			Not(HaveVolumeForConfigMap(fmt.Sprintf("%s-config", clusterName))),
+			Not(HaveAnnotation("clusterConfigHash")),
+		)))
+		Eventually(PodReadinessStatus(Namespace, PodName(clusterName, "a", 0)), NodeRestartDuration, CheckInterval).Should(BeTrue())
+		Eventually(PodReadinessStatus(Namespace, PodName(clusterName, "a", 1)), NodeRestartDuration, CheckInterval).Should(BeTrue())
+
+		By("exposing metrics for the cluster")
+		Eventually(OperatorMetrics(Namespace), NodeStartDuration, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			ClusterSizeMetric(Namespace, clusterName, 2),
+			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
+			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 1), "a", 1),
+		}))
 	})
 })
 
@@ -136,46 +169,35 @@ func readJSONResponseInto(reader io.Reader, responseHolder interface{}) error {
 	return nil
 }
 
-func metricsAreReportedForCluster(clusterName string) {
-	Eventually(OperatorMetrics(Namespace), NodeStartDuration, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
-		ClusterSizeMetric(Namespace, clusterName, 1),
-		LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
-	}))
+func theOperatorIsScaledDown() {
+	scaleOperator(0)
+}
+
+func theOperatorIsScaledUp() {
+	scaleOperator(1)
 }
 
 func theOperatorIsRestarted() {
-	operatorPodNameBeforeRestart := operatorPodName()()
-
-	err := KubeClientset.CoreV1().Pods(Namespace).Delete(operatorPodNameBeforeRestart, &metaV1.DeleteOptions{})
-	Expect(err).ToNot(HaveOccurred())
-
-	Eventually(PodExists(Namespace, operatorPodNameBeforeRestart), NodeTerminationDuration, CheckInterval).ShouldNot(BeTrue())
-	Eventually(operatorPodName(), NodeStartDuration, CheckInterval).ShouldNot(BeEmpty())
-	operatorPodNameAfterRestart := operatorPodName()()
-	Eventually(PodReadinessStatus(Namespace, operatorPodNameAfterRestart), NodeStartDuration, CheckInterval).Should(BeTrue())
+	theOperatorIsScaledDown()
+	theOperatorIsScaledUp()
 }
 
-func operatorPodName() func() string {
-	return func() string {
-		operatorListOptions := metaV1.ListOptions{LabelSelector: "app=cassandra-operator"}
-		operatorPods, err := KubeClientset.CoreV1().Pods(Namespace).List(operatorListOptions)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(operatorPods.Items).To(HaveLen(1))
+func scaleOperator(replicas int32) {
+	_, err := KubeClientset.AppsV1().Deployments(Namespace).UpdateScale("cassandra-operator", &autoscalingv1.Scale{
+		Spec:       autoscalingv1.ScaleSpec{Replicas: replicas},
+		ObjectMeta: metav1.ObjectMeta{Name: "cassandra-operator", Namespace: Namespace},
+	})
+	Expect(err).ToNot(HaveOccurred())
+	Eventually(theDeploymentScale(Namespace, "cassandra-operator"), 30*time.Second, CheckInterval).Should(Equal(replicas))
+	log.Infof("Scaled operator to %d replica", replicas)
+}
 
-		return operatorPods.Items[0].Name
+func theDeploymentScale(namespace, deploymentName string) func() (int32, error) {
+	return func() (int32, error) {
+		scale, err := KubeClientset.AppsV1().Deployments(namespace).GetScale(deploymentName, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		return scale.Status.Replicas, nil
 	}
-}
-
-func serviceDoesNotExistFor(clusterName string) {
-	err := KubeClientset.CoreV1().Services(Namespace).Delete(clusterName, &metaV1.DeleteOptions{})
-	Expect(err).ToNot(HaveOccurred())
-}
-
-func statefulSetsDoNotExistFor(clusterName string) {
-	listOptions := metaV1.ListOptions{LabelSelector: fmt.Sprintf("sky.uk/cassandra-operator=%s", clusterName)}
-	orphanDependencies := metaV1.DeletePropagationOrphan
-	deleteOptions := &metaV1.DeleteOptions{PropagationPolicy: &orphanDependencies}
-	err := KubeClientset.AppsV1beta1().StatefulSets(Namespace).DeleteCollection(deleteOptions, listOptions)
-	Expect(err).ToNot(HaveOccurred())
-	Eventually(StatefulSetsForCluster(Namespace, clusterName), time.Minute, CheckInterval).Should(BeEmpty())
 }

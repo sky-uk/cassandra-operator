@@ -6,7 +6,6 @@ require (
 	github.com/PaesslerAG/gval v0.1.1 // indirect
 	github.com/PaesslerAG/jsonpath v0.1.0
 	github.com/davecgh/go-spew v1.1.1
-	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.1 // indirect
 	github.com/gofrs/flock v0.7.1 // indirect
 	github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d // indirect
@@ -24,6 +23,7 @@ require (
 	github.com/sirupsen/logrus v1.3.0
 	github.com/sky-uk/licence-compliance-checker v1.1.1
 	github.com/spf13/cobra v0.0.3
+	github.com/stretchr/testify v1.3.0
 	github.com/theckman/go-flock v0.7.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/zap v1.10.0 // indirect
