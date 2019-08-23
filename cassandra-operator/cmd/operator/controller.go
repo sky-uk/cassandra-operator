@@ -67,6 +67,7 @@ func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client
 func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	ctx := newContext(request)
 	logger := ctx.logger
+	logger.Info("Reconciling all Cassandra resources")
 
 	// lookup the object to reconcile or delete it right away and exit early
 	desiredCassandra := r.objectFactory.newCassandra()
@@ -101,7 +102,7 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 
 func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
 	logger := ctx.logger
-	logger.Info("Reconciling Cassandra")
+	logger.Debug("Reconciling Cassandra")
 
 	v1alpha1helpers.SetDefaultsForCassandra(desiredCassandra)
 	validationError := validation.ValidateCassandra(desiredCassandra).ToAggregate()
@@ -144,7 +145,7 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 
 func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
 	logger := ctx.logger
-	logger.Info("Reconciling Cassandra custom config")
+	logger.Debug("Reconciling Cassandra custom config")
 
 	configMap := r.objectFactory.newConfigMap()
 	configMapErr := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.CustomConfigMapName()}, configMap)

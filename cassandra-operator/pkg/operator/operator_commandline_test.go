@@ -20,6 +20,10 @@ var _ = Describe("operator command line", func() {
 			output, err := exec.Command("cassandra-operator", "--help").CombinedOutput()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("-h, --help"))
+			Expect(string(output)).To(ContainSubstring("--log-level"))
+			Expect(string(output)).To(ContainSubstring("--metric-request-timeout"))
+			Expect(string(output)).To(ContainSubstring("--metric-poll-interval"))
+			Expect(string(output)).To(ContainSubstring("--controller-sync-period"))
 		})
 		It("should list the available log levels", func() {
 			output, err := exec.Command("cassandra-operator", "--help").CombinedOutput()
@@ -29,7 +33,7 @@ var _ = Describe("operator command line", func() {
 	})
 
 	Describe("--metric-poll-interval", func() {
-		It("should reject a metric poll interval flag whose value is not positive", func() {
+		It("should reject a value that is not positive", func() {
 			output, err := exec.Command("cassandra-operator", "--metric-poll-interval=-1s").CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("invalid metric-poll-interval"))
@@ -41,6 +45,14 @@ var _ = Describe("operator command line", func() {
 			output, err := exec.Command("cassandra-operator", "--log-level=debugwrong").CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("invalid log-level"))
+		})
+	})
+
+	Describe("--controller-sync-period", func() {
+		It("should reject a value that is negative", func() {
+			output, err := exec.Command("cassandra-operator", "--controller-sync-period=-1s").CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring("invalid controller-sync-period"))
 		})
 	})
 })

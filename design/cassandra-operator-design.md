@@ -162,7 +162,8 @@ such as `StatefulSet`, `Service` and `Cronjob`.
 
 When a change is made, a reconciliation process is triggered where the current state is compared to the desired state
 and the delta applied in one or more changes to the Kubernetes cluster.
-
+A reconciliation process is also triggered periodically to ensure any incomplete updates are eventually applied. 
+The reconciliation minimum frequency is controlled via a command line argument passed to the operator. 
 At a high level, the sequence of events is as follows:
 
 - the operator watches resources

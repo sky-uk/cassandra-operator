@@ -36,8 +36,8 @@ import (
 var (
 	metricPollInterval   time.Duration
 	metricRequestTimeout time.Duration
+	controllerSyncPeriod time.Duration
 	logLevel             string
-	allowEmptyDir        bool
 	clusters             map[types.NamespacedName]*v1alpha1.Cassandra
 	receiver             *operations.Receiver
 
@@ -66,7 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().DurationVar(&metricPollInterval, "metric-poll-interval", 5*time.Second, "Poll interval between cassandra nodes metrics retrieval")
 	rootCmd.PersistentFlags().DurationVar(&metricRequestTimeout, "metric-request-timeout", 2*time.Second, "Time limit for cassandra node metrics requests")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "should be one of: debug, info, warn, error, fatal, panic")
-	rootCmd.PersistentFlags().BoolVar(&allowEmptyDir, "allow-empty-dir", false, "Set to true in order to allow creation of clusters which use emptyDir storage")
+	rootCmd.PersistentFlags().DurationVar(&controllerSyncPeriod, "controller-sync-period", 5*time.Minute, "Minimum frequency at which watched resources are reconciled")
 }
 
 func main() {
@@ -80,9 +80,17 @@ func handleArgs(_ *cobra.Command, _ []string) error {
 		currentTime := time.Now()
 		return currentTime.Add(duration).After(currentTime)
 	}
+	var isNegative = func(duration time.Duration) bool {
+		currentTime := time.Now()
+		return currentTime.Add(duration).Before(currentTime)
+	}
 
 	if !isPositive(metricPollInterval) {
-		return fmt.Errorf("invalid metric-poll-interval, it must be a positive integer")
+		return fmt.Errorf("invalid metric-poll-interval, it must be a positive duration")
+	}
+
+	if isNegative(controllerSyncPeriod) {
+		return fmt.Errorf("invalid controller-sync-period, it must not be a negative duration")
 	}
 
 	level, err := logr.ParseLevel(logLevel)
@@ -119,7 +127,7 @@ func startOperator(_ *cobra.Command, _ []string) error {
 
 	// Setup a Manager
 	entryLog.Info("Setting up manager")
-	mgr, err := manager.New(kubeConfig, manager.Options{Scheme: scheme, Namespace: ns})
+	mgr, err := manager.New(kubeConfig, manager.Options{SyncPeriod: &controllerSyncPeriod, Scheme: scheme, Namespace: ns})
 	if err != nil {
 		entryLog.Fatalf("Unable to set up overall controller manager: %v", err)
 	}
@@ -211,11 +219,9 @@ func startServer(metricsPoller *metrics.PrometheusMetrics) {
 }
 
 func startMetricPolling(metricsPoller *metrics.PrometheusMetrics) {
-	entryLog := logr.WithField("name", "metrics")
 	go func() {
 		for {
 			for _, c := range clusters {
-				entryLog.Info("Sending request for metrics", "cluster", c.QualifiedName())
 				receiver.Receive(&dispatcher.Event{Kind: operations.GatherMetrics, Key: c.QualifiedName(), Data: c})
 			}
 			time.Sleep(metricPollInterval)
