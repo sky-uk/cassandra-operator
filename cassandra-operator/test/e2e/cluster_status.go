@@ -2,11 +2,13 @@ package e2e
 
 import (
 	"fmt"
+	"github.com/onsi/gomega"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"io/ioutil"
 	appsV1 "k8s.io/api/apps/v1beta2"
+	"k8s.io/api/batch/v1beta1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,121 +17,141 @@ import (
 	"time"
 )
 
-func PersistentVolumeClaimsForCluster(namespace, clusterName string) func() ([]*labelledResource, error) {
+func PersistentVolumeClaimsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
 	return persistentVolumeClaimsWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
 }
 
-func persistentVolumeClaimsWithLabel(namespace, label string) func() ([]*labelledResource, error) {
-	return func() ([]*labelledResource, error) {
+func persistentVolumeClaimsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
+	return func() ([]*kubernetesResource, error) {
 		pvcClient := KubeClientset.CoreV1().PersistentVolumeClaims(namespace)
 		pvcList, err := pvcClient.List(metaV1.ListOptions{LabelSelector: label})
 		if err != nil {
 			return nil, err
 		}
 
-		var labelledResources []*labelledResource
+		var kubernetesResources []*kubernetesResource
 		for _, item := range pvcList.Items {
-			labelledResources = append(labelledResources, &labelledResource{item})
+			kubernetesResources = append(kubernetesResources, &kubernetesResource{item})
 		}
-		return labelledResources, nil
+		return kubernetesResources, nil
 	}
 }
 
-func StatefulSetsForCluster(namespace, clusterName string) func() ([]*labelledResource, error) {
+func StatefulSetsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
 	return statefulSetsWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
 }
 
-func statefulSetsWithLabel(namespace, label string) func() ([]*labelledResource, error) {
-	return func() ([]*labelledResource, error) {
+func statefulSetsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
+	return func() ([]*kubernetesResource, error) {
 		ssClient := KubeClientset.AppsV1beta2().StatefulSets(namespace)
 		result, err := ssClient.List(metaV1.ListOptions{LabelSelector: label})
 		if err != nil {
 			return nil, err
 		}
 
-		var labelledResources []*labelledResource
+		var kubernetesResources []*kubernetesResource
 		for _, item := range result.Items {
-			labelledResources = append(labelledResources, &labelledResource{item})
+			kubernetesResources = append(kubernetesResources, &kubernetesResource{item})
 		}
-		return labelledResources, nil
+		return kubernetesResources, nil
 	}
 }
 
-func HeadlessServiceForCluster(namespace, clusterName string) func() (*labelledResource, error) {
-	return func() (*labelledResource, error) {
+func HeadlessServiceForCluster(namespace, clusterName string) func() (*kubernetesResource, error) {
+	return func() (*kubernetesResource, error) {
 		svcClient := KubeClientset.CoreV1().Services(namespace)
 		result, err := svcClient.Get(clusterName, metaV1.GetOptions{})
 		if err != nil {
 			return nil, errorUnlessNotFound(err)
 		}
 
-		return &labelledResource{result}, nil
+		return &kubernetesResource{result}, nil
 	}
 }
 
-func PodsForCluster(namespace, clusterName string) func() ([]*labelledResource, error) {
+func PodsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
 	return podsWithLabel(namespace, fmt.Sprintf("app=%s", clusterName))
 }
 
-func podsWithLabel(namespace, label string) func() ([]*labelledResource, error) {
-	return func() ([]*labelledResource, error) {
+func podsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
+	return func() ([]*kubernetesResource, error) {
 		podInterface := KubeClientset.CoreV1().Pods(namespace)
 		podList, err := podInterface.List(metaV1.ListOptions{LabelSelector: label})
 		if err != nil {
 			return nil, err
 		}
 
-		var labelledResources []*labelledResource
+		var kubernetesResources []*kubernetesResource
 		for _, item := range podList.Items {
-			labelledResources = append(labelledResources, &labelledResource{item})
+			kubernetesResources = append(kubernetesResources, &kubernetesResource{item})
 		}
-		return labelledResources, nil
+		return kubernetesResources, nil
 	}
 }
 
-func CronJobsForCluster(namespace, clusterName string) func() ([]*labelledResource, error) {
-	return func() ([]*labelledResource, error) {
+func CronJobsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
+	return func() ([]*kubernetesResource, error) {
 		jobList, err := KubeClientset.BatchV1beta1().CronJobs(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName)})
 		if err != nil {
 			return nil, err
 		}
 
-		var labelledResources []*labelledResource
+		var kubernetesResources []*kubernetesResource
 		for _, item := range jobList.Items {
-			labelledResources = append(labelledResources, &labelledResource{item})
+			kubernetesResources = append(kubernetesResources, &kubernetesResource{item})
 		}
-		return labelledResources, nil
+		return kubernetesResources, nil
 	}
 }
 
-func CronJob(namespace, jobName string) func() (*labelledResource, error) {
-	return func() (*labelledResource, error) {
+func CronJob(namespace, jobName string) func() (*kubernetesResource, error) {
+	return func() (*kubernetesResource, error) {
 		job, err := KubeClientset.BatchV1beta1().CronJobs(namespace).Get(jobName, metaV1.GetOptions{})
 		if err != nil {
 			return nil, errorUnlessNotFound(err)
 		}
 
-		return &labelledResource{job}, nil
+		return &kubernetesResource{job}, nil
 	}
 }
 
-type labelledResource struct {
+type kubernetesResource struct {
 	Resource interface{}
 }
 
-func (l *labelledResource) Labels() map[string]string {
-	switch r := l.Resource.(type) {
+func (k *kubernetesResource) Labels() map[string]string {
+	return k.ObjectMeta().Labels
+}
+
+func (k *kubernetesResource) CreationTimestamp() metaV1.Time {
+	return k.ObjectMeta().CreationTimestamp
+}
+
+func (k *kubernetesResource) ObjectMeta() *metaV1.ObjectMeta {
+	switch r := k.Resource.(type) {
 	case *coreV1.Service:
-		return r.ObjectMeta.Labels
+		return &r.ObjectMeta
+	case coreV1.Service:
+		return &r.ObjectMeta
+	case *appsV1.StatefulSet:
+		return &r.ObjectMeta
 	case appsV1.StatefulSet:
-		return r.ObjectMeta.Labels
+		return &r.ObjectMeta
+	case *coreV1.PersistentVolumeClaim:
+		return &r.ObjectMeta
 	case coreV1.PersistentVolumeClaim:
-		return r.ObjectMeta.Labels
+		return &r.ObjectMeta
+	case *coreV1.Pod:
+		return &r.ObjectMeta
 	case coreV1.Pod:
-		return r.ObjectMeta.Labels
+		return &r.ObjectMeta
+	case *v1beta1.CronJob:
+		return &r.ObjectMeta
+	case v1beta1.CronJob:
+		return &r.ObjectMeta
 	default:
-		fmt.Printf("Unknown resource type %v. Cannot locate labels", r)
-		return make(map[string]string)
+		fmt.Printf("Unknown resource type %v. Cannot locate ObjectMeta", r)
+		return nil
 	}
 }
 
@@ -318,13 +340,62 @@ func CassandraDefinitions(namespace string) ([]v1alpha1.Cassandra, error) {
 }
 
 func errorUnlessNotFound(err error) error {
-	switch apiError := err.(type) {
-	case *errors.StatusError:
-		if apiError.Status().Code == 404 {
-			return nil
-		}
-		return err
-	default:
+	if !errors.IsNotFound(err) {
 		return err
 	}
+	return nil
+}
+
+func StatefulSetRevision(namespace, statefulSetName string) (string, error) {
+	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(statefulSetName, metaV1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return statefulSet.Status.CurrentRevision, err
+}
+
+func StatefulSetDeletedSince(namespace, statefulSetName string, initialCreationTime time.Time) func() (bool, error) {
+	getStatefulSet := func(namespace, resourceName string) (*kubernetesResource, error) {
+		statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(statefulSetName, metaV1.GetOptions{})
+		return &kubernetesResource{statefulSet}, err
+	}
+	return kubernetesResourceIsDeletedSince(namespace, statefulSetName, getStatefulSet, initialCreationTime)
+}
+
+func ServiceIsDeletedSince(namespace, serviceName string, initialCreationTime time.Time) func() (bool, error) {
+	getService := func(namespace, resourceName string) (*kubernetesResource, error) {
+		service, err := KubeClientset.CoreV1().Services(namespace).Get(serviceName, metaV1.GetOptions{})
+		return &kubernetesResource{service}, err
+	}
+	return kubernetesResourceIsDeletedSince(namespace, serviceName, getService, initialCreationTime)
+}
+
+func CronJobIsDeletedSince(namespace, jobName string, initialCreationTime time.Time) func() (bool, error) {
+	getJob := func(namespace, resourceName string) (*kubernetesResource, error) {
+		service, err := KubeClientset.BatchV1beta1().CronJobs(namespace).Get(jobName, metaV1.GetOptions{})
+		return &kubernetesResource{service}, err
+	}
+	return kubernetesResourceIsDeletedSince(namespace, jobName, getJob, initialCreationTime)
+}
+
+func kubernetesResourceIsDeletedSince(namespace, resourceName string, getResource func(namespace, resourceName string) (*kubernetesResource, error), initialCreationTime time.Time) func() (bool, error) {
+	return func() (bool, error) {
+		kubernetesResource, err := getResource(namespace, resourceName)
+		if errors.IsNotFound(err) {
+			return true, nil
+		} else if err != nil {
+			return false, err
+		}
+
+		// Check creation time in case the resource was recreated in between this function invocations
+		return kubernetesResource.CreationTimestamp().After(initialCreationTime), nil
+	}
+}
+
+func ClusterConfigHashForRack(namespace, clusterName, rack string) string {
+	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(fmt.Sprintf("%s-%s", clusterName, rack), metaV1.GetOptions{})
+	gomega.Expect(err).To(gomega.BeNil())
+	rackHash, ok := statefulSet.Spec.Template.Annotations["clusterConfigHash"]
+	gomega.Expect(ok).To(gomega.BeTrue())
+	return rackHash
 }

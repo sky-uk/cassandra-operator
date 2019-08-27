@@ -12,7 +12,7 @@ import (
 // AddSnapshotOperation describes what the operator does when a snapshot schedule is added for a cluster
 type AddSnapshotOperation struct {
 	cassandra       *v1alpha1.Cassandra
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	eventRecorder   record.EventRecorder
 }
 

@@ -13,7 +13,7 @@ import (
 // UpdateSnapshotOperation describes what the operator does when the Snapshot spec is updated for a cluster
 type UpdateSnapshotOperation struct {
 	cassandra       *v1alpha1.Cassandra
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	eventRecorder   record.EventRecorder
 }
 

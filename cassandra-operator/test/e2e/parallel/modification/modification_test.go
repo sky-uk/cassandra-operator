@@ -15,7 +15,6 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e/parallel"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -156,7 +155,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		// given
 		registerResourcesUsed(2)
 		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
-		rackAHash := clusterConfigHashForRack(clusterName, "a")
+		rackAHash := ClusterConfigHashForRack(Namespace, clusterName, "a")
 
 		// when
 		ANewRackIsAddedForCluster(Namespace, clusterName, RackWithEmptyDir("b", 1))
@@ -190,7 +189,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			AClusterWithName(clusterName).
 				AndRacks(racks).
 				Exists()
-			configHashBeforeUpdate := clusterConfigHashForRack(clusterName, "a")
+			configHashBeforeUpdate := ClusterConfigHashForRack(Namespace, clusterName, "a")
 
 			// when
 			modificationTime := time.Now()
@@ -307,23 +306,12 @@ var _ = Context("Allowable cluster modifications", func() {
 	})
 })
 
-func clusterConfigHashForRack(clusterName, rack string) string {
-	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(Namespace).Get(fmt.Sprintf("%s-%s", clusterName, rack), v1.GetOptions{})
-	Expect(err).To(BeNil())
-	rackHash, ok := statefulSet.Spec.Template.Annotations["clusterConfigHash"]
-	Expect(ok).To(BeTrue())
-	return rackHash
-}
-
 func statefulSetRevisions(clusterName string, racks []v1alpha1.Rack) map[string]string {
-
 	m := map[string]string{}
-
 	for _, rack := range racks {
-		statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(Namespace).Get(fmt.Sprintf("%s-%s", clusterName, rack.Name), v1.GetOptions{})
+		revision, err := StatefulSetRevision(Namespace, fmt.Sprintf("%s-%s", clusterName, rack.Name))
 		Expect(err).To(BeNil())
-		m[rack.Name] = statefulSet.Status.CurrentRevision
+		m[rack.Name] = revision
 	}
-
 	return m
 }

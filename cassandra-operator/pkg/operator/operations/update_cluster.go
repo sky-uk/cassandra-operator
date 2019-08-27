@@ -14,7 +14,7 @@ type UpdateClusterOperation struct {
 	adjuster            *adjuster.Adjuster
 	eventRecorder       record.EventRecorder
 	statefulSetAccessor *statefulSetAccessor
-	clusterAccessor     *cluster.Accessor
+	clusterAccessor     cluster.Accessor
 	update              ClusterUpdate
 }
 

@@ -26,6 +26,7 @@ import (
 type objectReferenceFactory interface {
 	newCassandra() *v1alpha1.Cassandra
 	newConfigMap() *corev1.ConfigMap
+	newService() *corev1.Service
 }
 
 // implements objectReferenceFactory
@@ -69,26 +70,32 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 	logger := ctx.logger
 	logger.Info("Reconciling all Cassandra resources")
 
-	// lookup the object to reconcile or delete it right away and exit early
+	// Lookup the object to reconcile or delete it right away and exit early
 	desiredCassandra := r.objectFactory.newCassandra()
 	err := r.client.Get(context.TODO(), request.NamespacedName, desiredCassandra)
-	if errors.IsNotFound(err) {
+	if unexpectedError(err) {
+		return retryReconciliation("failed to lookup cassandra definition", err)
+	} else if errors.IsNotFound(err) || cassandraIsBeingDeleted(desiredCassandra) {
 		logger.Debug("Cassandra definition not found. Going to delete associated resources")
 		cassandraToDelete := &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace}}
 		r.eventDispatcher.Dispatch(&dispatcher.Event{Kind: operations.DeleteCluster, Key: ctx.eventKey, Data: cassandraToDelete})
 		delete(r.clusters, ctx.namespaceName)
 		return completeReconciliation()
 	}
-	if err != nil {
-		return retryReconciliation("failed to lookup cassandra definition", err)
-	}
 	r.clusters[ctx.namespaceName] = desiredCassandra
 
-	// reconcile the custom config first, as new statefulSet won't bootstrap
+	// Reconcile the custom config first, as new statefulSet won't bootstrap
 	// if they need to mount a volume for a configMap that no longer exists
 	result, err := r.reconcileCustomConfig(ctx, desiredCassandra)
 	if err != nil {
 		logger.Errorf("An error occurred while reconciling custom config for Cassandra: %v", err)
+		return result, err
+	}
+
+	// Create the service before Cassandra pods to allow pods to access that service (e.g. to find seeds)
+	result, err = r.reconcileCassandraService(ctx, desiredCassandra)
+	if err != nil {
+		logger.Errorf("An error occurred while reconciling Cassandra service: %v", err)
 		return result, err
 	}
 
@@ -113,12 +120,12 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 	}
 
 	currentCassandra, err := r.stateFinder.FindCurrentStateFor(desiredCassandra)
-	if errors.IsNotFound(err) {
+	if unexpectedError(err) {
+		return retryReconciliation("could not determine current state for Cassandra", err)
+	} else if errors.IsNotFound(err) {
 		logger.Debug("No resources found for this Cassandra definition. Going to add cluster")
 		r.eventDispatcher.Dispatch(&dispatcher.Event{Kind: operations.AddCluster, Key: ctx.eventKey, Data: desiredCassandra})
 		return completeReconciliation()
-	} else if err != nil {
-		return retryReconciliation("could not determine current state for Cassandra", err)
 	}
 
 	v1alpha1helpers.SetDefaultsForCassandra(currentCassandra)
@@ -149,13 +156,14 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 
 	configMap := r.objectFactory.newConfigMap()
 	configMapErr := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.CustomConfigMapName()}, configMap)
-	if configMapErr != nil && !errors.IsNotFound(configMapErr) {
+	configMapFound := configMapErr == nil
+	if unexpectedError(configMapErr) {
 		return retryReconciliation("failed to lookup potential configMap", configMapErr)
 	}
 
 	configHashes, configHashErr := r.stateFinder.FindCurrentConfigHashFor(desiredCassandra)
 	logger.Debugf("Custom config hash looked up: %v", configHashes)
-	if configHashErr != nil && !errors.IsNotFound(configHashErr) {
+	if unexpectedError(configHashErr) {
 		return reconcile.Result{}, fmt.Errorf("failed to look up config hash: %v", configHashErr)
 	} else if errors.IsNotFound(configHashErr) {
 		logger.Debug("No custom config changes required as no corresponding Cassandra cluster found")
@@ -163,17 +171,21 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 	}
 
 	currentCassandraHasCustomConfig := len(configHashes) > 0
-	if errors.IsNotFound(configMapErr) && currentCassandraHasCustomConfig {
-		logger.Debug("Custom config configured but no configMap exists. Going to delete configuration")
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.DeleteCustomConfig,
-			Key:  ctx.eventKey,
-			Data: operations.ConfigMapChange{Cassandra: desiredCassandra},
-		})
+	if errors.IsNotFound(configMapErr) {
+		if currentCassandraHasCustomConfig {
+			logger.Debug("Custom config configured but no configMap exists. Going to delete configuration")
+			r.eventDispatcher.Dispatch(&dispatcher.Event{
+				Kind: operations.DeleteCustomConfig,
+				Key:  ctx.eventKey,
+				Data: operations.ConfigMapChange{Cassandra: desiredCassandra},
+			})
+		} else {
+			logger.Debug("Custom config not configured and no configMap exists. Nothing to do")
+		}
 		return completeReconciliation()
 	}
 
-	if !errors.IsNotFound(configMapErr) && !currentCassandraHasCustomConfig {
+	if configMapFound && !currentCassandraHasCustomConfig {
 		logger.Debug("Custom config exists, but not configured. Going to add configuration")
 		r.eventDispatcher.Dispatch(&dispatcher.Event{
 			Kind: operations.AddCustomConfig,
@@ -183,9 +195,13 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 		return completeReconciliation()
 	}
 
-	//	TODO handle missing configmap for one or more racks - would help to make AddCustomConfig idempotent
 	if len(configHashes) != len(desiredCassandra.Spec.Racks) {
-		logger.Warningf("Custom config version is not the same for all statefulSets: %v", configHashes)
+		logger.Debugf("Custom config is missing on one or more racks. Custom config hashes: %v. Going to add the configuration", configHashes)
+		r.eventDispatcher.Dispatch(&dispatcher.Event{
+			Kind: operations.AddCustomConfig,
+			Key:  ctx.eventKey,
+			Data: operations.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+		})
 		return completeReconciliation()
 	}
 
@@ -204,6 +220,26 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 	}
 
 	logger.Debugf("No config map changes detected for configMap %s.%s", configMap.Namespace, configMap.Name)
+	return completeReconciliation()
+}
+
+func (r *CassandraReconciler) reconcileCassandraService(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
+	logger := ctx.logger
+	logger.Debug("Reconciling Cassandra Service")
+
+	service := r.objectFactory.newService()
+	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.Name}, service)
+	if unexpectedError(err) {
+		return retryReconciliation("failed to lookup Cassandra service", err)
+	} else if errors.IsNotFound(err) {
+		logger.Debug("Cassandra service not found. Going to create it")
+		r.eventDispatcher.Dispatch(&dispatcher.Event{
+			Kind: operations.AddService,
+			Key:  ctx.eventKey,
+			Data: desiredCassandra,
+		})
+		return completeReconciliation()
+	}
 	return completeReconciliation()
 }
 
@@ -229,10 +265,22 @@ func completeReconciliation() (reconcile.Result, error) {
 	return reconcile.Result{}, nil
 }
 
+func unexpectedError(err error) bool {
+	return err != nil && !errors.IsNotFound(err)
+}
+
 func (r *defaultReferenceFactory) newCassandra() *v1alpha1.Cassandra {
 	return &v1alpha1.Cassandra{}
 }
 
 func (r *defaultReferenceFactory) newConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{}
+}
+
+func (r *defaultReferenceFactory) newService() *corev1.Service {
+	return &corev1.Service{}
+}
+
+func cassandraIsBeingDeleted(cassandra *v1alpha1.Cassandra) bool {
+	return cassandra.DeletionTimestamp != nil
 }

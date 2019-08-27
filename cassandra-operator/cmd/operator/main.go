@@ -171,6 +171,11 @@ func startOperator(_ *cobra.Command, _ []string) error {
 		entryLog.Fatalf("Unable to watch CronJobs: %v", err)
 	}
 
+	// Watch Service and enqueue owning Cassandra key
+	if err := c.Watch(&source.Kind{Type: &corev1.Service{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+		entryLog.Fatalf("Unable to watch Services: %v", err)
+	}
+
 	// Watch ConfigMaps and enqueue a likely cluster
 	err = c.Watch(
 		&source.Kind{Type: &corev1.ConfigMap{}},

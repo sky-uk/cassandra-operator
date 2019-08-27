@@ -21,6 +21,13 @@ func (r *Receiver) newAddCluster(cassandra *v1alpha1.Cassandra) Operation {
 	}
 }
 
+func (r *Receiver) newAddService(cassandra *v1alpha1.Cassandra) Operation {
+	return &AddServiceOperation{
+		clusterAccessor: r.clusterAccessor,
+		cassandra:       cassandra,
+	}
+}
+
 func (r *Receiver) newDeleteCluster(cassandra *v1alpha1.Cassandra) Operation {
 	return &DeleteClusterOperation{
 		clusterAccessor: r.clusterAccessor,

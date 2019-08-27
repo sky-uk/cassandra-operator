@@ -1,0 +1,30 @@
+package operations
+
+import (
+	"fmt"
+	log "github.com/sirupsen/logrus"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+)
+
+// AddServiceOperation describes what the operator does when creating a cluster
+type AddServiceOperation struct {
+	clusterAccessor cluster.Accessor
+	cassandra       *v1alpha1.Cassandra
+}
+
+// Execute performs the operation
+func (o *AddServiceOperation) Execute() {
+	c := cluster.New(o.cassandra)
+
+	_, err := o.clusterAccessor.CreateServiceForCluster(c)
+	if err != nil {
+		log.Errorf("Error while creating headless service for cluster %s: %v", c.QualifiedName(), err)
+		return
+	}
+	log.Infof("Headless service created for cluster : %s", c.QualifiedName())
+}
+
+func (o *AddServiceOperation) String() string {
+	return fmt.Sprintf("add service %s", o.cassandra.QualifiedName())
+}

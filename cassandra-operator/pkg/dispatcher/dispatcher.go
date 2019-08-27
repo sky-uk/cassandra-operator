@@ -1,13 +1,14 @@
 package dispatcher
 
 import (
-	"github.com/prometheus/common/log"
+	log "github.com/sirupsen/logrus"
 	"sync"
 )
 
 // Event describes an event which can happen to a particular entity. Events have a kind (e.g. "created", "modified",
 // "deleted"), a key which uniquely identifies the entity the event applies to, and event-specific data.
 type Event struct {
+	ID   uint64
 	Kind string
 	Key  string
 	Data interface{}
@@ -43,6 +44,7 @@ type dispatcher struct {
 	stopCh                  <-chan struct{}
 	stopped                 bool
 	dispatchLock            sync.Mutex
+	eventCounter            uint64
 }
 
 const clusterEventBufferSize = 100
@@ -58,6 +60,9 @@ func (d *dispatcher) Dispatch(e *Event) {
 			log.Infof("Starting event worker for key: %s", e.Key)
 			go d.start(eventProcessingChannel, d.handlerFunc, d.stopCh)
 		}
+		d.eventCounter++
+		e.ID = d.eventCounter
+		log.Debugf("Event dispatched id=%d key=%s type=%s", e.ID, e.Key, e.Kind)
 		eventProcessingChannel <- *e
 	} else {
 		log.Warnf("Ignoring event with kind: %s and key: %s, as the event dispatching was stopped", e.Kind, e.Key)

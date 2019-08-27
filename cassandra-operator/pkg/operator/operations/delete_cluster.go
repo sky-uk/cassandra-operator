@@ -10,7 +10,7 @@ import (
 
 // DeleteClusterOperation describes what the operator does when deleting a cluster
 type DeleteClusterOperation struct {
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	cassandra       *v1alpha1.Cassandra
 	metricsPoller   *metrics.PrometheusMetrics
 }

@@ -72,7 +72,7 @@ type statefulSetShouldBeCreated struct {
 }
 
 func (matcher *statefulSetShouldBeCreated) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	statefulSet := lr.Resource.(v1beta2.StatefulSet)
 
 	if statefulSet.Spec.ServiceName != matcher.serviceName {
@@ -103,18 +103,18 @@ type haveLabel struct {
 }
 
 func (matcher *haveLabel) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	value, ok := lr.Labels()[matcher.key]
 	return ok && value == matcher.value, nil
 }
 
 func (matcher *haveLabel) FailureMessage(actual interface{}) (message string) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	return fmt.Sprintf("Expected label key: %s, value: %s. Actual labels: %s", matcher.key, matcher.value, lr.Labels())
 }
 
 func (matcher *haveLabel) NegatedFailureMessage(actual interface{}) (message string) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	return fmt.Sprintf("Expected label key: %s, value: %s. Actual labels: %s", matcher.key, matcher.value, lr.Labels())
 }
 
@@ -207,7 +207,7 @@ type haveContainer struct {
 }
 
 func (matcher *haveContainer) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	containers := matcher.containers(pod)
 	expectedName := matcher.expected.ContainerName
@@ -301,11 +301,11 @@ func (matcher *haveContainer) Match(actual interface{}) (success bool, err error
 }
 
 func (matcher *haveContainer) FailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Actual pod: %s", actual.(*labelledResource).Resource)
+	return fmt.Sprintf("Actual pod: %s", actual.(*kubernetesResource).Resource)
 }
 
 func (matcher *haveContainer) NegatedFailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Actual pod: %s", actual.(*labelledResource).Resource)
+	return fmt.Sprintf("Actual pod: %s", actual.(*kubernetesResource).Resource)
 }
 
 //
@@ -335,7 +335,7 @@ func (m *haveDifferentRevision) NegatedFailureMessage(actual interface{}) (messa
 }
 
 func (m *haveDifferentRevision) pod(actual interface{}) *coreV1.Pod {
-	pod := actual.(*labelledResource).Resource.(coreV1.Pod)
+	pod := actual.(*kubernetesResource).Resource.(coreV1.Pod)
 	return &pod
 }
 
@@ -355,7 +355,7 @@ type haveStorageCapacity struct {
 }
 
 func (matcher *haveStorageCapacity) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	storage := lr.Resource.(coreV1.PersistentVolumeClaim).Spec.Resources.Requests[coreV1.ResourceStorage]
 	return storage.String() == matcher.value, nil
 }
@@ -477,7 +477,7 @@ type haveJVMArg struct {
 }
 
 func (m *haveJVMArg) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 
 	var commandToRun string
@@ -518,7 +518,7 @@ type configMapVolumeAssertion struct {
 }
 
 func (m *configMapVolumeAssertion) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	for _, volume := range pod.Spec.Volumes {
 		if volume.VolumeSource.ConfigMap != nil {
@@ -529,13 +529,13 @@ func (m *configMapVolumeAssertion) Match(actual interface{}) (success bool, err 
 }
 
 func (m *configMapVolumeAssertion) FailureMessage(actual interface{}) (message string) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s. Actual volumes: %v", m.configMapName, pod.Spec.Volumes)
 }
 
 func (m *configMapVolumeAssertion) NegatedFailureMessage(actual interface{}) (message string) {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s not to exist. Actual volumes: %v", m.configMapName, pod.Spec.Volumes)
 }
@@ -600,7 +600,7 @@ func (m *haveAnnotationValue) NegatedFailureMessage(actual interface{}) (message
 }
 
 func podAnnotations(actual interface{}) map[string]string {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	return pod.Annotations
 }
@@ -636,67 +636,68 @@ type haveScheduleOptions struct {
 func (m *haveScheduleOptions) Match(actual interface{}) (success bool, err error) {
 	job := m.job(actual)
 	if job.Spec.Schedule != m.expected.Schedule {
-		return false, fmt.Errorf("expected job schedule to be %s for job %s, but was %s", m.expected.Schedule, job.Name, job.Spec.Schedule)
+		return false, fmt.Errorf("expected resource schedule to be %s for resource %s, but was %s", m.expected.Schedule, job.Name, job.Spec.Schedule)
 	}
 
 	if job.Spec.ConcurrencyPolicy != batch.ForbidConcurrent {
-		return false, fmt.Errorf("expected job's ConcurrencyPolicy to be ForbidConcurrent, was %s", job.Spec.ConcurrencyPolicy)
+		return false, fmt.Errorf("expected resource's ConcurrencyPolicy to be ForbidConcurrent, was %s", job.Spec.ConcurrencyPolicy)
 	}
 
 	containers := job.Spec.JobTemplate.Spec.Template.Spec.Containers
 	if len(containers) != 1 {
-		return false, fmt.Errorf("expected job '%s' to have exactly 1 container, but found %d: %v", job.Name, len(containers), containers)
+		return false, fmt.Errorf("expected resource '%s' to have exactly 1 container, but found %d: %v", job.Name, len(containers), containers)
 	}
 
 	container := containers[0]
 	if !strings.Contains(container.Image, m.expected.ContainerImage) {
-		return false, fmt.Errorf("expected container image for job '%s' to contain %s, but was %s", job.Name, m.expected.ContainerImage, container.Image)
+		return false, fmt.Errorf("expected container image for resource '%s' to contain %s, but was %s", job.Name, m.expected.ContainerImage, container.Image)
 	}
 
 	if !reflect.DeepEqual(container.Command, m.expected.ContainerCommand) {
-		return false, fmt.Errorf("expected container command for job '%s' to be %v, but was %v", job.Name, m.expected.ContainerCommand, container.Command)
+		return false, fmt.Errorf("expected container command for resource '%s' to be %v, but was %v", job.Name, m.expected.ContainerCommand, container.Command)
 	}
 
 	return true, nil
 }
 
 func (m *haveScheduleOptions) FailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected job to have spec: %v. \nActual job: %v", m.expected, m.job(actual))
+	return fmt.Sprintf("Expected resource to have spec: %v. \nActual resource: %v", m.expected, m.job(actual))
 }
 
 func (m *haveScheduleOptions) NegatedFailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected job not to have spec: %v. \nActual job: %v", m.expected, m.job(actual))
+	return fmt.Sprintf("Expected resource not to have spec: %v. \nActual resource: %v", m.expected, m.job(actual))
 }
 
 func (m *haveScheduleOptions) job(actual interface{}) batch.CronJob {
-	lr := actual.(*labelledResource)
+	lr := actual.(*kubernetesResource)
 	return lr.Resource.(batch.CronJob)
 }
 
 //
-// BeCreatedAfter matcher
+// BeCreatedOnOrAfter matcher
 //
-func BeCreatedAfter(targetTime time.Time) types.GomegaMatcher {
-	return &beCreatedAfter{targetTime: targetTime}
+func BeCreatedOnOrAfter(targetTime time.Time) types.GomegaMatcher {
+	return &beCreatedOnOrAfter{targetTime: targetTime}
 }
 
-type beCreatedAfter struct {
+type beCreatedOnOrAfter struct {
 	targetTime time.Time
 }
 
-func (m *beCreatedAfter) Match(actual interface{}) (success bool, err error) {
-	return m.job(actual).CreationTimestamp.After(m.targetTime), nil
+func (m *beCreatedOnOrAfter) Match(actual interface{}) (success bool, err error) {
+	actualCreationTime := m.resource(actual).CreationTimestamp()
+	return actualCreationTime.Time.Equal(m.targetTime) || actualCreationTime.After(m.targetTime), nil
 }
 
-func (m *beCreatedAfter) FailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected job creation time to be after %s. Actual creation time: %s", m.targetTime, m.job(actual).CreationTimestamp)
+func (m *beCreatedOnOrAfter) FailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected resource creation time to be on or after %s. Actual creation time: %s", m.targetTime, m.resource(actual).CreationTimestamp())
 }
 
-func (m *beCreatedAfter) NegatedFailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected job creation time not to be after %s. Actual creation time: %s", m.targetTime, m.job(actual).CreationTimestamp)
+func (m *beCreatedOnOrAfter) NegatedFailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected resource creation time not to be on or after %s. Actual creation time: %s", m.targetTime, m.resource(actual).CreationTimestamp())
 }
 
-func (m *beCreatedAfter) job(actual interface{}) batch.CronJob {
-	lr := actual.(*labelledResource)
-	return lr.Resource.(batch.CronJob)
+func (m *beCreatedOnOrAfter) resource(actual interface{}) *kubernetesResource {
+	lr := actual.(*kubernetesResource)
+	return lr
 }

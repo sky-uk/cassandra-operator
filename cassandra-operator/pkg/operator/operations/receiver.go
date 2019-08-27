@@ -9,6 +9,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -27,6 +28,8 @@ const (
 	UpdateCustomConfig = "UPDATE_CUSTOM_CONFIG"
 	// DeleteCustomConfig is a kind of event which the receiver is able to handle
 	DeleteCustomConfig = "DELETE_CUSTOM_CONFIG"
+	// AddService is a kind of event which the receiver is able to handle
+	AddService = "ADD_SERVICE"
 )
 
 // ClusterUpdate encapsulates Cassandra specs before and after the change
@@ -43,7 +46,7 @@ type ConfigMapChange struct {
 
 // Receiver receives events dispatched by the operator
 type Receiver struct {
-	clusterAccessor     *cluster.Accessor
+	clusterAccessor     cluster.Accessor
 	statefulSetAccessor *statefulSetAccessor
 	metricsPoller       *metrics.PrometheusMetrics
 	eventRecorder       record.EventRecorder
@@ -51,7 +54,7 @@ type Receiver struct {
 }
 
 // NewEventReceiver creates a new Receiver
-func NewEventReceiver(clusterAccessor *cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
+func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
 	adj, err := adjuster.New()
 	if err != nil {
 		log.Fatalf("unable to initialise Adjuster: %v", err)
@@ -69,43 +72,68 @@ func NewEventReceiver(clusterAccessor *cluster.Accessor, metricsPoller *metrics.
 
 // Receive receives operator events and delegates their processing to the appropriate handler
 func (r *Receiver) Receive(event *dispatcher.Event) {
-	logger := log.WithFields(
-		log.Fields{
-			"type": event.Kind,
-			"key":  event.Key,
-		},
-	)
-	logger.Debugf("Event received")
+	logger := r.eventLogger(event)
+	logger.Debug("Event received")
 	operations := r.operationsToExecute(event)
-	logger.Infof("Event will trigger %d operations", len(operations))
+	logger.Infof("Event will trigger %d operations: %v", len(operations), operations)
 
 	for _, operation := range operations {
 		logger.Debugf("Executing operation %s", operation.String())
 		operation.Execute()
 	}
+	logger.Debug("Event complete")
 }
 
 func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
+	logger := r.eventLogger(event)
+
 	switch event.Kind {
+	case AddService:
+		return []Operation{r.newAddService(event.Data.(*v1alpha1.Cassandra))}
 	case AddCluster:
 		return r.operationsForAddCluster(event.Data.(*v1alpha1.Cassandra))
 	case DeleteCluster:
 		return r.operationsForDeleteCluster(event.Data.(*v1alpha1.Cassandra))
 	case UpdateCluster:
-		return r.operationsForUpdateCluster(event.Data.(ClusterUpdate))
+		update := event.Data.(ClusterUpdate)
+		if r.clusterDoesNotExistOrIsBeingDeleted(update.NewCluster) {
+			logOperationNotAllowed(logger)
+			return nil
+		}
+		return r.operationsForUpdateCluster(update)
 	case GatherMetrics:
-		return []Operation{r.newGatherMetrics(event.Data.(*v1alpha1.Cassandra))}
+		cassandra := event.Data.(*v1alpha1.Cassandra)
+		if r.clusterDoesNotExistOrIsBeingDeleted(cassandra) {
+			logOperationNotAllowed(logger)
+			return nil
+		}
+		return []Operation{r.newGatherMetrics(cassandra)}
 	case UpdateCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
-		return []Operation{r.newUpdateCustomConfig(configMapChange.Cassandra, configMapChange.ConfigMap)}
+		cassandra := configMapChange.Cassandra
+		if r.clusterDoesNotExistOrIsBeingDeleted(cassandra) {
+			logOperationNotAllowed(logger)
+			return nil
+		}
+		return []Operation{r.newUpdateCustomConfig(cassandra, configMapChange.ConfigMap)}
 	case AddCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
-		return []Operation{r.newAddCustomConfig(configMapChange.Cassandra, configMapChange.ConfigMap)}
+		cassandra := configMapChange.Cassandra
+		if r.clusterDoesNotExistOrIsBeingDeleted(cassandra) {
+			logOperationNotAllowed(logger)
+			return nil
+		}
+		return []Operation{r.newAddCustomConfig(cassandra, configMapChange.ConfigMap)}
 	case DeleteCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
-		return []Operation{r.newDeleteCustomConfig(configMapChange.Cassandra)}
+		cassandra := configMapChange.Cassandra
+		if r.clusterDoesNotExistOrIsBeingDeleted(cassandra) {
+			logOperationNotAllowed(logger)
+			return nil
+		}
+		return []Operation{r.newDeleteCustomConfig(cassandra)}
 	default:
-		log.Errorf("Event type %s is not supported", event.Kind)
+		logger.Error("Event type is not supported")
 	}
 
 	return nil
@@ -161,4 +189,24 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 		}
 	}
 	return operations
+}
+
+func (r *Receiver) eventLogger(event *dispatcher.Event) *log.Entry {
+	logger := log.WithFields(
+		log.Fields{
+			"type": event.Kind,
+			"key":  event.Key,
+			"id":   event.ID,
+		},
+	)
+	return logger
+}
+
+func logOperationNotAllowed(logger *log.Entry) {
+	logger.Warn("Operation is not allowed. Cluster does not exist or is being deleted")
+}
+
+func (r *Receiver) clusterDoesNotExistOrIsBeingDeleted(clusterToFind *v1alpha1.Cassandra) bool {
+	cassandra, err := r.clusterAccessor.GetCassandraForCluster(clusterToFind.Namespace, clusterToFind.Name)
+	return errors.IsNotFound(err) || cassandra.DeletionTimestamp != nil
 }

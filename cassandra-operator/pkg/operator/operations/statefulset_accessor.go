@@ -11,7 +11,7 @@ import (
 )
 
 type statefulSetAccessor struct {
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 }
 
 func (h *statefulSetAccessor) registerStatefulSets(c *cluster.Cluster, configMap *v1.ConfigMap) error {

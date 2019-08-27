@@ -12,7 +12,7 @@ import (
 // DeleteSnapshotOperation describes what the operator does when a Snapshot schedule is removed for a cluster
 type DeleteSnapshotOperation struct {
 	cassandra       *v1alpha1.Cassandra
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	eventRecorder   record.EventRecorder
 }
 

@@ -223,8 +223,8 @@ func CassandraEventsSince(namespace, clusterName string, sinceTime time.Time) fu
 }
 
 func cassandraEventsFilteredFor(namespace, clusterName string, filter func(coreV1.Event) bool) func() ([]coreV1.Event, error) {
-	var cassandraEvents []coreV1.Event
 	return func() ([]coreV1.Event, error) {
+		var cassandraEvents []coreV1.Event
 		allEvents, err := KubeClientset.CoreV1().Events(namespace).List(metaV1.ListOptions{})
 		if err != nil {
 			return nil, err
@@ -241,4 +241,59 @@ func cassandraEventsFilteredFor(namespace, clusterName string, filter func(coreV
 
 func DurationSeconds(seconds int32) time.Duration {
 	return time.Duration(seconds) * time.Second
+}
+
+func TheStatefulSetIsDeletedForRack(namespace, clusterName, rackName string) {
+	statefulSetName := fmt.Sprintf("%s-%s", clusterName, rackName)
+
+	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(statefulSetName, metaV1.GetOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	cascadingDelete := metaV1.DeletePropagationForeground
+	err = KubeClientset.AppsV1beta1().StatefulSets(namespace).Delete(
+		statefulSetName,
+		&metaV1.DeleteOptions{PropagationPolicy: &cascadingDelete},
+	)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	gomega.Eventually(StatefulSetDeletedSince(namespace, statefulSetName, statefulSet.CreationTimestamp.Time), NodeTerminationDuration, CheckInterval).Should(gomega.BeTrue())
+	log.Infof("StatefulSet %s has been deleted since it was initially created at %s", statefulSetName, statefulSet.CreationTimestamp.Time)
+}
+
+func TheServiceIsDeletedFor(namespace, clusterName string) {
+	service, err := KubeClientset.CoreV1().Services(namespace).Get(clusterName, metaV1.GetOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	err = KubeClientset.CoreV1().Services(namespace).Delete(clusterName, metaV1.NewDeleteOptions(0))
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	gomega.Eventually(ServiceIsDeletedSince(namespace, clusterName, service.CreationTimestamp.Time), 30*time.Second, CheckInterval).Should(gomega.BeTrue())
+	log.Infof("Service %s has been deleted since it was initially created at %s", clusterName, service.CreationTimestamp)
+}
+
+func TheSnapshotCronJobIsDeleted(namespace, clusterName string) {
+	TheCronJobIsDeleted(namespace, fmt.Sprintf("%s-snapshot", clusterName))
+}
+
+func TheSnapshotCleanupCronJobIsDeleted(namespace, clusterName string) {
+	TheCronJobIsDeleted(namespace, fmt.Sprintf("%s-snapshot-cleanup", clusterName))
+}
+
+func TheCronJobIsDeleted(namespace, jobName string) {
+	job, err := KubeClientset.BatchV1beta1().CronJobs(namespace).Get(jobName, metaV1.GetOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	err = KubeClientset.BatchV1beta1().CronJobs(namespace).Delete(jobName, metaV1.NewDeleteOptions(0))
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	gomega.Eventually(CronJobIsDeletedSince(namespace, jobName, job.CreationTimestamp.Time), 30*time.Second, CheckInterval).Should(gomega.BeTrue())
+	log.Infof("Cronjob %s has been deleted since it was initially created at %s", jobName, job.CreationTimestamp)
+}
+
+func TheCustomConfigHashIsChangedForRack(namespace, clusterName, rackName string) {
+	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(fmt.Sprintf("%s-%s", clusterName, rackName), metaV1.GetOptions{})
+	gomega.Expect(err).To(gomega.BeNil())
+	statefulSet.Spec.Template.Annotations["clusterConfigHash"] = "something else"
+	_, err = KubeClientset.AppsV1beta2().StatefulSets(namespace).Update(statefulSet)
+	gomega.Expect(err).To(gomega.BeNil())
+	log.Infof("Custom config has changed for rack %s", rackName)
 }

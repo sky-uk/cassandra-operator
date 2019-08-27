@@ -12,7 +12,7 @@ import (
 // AddSnapshotCleanupOperation describes what the operator does when a snapshot cleanup definition is added
 type AddSnapshotCleanupOperation struct {
 	cassandra       *v1alpha1.Cassandra
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	eventRecorder   record.EventRecorder
 }
 

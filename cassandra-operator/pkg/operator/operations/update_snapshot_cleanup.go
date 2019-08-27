@@ -13,7 +13,7 @@ import (
 // UpdateSnapshotCleanupOperation describes what the operator does when the retention policy is updated for a cluster
 type UpdateSnapshotCleanupOperation struct {
 	cassandra       *v1alpha1.Cassandra
-	clusterAccessor *cluster.Accessor
+	clusterAccessor cluster.Accessor
 	eventRecorder   record.EventRecorder
 }
 
