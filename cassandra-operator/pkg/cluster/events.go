@@ -38,7 +38,7 @@ const (
 // NewEventRecorder creates an EventRecorder which can be used to record events reflecting the state of operator
 // managed clusters. It correctly does aggregation of repeated events into a count, first timestamp and last timestamp.
 func NewEventRecorder(kubeClientset *kubernetes.Clientset, s *runtime.Scheme) record.EventRecorder {
-	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster := record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{BurstSize: 50})
 	eventBroadcaster.StartRecordingToSink(&typedV1.EventSinkImpl{Interface: kubeClientset.CoreV1().Events(operatorNamespace)})
 	return eventBroadcaster.NewRecorder(s, v1.EventSource{Component: "cassandra-operator"})
 }
