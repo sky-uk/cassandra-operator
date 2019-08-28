@@ -608,7 +608,6 @@ func (m *mockAccessor) CreateStatefulSetForRack(c *cluster.Cluster, rack *v1alph
 	return nil, nil
 }
 
-
 //
 // HaveOperationsOfType matcher
 //

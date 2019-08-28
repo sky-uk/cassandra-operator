@@ -1,4 +1,4 @@
-package main
+package operator
 
 import (
 	"context"
@@ -249,7 +249,7 @@ func newContext(request reconcile.Request) *requestContext {
 		eventKey: clusterID,
 		logger: log.WithFields(
 			log.Fields{
-				"logger":  "controller.go",
+				"logger":  "reconciler.go",
 				"cluster": clusterID,
 			},
 		),

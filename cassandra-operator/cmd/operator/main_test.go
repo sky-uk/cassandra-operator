@@ -1,4 +1,4 @@
-package operator
+package main
 
 import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"

@@ -194,9 +194,10 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 func (r *Receiver) eventLogger(event *dispatcher.Event) *log.Entry {
 	logger := log.WithFields(
 		log.Fields{
-			"type": event.Kind,
-			"key":  event.Key,
-			"id":   event.ID,
+			"type":   event.Kind,
+			"key":    event.Key,
+			"id":     event.ID,
+			"logger": "receiver.go",
 		},
 	)
 	return logger
