@@ -12,43 +12,67 @@ All new code, including changes to existing code, should be tested and have a co
 
 The following must be installed on your development machine:
 
-- `go`
+- `go` (>=1.12)
 - `docker`
 - `openjdk-8` or another JDK
 - `gcc` (or `build-essential` package on debian distributions)
 - `kubectl`
-- `dgoss`
+- `curl`
+- `rsync`
 
-`cassandra-operator` must be cloned to a location on your `$GOPATH`, for example `go/src/github.com/sky-uk/cassandra-operator/`.
+This project uses [Go Modules](https://github.com/golang/go/wiki/Modules).
 
 ## Building and Testing
 
-To setup your environment with the required dependencies, run this at the project root level.
-This will create a [Docker-in-Docker](https://github.com/kubernetes-sigs/kubeadm-dind-cluster/) cluster.
-Missing system libraries that need installing will be listed in the output:
-
+To setup your environment with the required dependencies, run this at the project root level:
 ```
 make setup
 ```
+This will create a [Kind](https://kind.sigs.k8s.io/) cluster.
+Missing system libraries that need installing will be listed in the output
 
-To run code style checks on all the sub-projects:
+To compile, and create local docker images for each of the sub-projects:
+```
+make install
+```
 
+To run code style checks on all sub-projects:
 ```
 make check-style
 ```
 
-To build and run all tests:
+To run all tests on all sub-projects:
 ```
-make
+make check
 ```
+
+To run unit tests for the cassandra-operator sub-project:
+```
+make -C cassandra-operator test
+```
+
+### End-to-End Testing
 
 An end-to-end testing approach is used wherever possible.
 The end-to-end tests are run in parallel in order to the reduce build time as much as possible.
-The number of parallel tests is dictated by a hardcoded value in the end-to-end test suite, which has been chosen to reflect the namespace resource quota in AWS Dev.
+End-to-end tests are by default run against a local [Kind](https://kind.sigs.k8s.io/) cluster using a [fake-cassandra-docker](fake-cassandra-docker/README.md) image to speed up testing.
 
-End-to-end tests are by default run against a local [Docker-in-Docker](https://github.com/kubernetes-sigs/kubeadm-dind-cluster/) cluster using a [fake-cassandra-docker](fake-cassandra-docker/README.md) image to speed up testing.
-However tests can also be run against a real Cassandra image as well as against your own cluster.
+To create a [Kind](https://kind.sigs.k8s.io/) Kubernetes cluster:
+```
+make kind
+```
 
+To run all end-to-end tests for the cassandra-operator sub-project:
+```
+make -C cassandra-operator e2e-test
+```
+
+To run a single test suite: 
+```
+E2E_TEST=modification make -C cassandra-operator e2e-test-parallel
+```
+ 
+Additional flags are available to make it possible to run the tests against your own Kubernetes cluster using docker images from your custom repository.
 For instance, if you want to run a full build against your cluster with the default `cassandra:3.11` Cassandra image, use this:
 ```
 USE_MOCK=false POD_START_TIMEOUT=5m DOMAIN=mydomain.com KUBE_CONTEXT=k8Context TEST_REGISTRY=myregistry.com/cassandra-operator-test make
@@ -64,13 +88,15 @@ Flag | Meaning | Default
 `CASSANDRA_SIDECAR_IMAGE`      | The fully qualified name for the `cassandra-sidecar` docker image | `$(TEST_REGISTRY)/cassandra-sidecar:v$(gitRev)`
 `POD_START_TIMEOUT`            | The max duration allowed for a Cassandra pod to start. The time varies depending on whether a real or fake cassandra image is used and whether PVC or empty dir is used for the cassandra volumes. As a starting point use 150s for fake cassandra otherwise 5m | `150s`
 `DOMAIN`                       | Domain name used to create the test operator ingress host | `localhost`
-`KUBE_CONTEXT`                 | The Kubernetes context where the test operator will be deployed | `dind`
+`KUBE_CONTEXT`                 | The Kubernetes context where the test operator will be deployed | `kind`
+`KUBECONFIG`                   | The Kubernetes config location where the target `KUBE_CONTEXT` is defined | `$(HOME)/.kube/kind-config-kind`
 `TEST_REGISTRY`                | The name of the docker registry where test images created via the build will be pushed| `localhost:5000`
 `DOCKER_USERNAME`              | The docker username allowed to push to the release registry | (provided as encrypted variable in `.travis.yml`)
 `DOCKER_PASSWORD`              | The password for the docker username allowed to push to the release registry | (provided as encrypted variable in `.travis.yml`)
 `GINKGO_COMPILERS`             | Ginkgo `-compilers` value to use when compiling multiple tests suite | `0`, equivalent to not setting the option at all
 `GINKGO_NODES`                 | Ginkgo `-nodes` value to use when running tests suite in parallel | `0`, equivalent to not setting the option at all
 `E2E_TEST`                     | Name of the end-to-end test suite to run. Use this to run a specific test suite | ``, equivalent to running all test suites
+
 
 ## What to work on
 

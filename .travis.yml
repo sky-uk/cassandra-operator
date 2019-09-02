@@ -44,7 +44,7 @@ jobs:
   include:
     - stage: test
       name: cassandra-operator
-      before_script: make setup install dind
+      before_script: make setup install kind
       script: make -C cassandra-operator check
 
     - stage: test
@@ -54,7 +54,7 @@ jobs:
 
     - stage: test
       name: cassandra-snapshot
-      before_script: make setup install dind
+      before_script: make setup install kind
       script: make -C cassandra-snapshot check
 
     - stage: test

@@ -1,30 +1,21 @@
 #!/usr/bin/env bash
 set -e
 scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-projectDir="${scriptDir}/../"
-buildDir="${projectDir}/build/"
 
-mkdir -p ${buildDir}
+function setup_volume_on_node() {
+    local node=$1
+    local zone=$2
 
-function setup_nodes() {
-    local start_index=$1
-    local end_index=$2
-    local zone=$3
-
-    for ((node_index=${start_index}; node_index<=${end_index}; node_index++));
-    do
-        node="kube-node-${node_index}"
-        pv_path="/mnt/pv-zone-${zone}"
-        kubectl --context dind label --overwrite node ${node} failure-domain.beta.kubernetes.io/zone=eu-west-1${zone}
-        docker exec kube-node-${node_index} mkdir -p /data/vol ${pv_path}/bindmount
-        docker exec kube-node-${node_index} mount -o bind /data/vol ${pv_path}/bindmount
-    done
+    pv_path="/mnt/pv-zone-${zone}"
+    kubectl --context kind label --overwrite node ${node} failure-domain.beta.kubernetes.io/zone=eu-west-1${zone}
+    docker exec ${node} mkdir -p /data/vol ${pv_path}/bindmount
+    docker exec ${node} mount -o bind /data/vol ${pv_path}/bindmount
 }
 
 function create_storage_class() {
     # based on https://github.com/kubernetes-sigs/sig-storage-local-static-provisioner/blob/master/provisioner/deployment/kubernetes/example/default_example_storageclass.yaml
     local zone=$1
-    cat <<EOF | kubectl --context dind apply -f -
+    cat <<EOF | kubectl --context kind apply -f -
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -36,7 +27,7 @@ EOF
 
 function create_test_namespace() {
     local namespace=$1
-    cat <<EOF | kubectl --context dind apply -f -
+    cat <<EOF | kubectl --context kind apply -f -
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -46,7 +37,7 @@ EOF
 
 function deploy_local_volume_provisioner_credentials() {
     # based on https://github.com/kubernetes-sigs/sig-storage-local-static-provisioner/blob/master/provisioner/deployment/kubernetes/example/default_example_provisioner_generated.yaml
-    cat <<EOF | kubectl --context dind apply -f -
+    cat <<EOF | kubectl --context kind apply -f -
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -96,7 +87,7 @@ EOF
 function deploy_local_volume_provisioner() {
     # based on https://github.com/kubernetes-sigs/sig-storage-local-static-provisioner/blob/master/provisioner/deployment/kubernetes/example/default_example_provisioner_generated.yaml
     local zone=$1
-    cat <<EOF | kubectl --context dind apply -f -
+    cat <<EOF | kubectl --context kind apply -f -
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -162,76 +153,97 @@ spec:
 EOF
 }
 
-function runLocalRegistry {
-    # local registry so we can build image locally
-    # and tell dind nodes to pull the "local" image from the host
-    # based on https://github.com/kubernetes-sigs/kubeadm-dind-cluster/issues/56#issuecomment-387463386
-    runningRegistry=$(docker ps --filter=name="dind-registry" --format="{{.Names}}")
+function run_local_registry() {
+    # local registry so we can build images locally
+    runningRegistry=$(docker ps --filter=name="kind-registry" --format="{{.Names}}")
     if [[ "$runningRegistry" == "" ]]; then
         echo "Running local registry on port 5000"
-        docker run -d --name=dind-registry --rm -p 5000:5000 registry:2
+        docker run -d --name=kind-registry --restart=always -p 5000:5000 registry:2
     fi
 
-    echo "Setting up dind nodes to target local registry"
-    docker ps -a -q --filter=label=mirantis.kubeadm_dind_cluster | while read container_id;
-    do
-        docker exec ${container_id} /bin/bash -c \
-            "docker rm -fv registry-proxy || true"
-        # run registry proxy: forward from localhost:5000 on each node to host:5000
-        docker exec ${container_id} /bin/bash -c \
-            "docker run --name registry-proxy -d -e LISTEN=':5000' -e TALK=\"\$(/sbin/ip route|awk '/default/ { print \$3 }'):5000\" -p 5000:5000 tecnativa/tcp-proxy"
-    done
+    create_registry_proxy
 }
 
-# cluster config
-declare -A node_zone_count
-node_zone_count=(
-    [a]=${ZONE_A_NODES:-"2"}
-    [b]=${ZONE_B_NODES:-"2"}
-)
+# tell kind nodes to proxy TCP requests on port 5000 to the docker host on the same port
+# this is so that kind nodes can pull the "local" image from the docker host
+# based on https://github.com/kubernetes-sigs/kubeadm-dind-cluster/issues/56#issuecomment-387463386
+function create_registry_proxy {
+    cat <<EOF | kubectl --context kind apply -f -
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: registry-proxy
+  namespace: kube-system
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: registry-proxy
+  template:
+    metadata:
+      labels:
+        app: registry-proxy
+    spec:
+      hostNetwork: true
+      containers:
+        - image: "tecnativa/tcp-proxy"
+          name: tcp-proxy
+          command: ["/bin/sh", "-c"]
+          args:
+             - export TALK=\$(/sbin/ip route |  awk '/default/ { print \$3 ":5000"}');
+               export LISTEN=:5000;
+               /magic-entrypoint /docker-entrypoint.sh haproxy -f /usr/local/etc/haproxy/haproxy.cfg;
+          ports:
+            - containerPort: 5000
+EOF
+}
 
-read -r -a zones <<< "${!node_zone_count[@]}"
-numNodes=0
-for numZoneNodes in "${node_zone_count[@]}"
-do
-    numNodes=$((numNodes + numZoneNodes))
-done
-
-DIND_VERSION=${DIND_VERSION:-"1.10"}
-echo "Downloading dind artifacts into ${buildDir}"
-curl -L "https://github.com/kubernetes-sigs/kubeadm-dind-cluster/releases/download/v0.1.0/dind-cluster-v${DIND_VERSION}.sh" -o "${buildDir}/dind-cluster-v${DIND_VERSION}.sh"
-chmod +x ${buildDir}/dind-cluster-v${DIND_VERSION}.sh
+# pre-requisite
+if ! [ -x "$(command -v kind)" ]; then
+  echo 'Error: kind is not installed.' >&2
+  exit 1
+fi
 
 # clean previous cluster if present
-${buildDir}/dind-cluster-v${DIND_VERSION}.sh clean
+kind delete cluster || true
 
-# bootstrap cluster
-FEATURE_GATES="${FEATURE_GATES:-MountPropagation=true,PersistentLocalVolumes=true}"
-KUBELET_FEATURE_GATES="${KUBELET_FEATURE_GATES:-MountPropagation=true,DynamicKubeletConfig=true,PersistentLocalVolumes=true}"
+# create a cluster
+tmpDir=$(mktemp -d)
+trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
+cat << EOF > ${tmpDir}/kind-cluster.yml
+kind: Cluster
+apiVersion: kind.sigs.k8s.io/v1alpha3
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker
+  - role: worker
+EOF
 
-FEATURE_GATES=${FEATURE_GATES} KUBELET_FEATURE_GATES=${KUBELET_FEATURE_GATES} NUM_NODES=${numNodes} MGMT_CIDRS=172.18.0.0/16 POD_NETWORK_CIDR=172.20.0.0/16 ${buildDir}/dind-cluster-v${DIND_VERSION}.sh up
+# node image officially supported for v0.5.1 - see https://github.com/kubernetes-sigs/kind/releases/tag/v0.5.1
+KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.11.10@sha256:bb22258625199ba5e47fb17a8a8a7601e536cd03456b42c1ee32672302b1f909"}
+kind create cluster --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
+export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+kubectl config rename-context "kubernetes-admin@kind" "kind"
 
-# add kubectl directory to PATH
-export PATH="$HOME/.kubeadm-dind-cluster:$PATH"
-
+# create test namespace
 NAMESPACE=${NAMESPACE:-"test-cassandra-operator"}
-create_test_namespace local-volume-provisioning
 create_test_namespace ${NAMESPACE}
+create_test_namespace local-volume-provisioning
 
+# setup local volume provisioning
+setup_volume_on_node kind-worker a
+setup_volume_on_node kind-worker2 a
+setup_volume_on_node kind-worker3 b
+setup_volume_on_node kind-worker4 b
+create_storage_class a
+create_storage_class b
 deploy_local_volume_provisioner_credentials
+deploy_local_volume_provisioner a
+deploy_local_volume_provisioner b
 
-start=1
-for zone in "${zones[@]}"
-do
-    end=$((${start} + ${node_zone_count[${zone}]} - 1))
-    if [ node_zone_count[${zone}] != 0 ]
-    then
-        setup_nodes ${start} ${end} ${zone}
-    fi
-    start=$((${end} + 1))
-
-    create_storage_class ${zone}
-    deploy_local_volume_provisioner ${zone}
-done
-
-runLocalRegistry
+# create a local registry that can be used by kind nodes
+run_local_registry

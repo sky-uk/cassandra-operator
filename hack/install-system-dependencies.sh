@@ -19,5 +19,7 @@ curl --silent \
      --output goss \
      https://github.com/aelsabbahy/goss/releases/download/v0.3.5/goss-linux-amd64 \
      --output dgoss \
-     https://raw.githubusercontent.com/aelsabbahy/goss/v0.3.5/extras/dgoss/dgoss
-chmod +x kubectl goss dgoss
+     https://raw.githubusercontent.com/aelsabbahy/goss/v0.3.5/extras/dgoss/dgoss \
+     --output kind \
+     https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
+chmod +x kubectl goss dgoss kind

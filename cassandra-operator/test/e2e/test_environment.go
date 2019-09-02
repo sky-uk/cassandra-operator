@@ -51,11 +51,15 @@ func init() {
 	}
 
 	if kubeContext == "" {
-		kubeContext = "dind"
+		kubeContext = "kind"
+	}
+
+	kubeconfigLocation = os.Getenv("KUBECONFIG")
+	if kubeconfigLocation == "" {
+		kubeconfigLocation = fmt.Sprintf("%s/.kube/kind-config-kind", os.Getenv("HOME"))
 	}
 
 	var err error
-	kubeconfigLocation = fmt.Sprintf("%s/.kube/config", os.Getenv("HOME"))
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{Precedence: []string{kubeconfigLocation}},
 		&clientcmd.ConfigOverrides{CurrentContext: kubeContext},

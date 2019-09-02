@@ -30,7 +30,7 @@ This project is composed of several sub-modules that are either part of the Cass
 - [cassandra-operator](cassandra-operator/README.md): the Kubernetes operator that manages the Cassandra clusters lifecycle inside Kubernetes
 - [cassandra-snapshot](cassandra-snapshot/README.md): a component responsible for taking and deleting snapshots given a schedule and retention policy
 - [fake-cassandra-docker](fake-cassandra-docker/README.md): a fake Cassandra image used by the cassandra-operator and cassandra-snapshot to speed it up end-to-end testing
-- [test-kubernetes-cluster](test-kubernetes-cluster/README.md): a [Kubernetes Docker-in-Docker](https://github.com/kubernetes-sigs/kubeadm-dind-cluster) cluster used by the cassandra-operator and cassandra-snapshot to facilitate end-to-end testing
+- [test-kubernetes-cluster](test-kubernetes-cluster/README.md): a [Kind](https://kind.sigs.k8s.io/) cluster used by the cassandra-operator and cassandra-snapshot to facilitate end-to-end testing
 
 ## Design
 

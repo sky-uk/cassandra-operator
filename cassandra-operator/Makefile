@@ -3,8 +3,9 @@
 	validate-crds generate-crds \
 	validate-codegen generate-codegen
 
-# Default context is running locally against a dind cluster
-KUBE_CONTEXT ?= dind
+# Default context is running locally against a kind cluster
+KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBE_CONTEXT ?= kind
 POD_START_TIMEOUT ?= 150s
 USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)
@@ -88,6 +89,7 @@ integration-test: ensure-test-report-dir-exists
 ifeq ($(strip $(USE_MOCK)),true)
 	@echo "== e2e-test integration test against real cassandra"
 	KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		KUBECONFIG=$(KUBECONFIG) \
 		NAMESPACE=$(NAMESPACE) \
 		POD_START_TIMEOUT=5m \
 		USE_MOCK=false \
@@ -102,6 +104,7 @@ e2e-test: e2e-test-parallel e2e-test-sequential
 e2e-test-parallel: ensure-test-report-dir-exists
 	@echo "== e2e-test-parallel"
 	KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		KUBECONFIG=$(KUBECONFIG) \
 		NAMESPACE=$(NAMESPACE) \
 		POD_START_TIMEOUT=$(POD_START_TIMEOUT) \
 		FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) \
@@ -114,6 +117,7 @@ e2e-test-parallel: ensure-test-report-dir-exists
 e2e-test-sequential: ensure-test-report-dir-exists
 	@echo "== e2e-test-sequential"
 	KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		KUBECONFIG=$(KUBECONFIG) \
 		NAMESPACE=$(NAMESPACE) \
 		POD_START_TIMEOUT=$(POD_START_TIMEOUT) \
 		FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) \
@@ -126,10 +130,9 @@ e2e-test-sequential: ensure-test-report-dir-exists
 docker-image: go-build common-docker-build
 
 push-image: docker-image common-docker-push
-
 deploy-operator:
 	@echo "== deploy-operator"
-	IMAGE=$(IMAGE_TO_DEPLOY) CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) INGRESS_HOST=$(NAMESPACE).cassandra-operator.$(DOMAIN) $(projectDir)/deploy.sh
+	IMAGE=$(IMAGE_TO_DEPLOY) KUBECONFIG=$(KUBECONFIG) CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) INGRESS_HOST=$(NAMESPACE).cassandra-operator.$(DOMAIN) $(projectDir)/deploy.sh
 
 validate-licences:
 	@echo "== validate licences"

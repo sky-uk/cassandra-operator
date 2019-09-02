@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := all
 .PHONY: all clean install check build fmt vet lint validate-licences test e2e-te setup go-build go-install docker-image push-image prepare-deployment release check-style
 
-# Default context is running locally against a dind cluster
-KUBE_CONTEXT ?= dind
+# Default context is running locally against a kind cluster
+KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBE_CONTEXT ?= kind
 USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)
 IMAGE_UNDER_TEST ?= $(dockerTestImage)
@@ -93,6 +94,7 @@ ifeq ($(strip $(USE_MOCK)),true)
 	@echo "== e2e-test integration test against real cassandra"
 	IMAGE_UNDER_TEST=$(dockerTestImage) \
 				KUBE_CONTEXT=$(KUBE_CONTEXT) \
+				KUBECONFIG=$(KUBECONFIG) \
 				NAMESPACE=$(NAMESPACE) \
 				USE_MOCK=false \
 				ginkgo -r -compilers=$(GINKGO_COMPILERS) --v --progress test/e2e/create -- -junit-report-dir $(junitReportDir)
@@ -103,6 +105,7 @@ e2e-test: ensure-test-report-dir-exists
 	IMAGE_UNDER_TEST=$(IMAGE_UNDER_TEST) \
 				FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) \
 				KUBE_CONTEXT=$(KUBE_CONTEXT) \
+				KUBECONFIG=$(KUBECONFIG) \
 				NAMESPACE=$(NAMESPACE) \
 				USE_MOCK=$(USE_MOCK) \
 				ginkgo -r -compilers=$(GINKGO_COMPILERS) --v --progress test/e2e/$(E2E_TEST) -- -junit-report-dir $(junitReportDir)
@@ -114,7 +117,7 @@ push-image: docker-image common-docker-push
 prepare-deployment:
 	@echo "== prepare-deployment"
 	sed -e "s@\$$TARGET_NAMESPACE@$(NAMESPACE)@g" $(k8ResourcesDir)/cassandra-snapshot.yml > ${buildDir}/cassandra-snapshot.yml
-	kubectl --context $(KUBE_CONTEXT) -n $(NAMESPACE) apply -f ${buildDir}/cassandra-snapshot.yml
+	kubectl --kubeconfig $(KUBECONFIG) --context $(KUBE_CONTEXT) -n $(NAMESPACE) apply -f ${buildDir}/cassandra-snapshot.yml
 
 clean: common-docker-clean
 	@echo "== clean"

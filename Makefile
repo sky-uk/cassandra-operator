@@ -1,9 +1,10 @@
 .DEFAULT_GOAL := all
-.PHONY: all check-style clean-all build-all setup setup-all check-style-all run-local-registry verify-go-mod
+.PHONY: all check-style clean-all build-all setup setup-all check-style-all run-local-registry verify-go-mod kind
 
 TEST_REGISTRY ?= localhost:5000
 POD_START_TIMEOUT ?= 150s
-KUBE_CONTEXT ?= dind
+KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBE_CONTEXT ?= kind
 USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)
 CASSANDRA_BOOTSTRAPPER_IMAGE ?= $(TEST_REGISTRY)/cassandra-bootstrapper:v$(gitRev)
@@ -16,7 +17,7 @@ GINKGO_COMPILERS ?= 0
 gitRev := $(shell git rev-parse --short HEAD)
 projectDir := $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
 
-all: install dind check
+all: install kind check
 
 setup: check-system-dependencies setup-all run-local-registry
 
@@ -38,8 +39,8 @@ verify-go-mod:
 
 run-local-registry:
 	@echo "== run-local-registry"
-ifeq (, $(shell  docker ps --filter=name="dind-registry" --format="{{.Names}}"))
-	docker run -d --name=dind-registry --rm -p 5000:5000 registry:2
+ifeq (, $(shell  docker ps --filter=name="kind-registry" --format="{{.Names}}"))
+	docker run -d --name=kind-registry --restart=always -p 5000:5000 registry:2
 endif
 
 check-system-dependencies:
@@ -62,14 +63,17 @@ endif
 ifeq (, $(shell which kubectl))
 	$(error "kubectl not found in PATH")
 endif
+ifeq (, $(shell which kind))
+	$(error "kind not found in PATH")
+endif
 
 check-all:
 	@echo "== check-all"
 	$(MAKE) -C cassandra-bootstrapper check
 	$(MAKE) -C fake-cassandra-docker check
 	$(MAKE) -C cassandra-sidecar check
-	GINKGO_NODES=$(GINKGO_NODES) GINKGO_COMPILERS=$(GINKGO_COMPILERS) KUBE_CONTEXT=$(KUBE_CONTEXT) TEST_REGISTRY=$(TEST_REGISTRY) FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) USE_MOCK=$(USE_MOCK) $(MAKE) -C cassandra-snapshot check
-	GINKGO_NODES=$(GINKGO_NODES) GINKGO_COMPILERS=$(GINKGO_COMPILERS) KUBE_CONTEXT=$(KUBE_CONTEXT) TEST_REGISTRY=$(TEST_REGISTRY) FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) CASSANDRA_BOOTSTRAPPER_IMAGE=$(CASSANDRA_BOOTSTRAPPER_IMAGE) CASSANDRA_SNAPSHOT_IMAGE=$(CASSANDRA_SNAPSHOT_IMAGE) CASSANDRA_SIDECAR_IMAGE=$(CASSANDRA_SIDECAR_IMAGE) USE_MOCK=$(USE_MOCK) POD_START_TIMEOUT=$(POD_START_TIMEOUT) $(MAKE) -C cassandra-operator check
+	GINKGO_NODES=$(GINKGO_NODES) GINKGO_COMPILERS=$(GINKGO_COMPILERS) KUBECONFIG=$(KUBECONFIG) KUBE_CONTEXT=$(KUBE_CONTEXT) TEST_REGISTRY=$(TEST_REGISTRY) FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) USE_MOCK=$(USE_MOCK) $(MAKE) -C cassandra-snapshot check
+	GINKGO_NODES=$(GINKGO_NODES) GINKGO_COMPILERS=$(GINKGO_COMPILERS) KUBECONFIG=$(KUBECONFIG) KUBE_CONTEXT=$(KUBE_CONTEXT) TEST_REGISTRY=$(TEST_REGISTRY) FAKE_CASSANDRA_IMAGE=$(FAKE_CASSANDRA_IMAGE) CASSANDRA_BOOTSTRAPPER_IMAGE=$(CASSANDRA_BOOTSTRAPPER_IMAGE) CASSANDRA_SNAPSHOT_IMAGE=$(CASSANDRA_SNAPSHOT_IMAGE) CASSANDRA_SIDECAR_IMAGE=$(CASSANDRA_SIDECAR_IMAGE) USE_MOCK=$(USE_MOCK) POD_START_TIMEOUT=$(POD_START_TIMEOUT) $(MAKE) -C cassandra-operator check
 
 build-all:
 	@echo "== build-all"
@@ -103,9 +107,9 @@ setup-all:
 	$(MAKE) -C cassandra-operator setup
 	$(MAKE) -C cassandra-sidecar setup
 
-dind:
-	@echo "== recreate dind cluster"
-	NAMESPACE=$(NAMESPACE) $(projectDir)/test-kubernetes-cluster/recreate-dind-cluster.sh
+kind:
+	@echo "== recreate kind cluster"
+	NAMESPACE=$(NAMESPACE) $(projectDir)/test-kubernetes-cluster/recreate-kind-cluster.sh
 
 release-all:
 	@echo "== release-all"
