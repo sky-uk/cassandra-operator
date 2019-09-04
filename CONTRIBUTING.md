@@ -24,12 +24,11 @@ This project uses [Go Modules](https://github.com/golang/go/wiki/Modules).
 
 ## Building and Testing
 
-To setup your environment with the required dependencies, run this at the project root level:
+To setup your environment with the required dependencies, run this at the project root level.
+_Missing system libraries that need installing will be listed in the output_
 ```
 make setup
 ```
-This will create a [Kind](https://kind.sigs.k8s.io/) cluster.
-Missing system libraries that need installing will be listed in the output
 
 To compile, and create local docker images for each of the sub-projects:
 ```

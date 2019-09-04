@@ -1,8 +1,9 @@
 # Overview
 
-The Cassandra Operator is primarily composed of 3 components:
+The Cassandra Operator is primarily composed of 4 components:
 - [cassandra-operator](../cassandra-operator/README.md): the operator responsible for the lifecycle of the clusters in Kubernetes
 - [cassandra-bootstrapper](../cassandra-bootstrapper/README.md): a component responsible for configuring the Cassandra node before it can be started
+- [cassandra-sidecar](../cassandra-sidecar/README.md): a sidecar container running on each Cassandra node exposing node status 
 - [cassandra-snapshot](../cassandra-snapshot/README.md): a component responsible for taking and deleting snapshots given a retention policy 
 
 It allows users to run Cassandra clusters within Kubernetes without needing to manually perform tasks
@@ -86,9 +87,13 @@ to IP Addresses. If the DNS lookup fails (for example if the pod has not been cr
 
 ![Cassandra pod](diagrams/cassandra-pod.png)
 
-
 Each cassandra instance is created as a Kubernetes Pod, which in turn is managed by a `StatefulSet`. The pod consists of
-two [Init Containers](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) and a single container.
+two [Init Containers](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) and two containers.
+
+## Init Containers
+
+The two init containers are responsible for applying changes on top of the default Cassandra configuration, 
+in order to make it work with the operator·
 
 This setup uses three volumes:
   - `configuration`: an `EmptyDir` volume which holds Cassandra configuration files.
@@ -134,6 +139,15 @@ Other 3.x versions are likely to be compatible but are not currently being teste
  
 Each Cassandra instance is configured by the [cassandra-bootstrapper](../cassandra-bootstrapper/README.md) to use a custom seed provider.
 This [seed-provider](../cassandra-bootstrapper/seed-provider/README.md) uses the Kubernetes API Server to discover the other Cassandra instances.
+
+## Containers
+
+There are two containers:
+- Cassandra: this is the main container where Cassandra will be running 
+- Sidecar: this is a sidecar container that exposes the local node status via HTTP endpoints.
+It is used as a lightweight replacement for `nodetool` which is rather greedy in CPU, 
+and uses Jolokia to extract MBeans information to check cluster health (e.g. node joining, leaving, up/down)    
+
 
 # Configuration
 

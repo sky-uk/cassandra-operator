@@ -10,6 +10,8 @@ It is not yet recommended for use in production environments.
 * rack awareness
 * scaling out (more racks, more pods per rack)
 * scheduled backups with retention policy
+* periodic cluster definition reconciliation
+* lighweight nodetool status equivalent probes  
 * works with official Cassandra Docker images
 * deployable per namespace with RBAC permissions limited to it
 * deployable cluster-wide
@@ -44,7 +46,7 @@ Other Kubernetes versions are likely to work, but we do not actively test agains
 
 Cassandra Operator | Kubernetes | Cassandra
 --- | --- | ---
-0.70.1-alpha | 1.10 | 3.11
+0.72.0-alpha | 1.10 | 3.11
 
 ## Questions or Problems?
 

@@ -1,5 +1,58 @@
 # Changes
 
+## 0.72.0-alpha
+
+This release brings 2 main features, bug fixes and several enhancements.
+
+**Note: This version is not backwards-compatible with previous Cassandra clusters deployed by the operator.
+It includes one API change that is a not backward-compatible (#61).**
+
+Main features:
+- Reconcile cluster state based on its definition at regular intervals (#53)
+- Cassandra sidecar exposing node status endpoints (#30)
+
+Changelog:
+- [ENHANCEMENT] [Switch from dind to kind](#176) (@sebbonnet)
+- [ENHANCEMENT] [Reduce main.go to bare minimum](#175) (@sebbonnet)
+- [FEATURE] [Reconcile partial and external modification](#171) (@sebbonnet)
+- [BUGFIX] [Double the number of events per Cassandra](#174) (@sebbonnet)
+- [FEATURE] [Expose reconciliation syncPeriod as cmd line arg](#172) (@sebbonnet)
+- [FEATURE] [Reconcile by determining current state](#170) (@sebbonnet)
+- [ENHANCEMENT] [Use cmd.Equal to compare CassandraSpec](#166) (@sebbonnet)
+- [BUGFIX] [Stop creating configmap volume or mount if exists](#165) (@sebbonnet)
+- [BUGFIX] [Fix affinity rules for emptydir](#168) (@sebbonnet)
+- [BUGFIX] [Generate all client code using code-gen](#163) (@sebbonnet)
+- [FEATURE] [controller-runtime based controller](#150) (@kragniz)
+- [FEATURE] [Move update validation to the validation package](#156) (@wallrj)
+- [ENHANCEMENT] [Upgrade controller tools](#159) (@wallrj)
+- [ENHANCEMENT] [A comparison of webhook libraries](#144) (@wallrj)
+- [BUGFIX] [Fix intermittent licence check failures](#154) (@sebbonnet)
+- [ENHANCEMENT] [Scripts to check and update go.mod files in all go sub-projects](#153) (@wallrj)
+- [FEATURE] [Move validation to apis package and use apimachinery Validation helpers](#139) (@wallrj)
+- [ENHANCEMENT] [Add caching of gradle dependencies](#142) (@wallrj)
+- [ENHANCEMENT] [Use describe table to shorten tests](#140) (@sebbonnet)
+- [BUGFIX] [Do not attempt updating cluster on snapshot change](#137) (@sebbonnet)
+- [BUGFIX] [Use dynamic informer to handle unmarshalling errors](#125) (@kragniz)
+- [FEATURE] [Make Snapshot.RetentionPolicy.Enabled an optional field](#126) (@wallrj)
+- [BUGFIX] [Log max 2 events per statefulset](#129) (@sebbonnet)
+- [BUGFIX] [Prevent mutating objects we get back from watchers](#127) (@sebbonnet)
+- [BUGFIX] [Fix panic when comparing snapshots](#120) (@sebbonnet)
+- [FEATURE] [Optional probe fields](#117) (@wallrj)
+- [FEATURE] [Cassandra sidecar which responds to liveness and readiness probes](#116) (@wallrj)
+- [ENHANCEMENT] [Generate code using controller-gen](#112) (@kragniz)
+- [FEATURE] [Add ownerReferences to created resources](#100) (@kragniz)
+- [ENHANCEMENT] [Run tests in parallel](#102) (@wallrj)
+- [ENHANCEMENT] [Run all static checks and compilation steps before launching the e2e tests](#99) (@wallrj)
+- [ENHANCEMENT] [Generate CRD using controller-tools](#94) (@kragniz)
+- [FEATURE] [Use pointers for optional fields](#93) (@kragniz)
+- [FEATURE] [types: add omitempty for optional fields](#88) (@kragniz)
+- [ENHANCEMENT] [Migrate cassandra-operator from dep to go modules #60 ](#86) (@kragniz)
+- [FEATURE] [Rename the DC field to Datacenter and make it a string pointer](#61) (@wallrj)
+- [ENHANCEMENT] [Add a make check-style target](#68) (@wallrj)
+
+## 0.70.1-alpha
+- [BUGFIX] [Cassandra node unable to find seed provider ](https://github.com/sky-uk/cassandra-operator/issues/50)
+
 ## 0.70.0-alpha
 - [ANNOUNCEMENT] This is the first release available to the general public
   
@@ -9,8 +62,8 @@
 - [FEATURE] New properties to specify docker images for snapshot and bootstrapping
   
   Adds 2 new properties to the cassandra cluster definition: 
-  - `pod.bootstrapperImage`: docker image used to bootstrap cassandra pods - see [cassandra-bootstrapper](../cassandra-bootstrapper/README.md) 
-  - `snapshot.image`: docker image used to trigger snapshot creation and cleanup - see [cassandra-snapshot](../cassandra-snapshot/README.md)
+  - `pod.bootstrapperImage`: docker image used to bootstrap cassandra pods - see [cassandra-bootstrapper](cassandra-bootstrapper/README.md) 
+  - `snapshot.image`: docker image used to trigger snapshot creation and cleanup - see [cassandra-snapshot](cassandra-snapshot/README.md)
   
   These properties default to the latest version of each image.
   They are exposed for transparency and flexibility and mostly intended to be used during upgrades 
@@ -22,7 +75,7 @@
  
   This change introduces snapshot creation and cleanup by means of cronjobs, 
   and so requires the Operator to have additional permissions to list, create, modify and delete cronjobs.
-  For more details refer to [cassandra-snapshot](../cassandra-snapshot/README.md)
+  For more details refer to [cassandra-snapshot](cassandra-snapshot/README.md)
 
 ## 0.66.0
 - [BUGFIX] [Wait indefinitely for rack changes](https://github.com/sky-uk/cassandra-operator/issues/19)
