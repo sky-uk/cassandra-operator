@@ -117,7 +117,7 @@ var _ = Describe("reconciliation", func() {
 
 			It("should dispatch an UpdateCluster event when the current cluster definition is different", func() {
 				currentCassandra := desiredCassandra.DeepCopy()
-				currentCassandra.Spec.Pod.CPU = resource.MustParse("101m")
+				currentCassandra.Spec.Pod.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("101m")
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
 
@@ -329,7 +329,7 @@ var _ = Describe("reconciliation", func() {
 
 			It("should dispatch configMap events before Cassandra ones", func() {
 				currentCassandra := desiredCassandra.DeepCopy()
-				currentCassandra.Spec.Pod.CPU = resource.MustParse("101m")
+				currentCassandra.Spec.Pod.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("101m")
 				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
@@ -353,7 +353,7 @@ var _ = Describe("reconciliation", func() {
 
 			It("should dispatch add service before Cassandra events", func() {
 				currentCassandra := desiredCassandra.DeepCopy()
-				currentCassandra.Spec.Pod.CPU = resource.MustParse("101m")
+				currentCassandra.Spec.Pod.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("101m")
 				fakes.configMapHasntChangedFor(desiredCassandra, configMapNamespaceName)
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
@@ -484,8 +484,14 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 			Datacenter: ptr.String("my-datacenter"),
 			Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "rack-storage-a", Zone: "rack-zone"}},
 			Pod: v1alpha1.Pod{
-				Memory:      resource.MustParse("1Gi"),
-				CPU:         resource.MustParse("100m"),
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
 				StorageSize: resource.MustParse("2Gi"),
 			},
 		},

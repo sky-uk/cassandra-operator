@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
 
@@ -22,45 +23,67 @@ var _ = Describe("Cassandra Types", func() {
 
 		DescribeTable("equality",
 			podEqualityCheck,
-			Entry("if all fields are equal", func(pod *Pod) {}),
-			Entry("when cpu value is the same but using a different amount", func(pod *Pod) { pod.CPU = resource.MustParse("1") }),
-			Entry("when memory value is the same but using a different amount", func(pod *Pod) { pod.Memory = resource.MustParse("2048Mi") }),
-			Entry("when storage size value is the same but using a different amount", func(pod *Pod) { pod.StorageSize = resource.MustParse("1024Mi") }),
+			Entry("if all fields are equal", func(pod, _ *Pod) {}),
+			Entry("when cpu request value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("1") }),
+			Entry("when cpu limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("1") }),
+			Entry("when memory request value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
+			Entry("when memory limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
+			Entry("when storage size value is the same but using a different amount", func(pod, _ *Pod) { pod.StorageSize = resource.MustParse("1024Mi") }),
 		)
 
 		DescribeTable("inequality",
 			podInequalityCheck,
-			Entry("when one pod has a nil bootstrap image", func(pod *Pod) { pod.BootstrapperImage = nil }),
-			Entry("when pods have different bootstrap images", func(pod *Pod) { pod.BootstrapperImage = ptr.String("another image") }),
-			Entry("when one pod has a nil sidecar image", func(pod *Pod) { pod.SidecarImage = nil }),
-			Entry("when pods have different sidecar images", func(pod *Pod) { pod.SidecarImage = ptr.String("another image") }),
-			Entry("when one pod has a nil cassandra image", func(pod *Pod) { pod.Image = nil }),
-			Entry("when pods have different cassandra images", func(pod *Pod) { pod.Image = ptr.String("another image") }),
-			Entry("when one pod has no storage size", func(pod *Pod) { pod.StorageSize = resource.Quantity{} }),
-			Entry("when pods have different storage sizes", func(pod *Pod) { pod.StorageSize = resource.MustParse("10Gi") }),
-			Entry("when one pod has no cpu", func(pod *Pod) { pod.CPU = resource.Quantity{} }),
-			Entry("when pods have different number of cpu", func(pod *Pod) { pod.CPU = resource.MustParse("10") }),
-			Entry("when one pod has no memory", func(pod *Pod) { pod.Memory = resource.Quantity{} }),
-			Entry("when pods have different memory sizes", func(pod *Pod) { pod.Memory = resource.MustParse("10") }),
-			Entry("when liveness probes have different success threshold values", func(pod *Pod) { pod.LivenessProbe.SuccessThreshold = ptr.Int32(20) }),
-			Entry("when liveness probes have different timeout values", func(pod *Pod) { pod.LivenessProbe.TimeoutSeconds = ptr.Int32(20) }),
-			Entry("when liveness probes have different failure threshold values", func(pod *Pod) { pod.LivenessProbe.FailureThreshold = ptr.Int32(20) }),
-			Entry("when liveness probes have different initial delay values", func(pod *Pod) { pod.LivenessProbe.InitialDelaySeconds = ptr.Int32(20) }),
-			Entry("when liveness probes have different period seconds values", func(pod *Pod) { pod.LivenessProbe.PeriodSeconds = ptr.Int32(20) }),
-			Entry("when one liveness probe has a nil success threshold", func(pod *Pod) { pod.LivenessProbe.SuccessThreshold = nil }),
-			Entry("when one liveness probe has a nil timeout", func(pod *Pod) { pod.LivenessProbe.TimeoutSeconds = nil }),
-			Entry("when one liveness probe has a nil failure threshold", func(pod *Pod) { pod.LivenessProbe.FailureThreshold = nil }),
-			Entry("when one liveness probe has a nil delay", func(pod *Pod) { pod.LivenessProbe.InitialDelaySeconds = nil }),
-			Entry("when one liveness probe has a nil period", func(pod *Pod) { pod.LivenessProbe.PeriodSeconds = nil }),
-			Entry("when readiness probes have different timeout values", func(pod *Pod) { pod.ReadinessProbe.TimeoutSeconds = ptr.Int32(20) }),
-			Entry("when readiness probes have different failure threshold values", func(pod *Pod) { pod.ReadinessProbe.FailureThreshold = ptr.Int32(20) }),
-			Entry("when readiness probes have different initial delay values", func(pod *Pod) { pod.ReadinessProbe.InitialDelaySeconds = ptr.Int32(20) }),
-			Entry("when readiness probes have different period seconds values", func(pod *Pod) { pod.ReadinessProbe.PeriodSeconds = ptr.Int32(20) }),
-			Entry("when one readiness probe has a nil success threshold", func(pod *Pod) { pod.ReadinessProbe.SuccessThreshold = nil }),
-			Entry("when one readiness probe has a nil timeout", func(pod *Pod) { pod.ReadinessProbe.TimeoutSeconds = nil }),
-			Entry("when one readiness probe has a nil failure threshold", func(pod *Pod) { pod.ReadinessProbe.FailureThreshold = nil }),
-			Entry("when one readiness probe has a nil delay", func(pod *Pod) { pod.ReadinessProbe.InitialDelaySeconds = nil }),
-			Entry("when one readiness probe has a nil period", func(pod *Pod) { pod.ReadinessProbe.PeriodSeconds = nil }),
+			Entry("when one pod has a nil bootstrap image", func(pod, _ *Pod) { pod.BootstrapperImage = nil }),
+			Entry("when pods have different bootstrap images", func(pod, _ *Pod) { pod.BootstrapperImage = ptr.String("another image") }),
+			Entry("when one pod has a nil sidecar image", func(pod, _ *Pod) { pod.SidecarImage = nil }),
+			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.SidecarImage = ptr.String("another image") }),
+			Entry("when one pod has a nil cassandra image", func(pod, _ *Pod) { pod.Image = nil }),
+			Entry("when pods have different cassandra images", func(pod, _ *Pod) { pod.Image = ptr.String("another image") }),
+			Entry("when one pod has no storage size", func(pod, _ *Pod) { pod.StorageSize = resource.Quantity{} }),
+			Entry("when pods have different storage sizes", func(pod, _ *Pod) { pod.StorageSize = resource.MustParse("10Gi") }),
+			Entry("when one pod has no cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
+			Entry("when one pod has no cpu limit", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
+			Entry("when pods have different number of cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("10") }),
+			Entry("when pods have different number of cpu limit", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("120") }),
+			Entry("when one pod has no cpu request and the other has 0 requests", func(pod, otherPod *Pod) {
+				delete(pod.Resources.Requests, coreV1.ResourceCPU)
+				otherPod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			}),
+			Entry("when one pod has no cpu limit and the other has 0 limits", func(pod, otherPod *Pod) {
+				delete(pod.Resources.Limits, coreV1.ResourceCPU)
+				otherPod.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
+			}),
+			Entry("when one pod has no memory request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{} }),
+			Entry("when one pod has no memory limit", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceMemory] = resource.Quantity{} }),
+			Entry("when pods have different memory request sizes", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1000Mi") }),
+			Entry("when pods have different memory limit sizes", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("1Gi") }),
+			Entry("when one pod has no memory request and the other has 0 requests", func(pod, otherPod *Pod) {
+				delete(pod.Resources.Requests, coreV1.ResourceMemory)
+				otherPod.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{}
+			}),
+			Entry("when one pod has no memory limit and the other has 0 limits", func(pod, otherPod *Pod) {
+				delete(pod.Resources.Limits, coreV1.ResourceMemory)
+				otherPod.Resources.Limits[coreV1.ResourceMemory] = resource.Quantity{}
+			}),
+			Entry("when liveness probes have different success threshold values", func(pod, _ *Pod) { pod.LivenessProbe.SuccessThreshold = ptr.Int32(20) }),
+			Entry("when liveness probes have different timeout values", func(pod, _ *Pod) { pod.LivenessProbe.TimeoutSeconds = ptr.Int32(20) }),
+			Entry("when liveness probes have different failure threshold values", func(pod, _ *Pod) { pod.LivenessProbe.FailureThreshold = ptr.Int32(20) }),
+			Entry("when liveness probes have different initial delay values", func(pod, _ *Pod) { pod.LivenessProbe.InitialDelaySeconds = ptr.Int32(20) }),
+			Entry("when liveness probes have different period seconds values", func(pod, _ *Pod) { pod.LivenessProbe.PeriodSeconds = ptr.Int32(20) }),
+			Entry("when one liveness probe has a nil success threshold", func(pod, _ *Pod) { pod.LivenessProbe.SuccessThreshold = nil }),
+			Entry("when one liveness probe has a nil timeout", func(pod, _ *Pod) { pod.LivenessProbe.TimeoutSeconds = nil }),
+			Entry("when one liveness probe has a nil failure threshold", func(pod, _ *Pod) { pod.LivenessProbe.FailureThreshold = nil }),
+			Entry("when one liveness probe has a nil delay", func(pod, _ *Pod) { pod.LivenessProbe.InitialDelaySeconds = nil }),
+			Entry("when one liveness probe has a nil period", func(pod, _ *Pod) { pod.LivenessProbe.PeriodSeconds = nil }),
+			Entry("when readiness probes have different timeout values", func(pod, _ *Pod) { pod.ReadinessProbe.TimeoutSeconds = ptr.Int32(20) }),
+			Entry("when readiness probes have different failure threshold values", func(pod, _ *Pod) { pod.ReadinessProbe.FailureThreshold = ptr.Int32(20) }),
+			Entry("when readiness probes have different initial delay values", func(pod, _ *Pod) { pod.ReadinessProbe.InitialDelaySeconds = ptr.Int32(20) }),
+			Entry("when readiness probes have different period seconds values", func(pod, _ *Pod) { pod.ReadinessProbe.PeriodSeconds = ptr.Int32(20) }),
+			Entry("when one readiness probe has a nil success threshold", func(pod, _ *Pod) { pod.ReadinessProbe.SuccessThreshold = nil }),
+			Entry("when one readiness probe has a nil timeout", func(pod, _ *Pod) { pod.ReadinessProbe.TimeoutSeconds = nil }),
+			Entry("when one readiness probe has a nil failure threshold", func(pod, _ *Pod) { pod.ReadinessProbe.FailureThreshold = nil }),
+			Entry("when one readiness probe has a nil delay", func(pod, _ *Pod) { pod.ReadinessProbe.InitialDelaySeconds = nil }),
+			Entry("when one readiness probe has a nil period", func(pod, _ *Pod) { pod.ReadinessProbe.PeriodSeconds = nil }),
 		)
 	})
 
@@ -118,7 +141,7 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one cassandra has a different number of racks", func(cass *CassandraSpec) { cass.Racks = []Rack{*rackSpec("a")} }),
 			Entry("when one cassandra has a no snapshot", func(cass *CassandraSpec) { cass.Snapshot = nil }),
 			Entry("when one cassandra has a different schedule", func(cass *CassandraSpec) { cass.Snapshot.Schedule = "1 2 3 4" }),
-			Entry("when one cassandra has a different pod spec", func(cass *CassandraSpec) { cass.Pod.CPU = resource.MustParse("30") }),
+			Entry("when one cassandra has a different pod spec", func(cass *CassandraSpec) { cass.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("30") }),
 		)
 	})
 })
@@ -197,25 +220,25 @@ func rackComparisonCheck(mutate func(rack *Rack), expectCheck func(rack, otherRa
 
 	Expect(expectCheck(rack1, rack2)).To(BeTrue())
 }
-func podEqualityCheck(mutate func(pod *Pod)) {
+func podEqualityCheck(mutate func(pod, otherPod *Pod)) {
 	podsEqual := func(pod, otherPod *Pod) bool {
 		return pod.Equal(*otherPod) && otherPod.Equal(*pod)
 	}
 	podComparisonCheck(mutate, podsEqual)
 }
 
-func podInequalityCheck(mutate func(pod *Pod)) {
+func podInequalityCheck(mutate func(pod, otherPod *Pod)) {
 	podsNotEqual := func(pod, otherPod *Pod) bool {
 		return !pod.Equal(*otherPod) && !otherPod.Equal(*pod)
 	}
 	podComparisonCheck(mutate, podsNotEqual)
 }
 
-func podComparisonCheck(mutate func(pod *Pod), expectCheck func(pod, otherPod *Pod) bool) {
+func podComparisonCheck(mutate func(pod, otherPod *Pod), expectCheck func(pod, otherPod *Pod) bool) {
 	pod1 := podSpec()
 	pod2 := pod1.DeepCopy()
 
-	mutate(pod1)
+	mutate(pod1, pod2)
 
 	Expect(expectCheck(pod1, pod2)).To(BeTrue())
 }
@@ -225,9 +248,17 @@ func podSpec() *Pod {
 		BootstrapperImage: ptr.String("BootstrapperImage"),
 		SidecarImage:      ptr.String("SidecarImage"),
 		Image:             ptr.String("Image"),
-		Memory:            resource.MustParse("2Gi"),
-		CPU:               resource.MustParse("1000m"),
-		StorageSize:       resource.MustParse("1Gi"),
+		Resources: coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("2Gi"),
+				coreV1.ResourceCPU:    resource.MustParse("1000m"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("2Gi"),
+				coreV1.ResourceCPU:    resource.MustParse("1000m"),
+			},
+		},
+		StorageSize: resource.MustParse("1Gi"),
 		LivenessProbe: &Probe{
 			SuccessThreshold:    ptr.Int32(1),
 			PeriodSeconds:       ptr.Int32(2),

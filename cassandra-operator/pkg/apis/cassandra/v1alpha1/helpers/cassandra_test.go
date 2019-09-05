@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -28,8 +29,16 @@ var _ = Describe("Cassandra Helpers", func() {
 				Spec: v1alpha1.CassandraSpec{
 					Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 					Pod: v1alpha1.Pod{
-						Memory:      resource.MustParse("1Gi"),
-						CPU:         resource.MustParse("100m"),
+						Resources: coreV1.ResourceRequirements{
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("1Gi"),
+								coreV1.ResourceCPU:    resource.MustParse("100m"),
+							},
+							Limits: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("1Gi"),
+								coreV1.ResourceCPU:    resource.MustParse("100m"),
+							},
+						},
 						StorageSize: resource.MustParse("1Gi"),
 					},
 				},

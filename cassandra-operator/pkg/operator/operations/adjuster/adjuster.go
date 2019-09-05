@@ -42,11 +42,16 @@ const statefulSetPatchTemplate = `{
 		   },
 		   "resources": {
 			 "requests": {
-			   "cpu": "{{ .PodCPU }}",
-			   "memory": "{{ .PodMemory }}"
+               {{ if .PodCPURequest }}
+			   "cpu": "{{ .PodCPURequest }}",
+    	 	   {{ end }}	
+			   "memory": "{{ .PodMemoryRequest }}"
 			 },
 			 "limits": {
-			   "memory": "{{ .PodMemory }}"
+               {{ if .PodCPULimit}}
+			   "cpu": "{{ .PodCPULimit }}",
+               {{ end }}
+			   "memory": "{{ .PodMemoryLimit }}"
 			 }
 		   }
 		},
@@ -100,8 +105,10 @@ type patchProperties struct {
 	Replicas                 int32
 	PodBootstrapperImage     string
 	PodCassandraSidecarImage string
-	PodCPU                   string
-	PodMemory                string
+	PodCPURequest            string
+	PodMemoryRequest         string
+	PodCPULimit              string
+	PodMemoryLimit           string
 	PodLivenessProbe         *v1alpha1.Probe
 	PodReadinessProbe        *v1alpha1.Probe
 }
@@ -160,8 +167,10 @@ func (r *Adjuster) patchForRack(rack *v1alpha1.Rack, newCluster *v1alpha1.Cassan
 		Replicas:                 rack.Replicas,
 		PodBootstrapperImage:     *newCluster.Spec.Pod.BootstrapperImage,
 		PodCassandraSidecarImage: *newCluster.Spec.Pod.SidecarImage,
-		PodCPU:                   newCluster.Spec.Pod.CPU.String(),
-		PodMemory:                newCluster.Spec.Pod.Memory.String(),
+		PodCPURequest:            quantityOrEmpty(newCluster.Spec.Pod.Resources.Requests, v1.ResourceCPU),
+		PodMemoryRequest:         newCluster.Spec.Pod.Resources.Requests.Memory().String(),
+		PodCPULimit:              quantityOrEmpty(newCluster.Spec.Pod.Resources.Limits, v1.ResourceCPU),
+		PodMemoryLimit:           newCluster.Spec.Pod.Resources.Limits.Memory().String(),
 		PodLivenessProbe:         newCluster.Spec.Pod.LivenessProbe,
 		PodReadinessProbe:        newCluster.Spec.Pod.ReadinessProbe,
 	}
@@ -172,6 +181,13 @@ func (r *Adjuster) patchForRack(rack *v1alpha1.Rack, newCluster *v1alpha1.Cassan
 
 	patchString := patch.String()
 	return patchString, nil
+}
+
+func quantityOrEmpty(resources v1.ResourceList, resourceName v1.ResourceName) string {
+	if val, ok := resources[resourceName]; ok {
+		return val.String()
+	}
+	return ""
 }
 
 func (r *Adjuster) podSpecHasChanged(oldCluster, newCluster *v1alpha1.Cassandra) bool {

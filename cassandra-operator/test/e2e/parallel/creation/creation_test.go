@@ -53,9 +53,16 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 			BootstrapperImage: &CassandraBootstrapperImageName,
 			SidecarImage:      &CassandraSidecarImageName,
 			Image:             &CassandraImageName,
-			Memory:            resource.MustParse("987Mi"),
-			CPU:               resource.MustParse("1m"),
-			StorageSize:       resource.MustParse("100Mi"),
+			Resources: coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("987Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("1m"),
+				},
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("987Mi"),
+				},
+			},
+			StorageSize: resource.MustParse("100Mi"),
 			LivenessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
 				TimeoutSeconds:      ptr.Int32(7),

@@ -54,7 +54,7 @@ func init() {
 	maxSidecarMemoryRequest = resource.MustParse("50Mi")
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
-	sidecarCPULimit = resource.MustParse("200m")
+	sidecarCPULimit = resource.MustParse("100m")
 }
 
 // Cluster defines the properties of a Cassandra cluster which the operator should manage.
@@ -359,7 +359,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack, customConfigMap 
 				ContainerPort: 9042,
 			},
 		},
-		Resources:      c.createResourceRequirements(),
+		Resources:      c.definition.Spec.Pod.Resources,
 		LivenessProbe:  createHTTPProbe(c.definition.Spec.Pod.LivenessProbe, "/live", healthServerPort),
 		ReadinessProbe: createHTTPProbe(c.definition.Spec.Pod.ReadinessProbe, "/ready", healthServerPort),
 		Lifecycle: &v1.Lifecycle{
@@ -395,11 +395,11 @@ func (c *Cluster) createCassandraSidecarContainer(rack *v1alpha1.Rack) v1.Contai
 		Resources: v1.ResourceRequirements{
 			Requests: v1.ResourceList{
 				v1.ResourceCPU: minQuantity(
-					c.definition.Spec.Pod.CPU,
+					*c.definition.Spec.Pod.Resources.Requests.Cpu(),
 					maxSidecarCPURequest,
 				),
 				v1.ResourceMemory: minQuantity(
-					c.definition.Spec.Pod.Memory,
+					*c.definition.Spec.Pod.Resources.Requests.Memory(),
 					maxSidecarMemoryRequest,
 				),
 			},
@@ -439,11 +439,11 @@ func (c *Cluster) createEnvironmentVariableDefinition(rack *v1alpha1.Rack) []v1.
 		},
 		{
 			Name:  "POD_CPU_MILLICORES",
-			Value: fmt.Sprintf("%d", c.definition.Spec.Pod.CPU.MilliValue()),
+			Value: fmt.Sprintf("%d", c.definition.Spec.Pod.Resources.Requests.Cpu().MilliValue()),
 		},
 		{
 			Name:  "POD_MEMORY_BYTES",
-			Value: fmt.Sprintf("%d", c.definition.Spec.Pod.Memory.Value()),
+			Value: fmt.Sprintf("%d", c.definition.Spec.Pod.Resources.Requests.Memory().Value()),
 		},
 	}
 
@@ -616,7 +616,7 @@ func (c *Cluster) createInitConfigContainer() v1.Container {
 		VolumeMounts: []v1.VolumeMount{
 			{Name: "configuration", MountPath: "/configuration"},
 		},
-		Resources: c.createResourceRequirements(),
+		Resources: c.definition.Spec.Pod.Resources,
 	}
 }
 func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) v1.Container {
@@ -633,20 +633,8 @@ func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack, cust
 		Name:         cassandraBootstrapperContainerName,
 		Env:          c.createEnvironmentVariableDefinition(rack),
 		Image:        *c.definition.Spec.Pod.BootstrapperImage,
-		Resources:    c.createResourceRequirements(),
+		Resources:    c.definition.Spec.Pod.Resources,
 		VolumeMounts: mounts,
-	}
-}
-
-func (c *Cluster) createResourceRequirements() v1.ResourceRequirements {
-	return v1.ResourceRequirements{
-		Requests: v1.ResourceList{
-			v1.ResourceCPU:    c.definition.Spec.Pod.CPU,
-			v1.ResourceMemory: c.definition.Spec.Pod.Memory,
-		},
-		Limits: v1.ResourceList{
-			v1.ResourceMemory: c.definition.Spec.Pod.Memory,
-		},
 	}
 }
 

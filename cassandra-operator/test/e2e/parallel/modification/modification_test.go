@@ -83,8 +83,15 @@ var _ = Context("Allowable cluster modifications", func() {
 			BootstrapperImage: &CassandraBootstrapperImageName,
 			SidecarImage:      &CassandraSidecarImageName,
 			Image:             &CassandraImageName,
-			Memory:            resource.MustParse("999Mi"),
-			CPU:               resource.MustParse("1m"),
+			Resources: coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("999Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("1m"),
+				},
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+			},
 			LivenessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold + 1),
 				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),

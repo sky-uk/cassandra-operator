@@ -10,7 +10,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
@@ -381,13 +383,15 @@ func (jh *jolokiaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for requestPathSubstring, primedResponse := range jh.responsePrimers {
 		if strings.Contains(r.URL.Path, requestPathSubstring) {
 			w.WriteHeader(primedResponse.statusCode)
-			w.Write([]byte(primedResponse.response))
+			_, err := w.Write([]byte(primedResponse.response))
+			Expect(err).NotTo(HaveOccurred())
 			return
 		}
 	}
 
 	w.WriteHeader(404)
-	w.Write([]byte("Not Found"))
+	_, err := w.Write([]byte("Not Found"))
+	Expect(err).NotTo(HaveOccurred())
 }
 
 func aCluster(clusterName, namespace string) *cluster.Cluster {
@@ -396,8 +400,14 @@ func aCluster(clusterName, namespace string) *cluster.Cluster {
 		Spec: v1alpha1.CassandraSpec{
 			Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 			Pod: v1alpha1.Pod{
-				Memory:      resource.MustParse("1Gi"),
-				CPU:         resource.MustParse("100m"),
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
 				StorageSize: resource.MustParse("1Gi"),
 			},
 		},

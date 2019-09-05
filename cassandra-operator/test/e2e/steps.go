@@ -99,8 +99,7 @@ func TheClusterIsDeleted(clusterName string) {
 
 func TheClusterPodSpecAreChangedTo(namespace, clusterName string, podSpec v1alpha1.Pod) {
 	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
-		spec.Pod.CPU = podSpec.CPU
-		spec.Pod.Memory = podSpec.Memory
+		spec.Pod.Resources = podSpec.Resources
 		spec.Pod.LivenessProbe = podSpec.LivenessProbe
 		spec.Pod.ReadinessProbe = podSpec.ReadinessProbe
 	})

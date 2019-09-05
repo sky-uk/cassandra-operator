@@ -46,8 +46,14 @@ var _ = Describe("operations to execute based on event", func() {
 			Spec: v1alpha1.CassandraSpec{
 				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
-					Memory:      resource.MustParse("1Gi"),
-					CPU:         resource.MustParse("100m"),
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+					},
 					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{

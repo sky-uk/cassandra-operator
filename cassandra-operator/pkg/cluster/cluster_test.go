@@ -12,7 +12,7 @@ import (
 	"github.com/onsi/gomega/types"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"k8s.io/api/batch/v1beta1"
-	v1 "k8s.io/api/core/v1"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,18 +33,18 @@ func TestCluster(t *testing.T) {
 
 var _ = Describe("identification of custom config maps", func() {
 	It("should look like a custom configmap when it ending with the correct suffix", func() {
-		configMap := v1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config"}}
+		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config"}}
 		Expect(LooksLikeACassandraConfigMap(&configMap)).To(BeTrue())
 	})
 
 	It("should not look like a custom configmap when not ending with the correct suffix", func() {
-		configMap := v1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-more"}}
+		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-more"}}
 		Expect(LooksLikeACassandraConfigMap(&configMap)).To(BeFalse())
 	})
 
 	It("should identify when a custom config map is not related to any cluster", func() {
 		clusters := map[string]*Cluster{"cluster1": {definition: &v1alpha1.Cassandra{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1"}}}}
-		configMap := v1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-for-something-else"}}
+		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-for-something-else"}}
 
 		Expect(ConfigMapBelongsToAManagedCluster(clusters, &configMap)).To(BeFalse())
 	})
@@ -52,7 +52,7 @@ var _ = Describe("identification of custom config maps", func() {
 
 var _ = Describe("creation of stateful sets", func() {
 	var clusterDef *v1alpha1.Cassandra
-	var configMap = &v1.ConfigMap{
+	var configMap = &coreV1.ConfigMap{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:      "mycluster-config",
 			Namespace: NAMESPACE,
@@ -67,8 +67,16 @@ var _ = Describe("creation of stateful sets", func() {
 			Spec: v1alpha1.CassandraSpec{
 				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
-					Memory:      resource.MustParse("1Gi"),
-					CPU:         resource.MustParse("100m"),
+					Resources: coreV1.ResourceRequirements{
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+					},
 					StorageSize: resource.MustParse("1Gi"),
 					ReadinessProbe: &v1alpha1.Probe{
 						FailureThreshold:    ptr.Int32(3),
@@ -102,15 +110,11 @@ var _ = Describe("creation of stateful sets", func() {
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Name).To(Equal("init-config"))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Image).To(Equal(*cluster.definition.Spec.Pod.Image))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Command).To(Equal([]string{"sh", "-c", "cp -vr /etc/cassandra/* /configuration"}))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Requests.Memory()).To(Equal(clusterDef.Spec.Pod.Memory))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Requests.Cpu()).To(Equal(clusterDef.Spec.Pod.CPU))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Limits.Memory()).To(Equal(clusterDef.Spec.Pod.Memory))
+		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(clusterDef.Spec.Pod.Resources))
 
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
 		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("skyuk/cassandra-bootstrapper:latest"))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Requests.Memory()).To(Equal(clusterDef.Spec.Pod.Memory))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Requests.Cpu()).To(Equal(clusterDef.Spec.Pod.CPU))
-		Expect(*statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Limits.Memory()).To(Equal(clusterDef.Spec.Pod.Memory))
+		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources).To(Equal(clusterDef.Spec.Pod.Resources))
 	})
 
 	It("should create the bootstrapper init container with the specified image if one is given", func() {
@@ -127,15 +131,15 @@ var _ = Describe("creation of stateful sets", func() {
 
 		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 		Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(v1.EnvVar{Name: "POD_CPU_MILLICORES", Value: "100"}))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(v1.EnvVar{Name: "POD_MEMORY_BYTES", Value: strconv.Itoa(1024 * 1024 * 1024)}))
+		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_CPU_MILLICORES", Value: "100"}))
+		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_MEMORY_BYTES", Value: strconv.Itoa(1024 * 1024 * 1024)}))
 	})
 
 	It("should define environment variable for extra classpath in main container", func() {
 		cluster := ACluster(clusterDef)
 
 		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
-		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
 	})
 
 	It("should define emptyDir volumes for configuration and extra libraries", func() {
@@ -288,77 +292,95 @@ var _ = Describe("creation of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			actualEnv := statefulSet.Spec.Template.Spec.Containers[1].Env
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
 			// then
-			Expect(actualEnv).To(And(
-				ContainElement(v1.EnvVar{Name: "NODE_LISTEN_ADDRESS", ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(sidecarContainer.Env).To(And(
+				ContainElement(coreV1.EnvVar{Name: "NODE_LISTEN_ADDRESS", ValueFrom: &coreV1.EnvVarSource{
+					FieldRef: &coreV1.ObjectFieldSelector{
 						FieldPath: "status.podIP",
 					},
 				}}),
-				ContainElement(v1.EnvVar{Name: "CLUSTER_NAME", Value: cluster.Name()}),
-				ContainElement(v1.EnvVar{Name: "CLUSTER_NAMESPACE", Value: cluster.Namespace()}),
+				ContainElement(coreV1.EnvVar{Name: "CLUSTER_NAME", Value: cluster.Name()}),
+				ContainElement(coreV1.EnvVar{Name: "CLUSTER_NAMESPACE", Value: cluster.Namespace()}),
 			))
+		})
+
+		It("should have memory and cpu limits", func() {
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+			// when
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
+
+			// then
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(*sidecarContainer.Resources.Limits.Cpu()).To(Equal(resource.MustParse("100m")))
+			Expect(*sidecarContainer.Resources.Limits.Memory()).To(Equal(resource.MustParse("50Mi")))
 		})
 
 		It("should use the maxSidecarCPURequest if that is lower than Cassandra.Spec.Pod.CPU", func() {
 			// given
-			clusterDef.Spec.Pod.CPU = resource.MustParse("2")
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("2")
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
 			// then
-			Expect(actualResources.Requests.Cpu()).To(Equal(&maxSidecarCPURequest))
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(*sidecarContainer.Resources.Requests.Cpu()).To(Equal(resource.MustParse("100m")))
 		})
 
 		It("should allow CPU bursting configurations", func() {
 			// given
-			clusterDef.Spec.Pod.CPU = resource.MustParse("0")
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("0")
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
 			// then
-			Expect(*actualResources.Requests.Cpu()).To(Equal(resource.MustParse("0")))
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(*sidecarContainer.Resources.Requests.Cpu()).To(Equal(resource.MustParse("0")))
 		})
 
-		It("should use the maxSidecarMemoryRequest if that is lower than Cassandra.Spec.Pod.Memory", func() {
+		It("should use the maxSidecarMemoryRequest if that is lower than the memory request in the Cassandra definition", func() {
 			// given
-			clusterDef.Spec.Pod.Memory = resource.MustParse("1Ti")
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Ti")
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
 			// then
-			Expect(actualResources.Requests.Memory()).To(Equal(&maxSidecarMemoryRequest))
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(*sidecarContainer.Resources.Requests.Memory()).To(Equal(resource.MustParse("50Mi")))
 		})
 
 		It("should allow Memory bursting configurations", func() {
 			// given
-			clusterDef.Spec.Pod.Memory = resource.MustParse("1")
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1")
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			actualResources := statefulSet.Spec.Template.Spec.Containers[1].Resources
+			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
 			// then
-			Expect(*actualResources.Requests.Memory()).To(Equal(resource.MustParse("1")))
+			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
+			Expect(*sidecarContainer.Resources.Requests.Memory()).To(Equal(resource.MustParse("1")))
 		})
 	})
 })
 
 var _ = Describe("modification of stateful sets", func() {
 	var clusterDef *v1alpha1.Cassandra
-	var configMap = &v1.ConfigMap{
+	var configMap = &coreV1.ConfigMap{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:      "mycluster-config",
 			Namespace: NAMESPACE,
@@ -373,8 +395,16 @@ var _ = Describe("modification of stateful sets", func() {
 			Spec: v1alpha1.CassandraSpec{
 				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
-					Memory:      resource.MustParse("1Gi"),
-					CPU:         resource.MustParse("100m"),
+					Resources: coreV1.ResourceRequirements{
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+					},
 					StorageSize: resource.MustParse("1Gi"),
 				},
 			},
@@ -475,8 +505,16 @@ var _ = Describe("creation of snapshot job", func() {
 			Spec: v1alpha1.CassandraSpec{
 				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
-					Memory:      resource.MustParse("1Gi"),
-					CPU:         resource.MustParse("100m"),
+					Resources: coreV1.ResourceRequirements{
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+					},
 					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{
@@ -564,7 +602,7 @@ var _ = Describe("creation of snapshot job", func() {
 		cronJob := cluster.CreateSnapshotJob()
 
 		snapshotPod := cronJob.Spec.JobTemplate.Spec.Template.Spec
-		Expect(snapshotPod.RestartPolicy).To(Equal(v1.RestartPolicyOnFailure))
+		Expect(snapshotPod.RestartPolicy).To(Equal(coreV1.RestartPolicyOnFailure))
 	})
 
 	It("should not create a snapshot job if none is specified in the cluster spec", func() {
@@ -603,8 +641,16 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 			Spec: v1alpha1.CassandraSpec{
 				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
-					Memory:      resource.MustParse("1Gi"),
-					CPU:         resource.MustParse("100m"),
+					Resources: coreV1.ResourceRequirements{
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("1Gi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+					},
 					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{
@@ -764,7 +810,7 @@ type configMapMatcher struct {
 
 func (h *configMapMatcher) Match(actual interface{}) (success bool, err error) {
 	switch v := actual.(type) {
-	case v1.Volume:
+	case coreV1.Volume:
 		return v.Name == h.volumeName && v.ConfigMap != nil && v.ConfigMap.LocalObjectReference.Name == h.localObjectReference, nil
 	default:
 		return false, fmt.Errorf("expected v1.Volume, got %v", actual)
@@ -791,7 +837,7 @@ type emptyDirMatcher struct {
 
 func (h *emptyDirMatcher) Match(actual interface{}) (success bool, err error) {
 	switch v := actual.(type) {
-	case v1.Volume:
+	case coreV1.Volume:
 		return v.Name == h.volumeName && v.EmptyDir != nil, nil
 	default:
 		return false, fmt.Errorf("expected v1.Volume, got %v", actual)
@@ -819,7 +865,7 @@ type volumeMountMatcher struct {
 
 func (h *volumeMountMatcher) Match(actual interface{}) (success bool, err error) {
 	switch m := actual.(type) {
-	case v1.VolumeMount:
+	case coreV1.VolumeMount:
 		return m.Name == h.mount && m.MountPath == h.path, nil
 	default:
 		return false, fmt.Errorf("expected v1.VolumeMount, got %v", actual)

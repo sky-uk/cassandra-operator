@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -87,10 +88,9 @@ type Pod struct {
 	SidecarImage *string `json:"sidecarImage,omitempty"`
 
 	// +optional
-	Image       *string           `json:"image,omitempty"`
-	StorageSize resource.Quantity `json:"storageSize"`
-	Memory      resource.Quantity `json:"memory"`
-	CPU         resource.Quantity `json:"cpu"`
+	Image       *string                     `json:"image,omitempty"`
+	StorageSize resource.Quantity           `json:"storageSize"`
+	Resources   coreV1.ResourceRequirements `json:"resources"`
 	// +optional
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
 	// +optional
@@ -221,8 +221,20 @@ func (p Pod) Equal(other Pod) bool {
 		reflect.DeepEqual(p.LivenessProbe, other.LivenessProbe) &&
 		reflect.DeepEqual(p.ReadinessProbe, other.ReadinessProbe) &&
 		p.StorageSize.Cmp(other.StorageSize) == 0 &&
-		p.Memory.Cmp(other.Memory) == 0 &&
-		p.CPU.Cmp(other.CPU) == 0
+		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceMemory) &&
+		resourcesAreEqual(p.Resources.Limits, other.Resources.Limits, coreV1.ResourceMemory) &&
+		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceCPU) &&
+		resourcesAreEqual(p.Resources.Limits, other.Resources.Limits, coreV1.ResourceCPU)
+}
+
+func resourcesAreEqual(resources coreV1.ResourceList, otherResources coreV1.ResourceList, resourceName coreV1.ResourceName) bool {
+	val, ok := resources[resourceName]
+	otherVal, otherOk := otherResources[resourceName]
+
+	if ok && otherOk {
+		return val.Cmp(otherVal) == 0
+	}
+	return ok == otherOk
 }
 
 func sortedRacks(racks []Rack) []Rack {

@@ -78,9 +78,16 @@ func clusterDefaultSpec() *v1alpha1.CassandraSpec {
 			BootstrapperImage: &CassandraBootstrapperImageName,
 			SidecarImage:      &CassandraSidecarImageName,
 			Image:             &CassandraImageName,
-			Memory:            resource.MustParse(PodMemory),
-			CPU:               resource.MustParse(PodCPU),
-			StorageSize:       resource.MustParse(podStorageSize),
+			Resources: coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse(PodMemory),
+					coreV1.ResourceCPU:    resource.MustParse(PodCPU),
+				},
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse(PodMemory),
+				},
+			},
+			StorageSize: resource.MustParse(podStorageSize),
 			LivenessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
 				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),

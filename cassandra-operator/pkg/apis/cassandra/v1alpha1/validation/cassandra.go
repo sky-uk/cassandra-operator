@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/robfig/cron"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
@@ -91,13 +92,43 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 
 func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
-	if c.Spec.Pod.Memory.IsZero() {
+	if c.Spec.Pod.Resources.Requests.Memory().IsZero() {
 		allErrs = append(
 			allErrs,
 			field.Invalid(
-				fldPath.Child("Memory"),
-				c.Spec.Pod.Memory.String(),
+				fldPath.Child("Resources.Requests.Memory"),
+				c.Spec.Pod.Resources.Requests.Memory().String(),
 				"must be > 0",
+			),
+		)
+	}
+	if c.Spec.Pod.Resources.Limits.Memory().IsZero() {
+		allErrs = append(
+			allErrs,
+			field.Invalid(
+				fldPath.Child("Resources.Limits.Memory"),
+				c.Spec.Pod.Resources.Limits.Memory().String(),
+				"must be > 0",
+			),
+		)
+	}
+	if isRequestGreaterThanLimit(c.Spec.Pod.Resources, coreV1.ResourceMemory) {
+		allErrs = append(
+			allErrs,
+			field.Invalid(
+				fldPath.Child("Resources.Requests.Memory"),
+				c.Spec.Pod.Resources.Requests.Memory().String(),
+				fmt.Sprintf("must not be greater than spec.Pod.Resources.Limits.Memory (%s)", c.Spec.Pod.Resources.Limits.Memory().String()),
+			),
+		)
+	}
+	if isRequestGreaterThanLimit(c.Spec.Pod.Resources, coreV1.ResourceCPU) {
+		allErrs = append(
+			allErrs,
+			field.Invalid(
+				fldPath.Child("Resources.Requests.Cpu"),
+				c.Spec.Pod.Resources.Requests.Cpu().String(),
+				fmt.Sprintf("must not be greater than spec.Pod.Resources.Limits.Cpu (%s)", c.Spec.Pod.Resources.Limits.Cpu().String()),
 			),
 		)
 	}
@@ -131,6 +162,15 @@ func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.Erro
 		validateReadinessProbe(c.Spec.Pod.ReadinessProbe, fldPath.Child("ReadinessProbe"))...,
 	)
 	return allErrs
+}
+
+func isRequestGreaterThanLimit(resources coreV1.ResourceRequirements, resourceName coreV1.ResourceName) bool {
+	if request, ok := resources.Requests[resourceName]; ok {
+		if limit, ok := resources.Limits[resourceName]; ok {
+			return request.Cmp(limit) > 0
+		}
+	}
+	return false
 }
 
 func validateUnsignedInt(allErrs field.ErrorList, fldPath *field.Path, value int32, min int32) field.ErrorList {

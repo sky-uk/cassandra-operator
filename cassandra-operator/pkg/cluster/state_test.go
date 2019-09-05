@@ -249,8 +249,16 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 			Datacenter: ptr.String("my-datacenter"),
 			Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "rack-storage", Zone: "rack-zone"}},
 			Pod: v1alpha1.Pod{
-				Memory:      resource.MustParse("1Gi"),
-				CPU:         resource.MustParse("100m"),
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+					},
+				},
 				StorageSize: resource.MustParse("2Gi"),
 			},
 		},
@@ -260,19 +268,10 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 }
 
 func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
-	cassandra := &v1alpha1.Cassandra{
-		ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
-		Spec: v1alpha1.CassandraSpec{
-			Datacenter: ptr.String("my-datacenter"),
-			Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1}},
-			Pod: v1alpha1.Pod{
-				Memory: resource.MustParse("1Gi"),
-				CPU:    resource.MustParse("100m"),
-			},
-			UseEmptyDir: ptr.Bool(true),
-		},
-	}
-	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
+	cassandra := aClusterDefinition()
+	cassandra.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1}}
+	cassandra.Spec.UseEmptyDir = ptr.Bool(true)
+	cassandra.Spec.Pod.StorageSize = resource.Quantity{}
 	return cassandra
 }
 

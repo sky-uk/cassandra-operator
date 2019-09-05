@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -43,6 +44,27 @@ var _ = Describe("ValidateCassandra", func() {
 			"Snapshot.RetentionPolicy is not required",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Snapshot.RetentionPolicy = nil
+			},
+		),
+		Entry(
+			"Pod cpu request can be provided without cpu limit",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Pod.Resources.Limits, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Pod cpu limit can be provided without cpu request",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Pod.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Both pod cpu request and limit can be omitted",
+			func(c *v1alpha1.Cassandra) {
+				delete(c.Spec.Pod.Resources.Limits, coreV1.ResourceCPU)
+				delete(c.Spec.Pod.Resources.Requests, coreV1.ResourceCPU)
 			},
 		),
 	)
@@ -94,10 +116,26 @@ var _ = Describe("ValidateCassandra", func() {
 			},
 		),
 		Entry(
-			"Pod.Memory must be > 0",
-			"spec.Pod.Memory: Invalid value: \"0\": must be > 0",
+			"Pod.Resources.Requests.Memory must be > 0",
+			"spec.Pod.Resources.Requests.Memory: Invalid value: \"0\": must be > 0",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.Memory.Set(0)
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Pod cpu request > cpu limit",
+			"spec.Pod.Resources.Requests.Cpu: Invalid value: \"151m\": must not be greater than spec.Pod.Resources.Limits.Cpu (150m)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("150m")
+			},
+		),
+		Entry(
+			"Pod memory request > cpu limit",
+			"spec.Pod.Resources.Requests.Memory: Invalid value: \"151Mi\": must not be greater than spec.Pod.Resources.Limits.Memory (150Mi)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("151Mi")
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("150Mi")
 			},
 		),
 		Entry(
@@ -375,27 +413,47 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			},
 		),
 		Entry(
-			"Pod Memory Increased",
+			"Pod Requests Memory changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.Memory.Add(resource.MustParse("1Mi"))
+				quantity := c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory]
+				quantity.Sub(resource.MustParse("1Mi"))
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = quantity
 			},
 		),
 		Entry(
-			"Pod Memory Decreased",
+			"Pod Limit Memory changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.Memory.Sub(resource.MustParse("1Mi"))
+				quantity := c.Spec.Pod.Resources.Limits[coreV1.ResourceMemory]
+				quantity.Add(resource.MustParse("1Mi"))
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceMemory] = quantity
 			},
 		),
 		Entry(
-			"Pod CPU Increased",
+			"Pod Request CPU changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.CPU.Add(resource.MustParse("1m"))
+				quantity := c.Spec.Pod.Resources.Requests[coreV1.ResourceCPU]
+				quantity.Sub(resource.MustParse("2000"))
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = quantity
 			},
 		),
 		Entry(
-			"Pod CPU Decreased",
+			"Pod Limit Cpu changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.CPU.Sub(resource.MustParse("1m"))
+				quantity := c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU]
+				quantity.Add(resource.MustParse("150"))
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Pod Request Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Pod Limit Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
 			},
 		),
 		Entry(
@@ -584,9 +642,16 @@ func aValidCassandra() *v1alpha1.Cassandra {
 				},
 			},
 			Pod: v1alpha1.Pod{
-				Image:       ptr.String("cassandra:3.11.4"),
-				CPU:         resource.MustParse("0"),
-				Memory:      resource.MustParse("1Gi"),
+				Image: ptr.String("cassandra:3.11.4"),
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceCPU:    resource.MustParse("0"),
+						coreV1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
 				StorageSize: resource.MustParse("100Gi"),
 				LivenessProbe: &v1alpha1.Probe{
 					FailureThreshold:    ptr.Int32(1),

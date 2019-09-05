@@ -141,8 +141,7 @@ func (in *Pod) DeepCopyInto(out *Pod) {
 		**out = **in
 	}
 	out.StorageSize = in.StorageSize.DeepCopy()
-	out.Memory = in.Memory.DeepCopy()
-	out.CPU = in.CPU.DeepCopy()
+	in.Resources.DeepCopyInto(&out.Resources)
 	if in.LivenessProbe != nil {
 		in, out := &in.LivenessProbe, &out.LivenessProbe
 		*out = new(Probe)
