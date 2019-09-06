@@ -126,13 +126,13 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 					ServiceAccountName: v1alpha1.NodeServiceAccountName,
 					InitContainers: []v1.Container{
 						c.createInitConfigContainer(),
-						c.createCassandraBootstrapperContainer(rack, customConfigMap),
+						c.createCassandraBootstrapperContainer(rack),
 					},
 					Containers: []v1.Container{
-						c.createCassandraContainer(rack, customConfigMap),
+						c.createCassandraContainer(rack),
 						c.createCassandraSidecarContainer(rack),
 					},
-					Volumes:  c.createPodVolumes(customConfigMap),
+					Volumes:  c.createPodVolumes(),
 					Affinity: c.createAffinityRules(rack),
 				},
 			},
@@ -141,10 +141,16 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 	}
 
 	if customConfigMap != nil {
-		sts.Spec.Template.Annotations = map[string]string{ConfigHashAnnotation: hash.ConfigMapHash(customConfigMap)}
+		c.AddCustomConfigVolumeToStatefulSet(sts, rack, customConfigMap)
 	}
 
 	return sts
+}
+
+// UpdateStatefulSetToDesiredState updates the current statefulSet to the desired state based on the desired rack definition
+func (c *Cluster) UpdateStatefulSetToDesiredState(currentStatefulSet *appsv1.StatefulSet, targetRack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) {
+	desiredStatefulSet := c.CreateStatefulSetForRack(targetRack, customConfigMap)
+	currentStatefulSet.Spec = desiredStatefulSet.Spec
 }
 
 func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
@@ -328,7 +334,7 @@ func (c *Cluster) objectMetadataWithOwner(name string, extraLabels ...string) me
 	return meta
 }
 
-func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) v1.Container {
+func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 	return v1.Container{
 		Name:  cassandraContainerName,
 		Image: *c.definition.Spec.Pod.Image,
@@ -372,7 +378,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack, customConfigMap 
 		Env: []v1.EnvVar{
 			{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"},
 		},
-		VolumeMounts: c.createVolumeMounts(customConfigMap),
+		VolumeMounts: c.createVolumeMounts(),
 	}
 }
 
@@ -471,7 +477,7 @@ func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1
 	return persistentVolumeClaim
 }
 
-func (c *Cluster) createVolumeMounts(customConfigMap *v1.ConfigMap) []v1.VolumeMount {
+func (c *Cluster) createVolumeMounts() []v1.VolumeMount {
 	mounts := []v1.VolumeMount{
 		{Name: c.definition.StorageVolumeName(), MountPath: storageVolumeMountPath},
 		{Name: configurationVolumeName, MountPath: configurationVolumeMountPath},
@@ -488,14 +494,10 @@ func (c *Cluster) createCustomConfigVolumeMount() v1.VolumeMount {
 	}
 }
 
-func (c *Cluster) createPodVolumes(customConfigMap *v1.ConfigMap) []v1.Volume {
+func (c *Cluster) createPodVolumes() []v1.Volume {
 	volumes := []v1.Volume{
 		emptyDir("configuration"),
 		emptyDir("extra-lib"),
-	}
-
-	if customConfigMap != nil {
-		volumes = append(volumes, c.createConfigMapVolume(customConfigMap))
 	}
 
 	if *c.definition.Spec.UseEmptyDir {
@@ -542,7 +544,7 @@ func createHTTPProbe(probe *v1alpha1.Probe, path string, port int) *v1.Probe {
 }
 
 // AddCustomConfigVolumeToStatefulSet updates the provided statefulset to mount the configmap as a volume
-func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.StatefulSet, customConfigMap *v1.ConfigMap) error {
+func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.StatefulSet, _ *v1alpha1.Rack, customConfigMap *v1.ConfigMap) {
 	if statefulSet.Spec.Template.Annotations == nil {
 		statefulSet.Spec.Template.Annotations = map[string]string{}
 	}
@@ -558,7 +560,6 @@ func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.Statefu
 			statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts, c.createCustomConfigVolumeMount())
 		}
 	}
-	return nil
 }
 
 func (c *Cluster) hasConfigMapVolumeMount(container *v1.Container) bool {
@@ -580,7 +581,7 @@ func (c *Cluster) hasConfigMapVolume(statefulSet *appsv1.StatefulSet) bool {
 }
 
 // RemoveCustomConfigVolumeFromStatefulSet updates the provided statefulset to unmount the configmap as a volume
-func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.StatefulSet, _ *v1.ConfigMap) error {
+func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.StatefulSet, _ *v1alpha1.Rack, _ *v1.ConfigMap) {
 	var volumesAfterRemoval []v1.Volume
 	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
 		if volume.Name != c.customConfigMapVolumeName() {
@@ -602,7 +603,6 @@ func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.St
 			statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts = volumesMountAfterRemoval
 		}
 	}
-	return nil
 }
 
 func (c *Cluster) customConfigMapVolumeName() string {
@@ -619,14 +619,10 @@ func (c *Cluster) createInitConfigContainer() v1.Container {
 		Resources: c.definition.Spec.Pod.Resources,
 	}
 }
-func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) v1.Container {
+func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.Container {
 	mounts := []v1.VolumeMount{
 		{Name: "configuration", MountPath: "/configuration"},
 		{Name: "extra-lib", MountPath: "/extra-lib"},
-	}
-
-	if customConfigMap != nil {
-		mounts = append(mounts, c.createCustomConfigVolumeMount())
 	}
 
 	return v1.Container{

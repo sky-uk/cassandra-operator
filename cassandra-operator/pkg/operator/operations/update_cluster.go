@@ -42,9 +42,10 @@ func (o *UpdateClusterOperation) Execute() {
 	for _, clusterChange := range clusterChanges {
 		switch clusterChange.ChangeType {
 		case adjuster.UpdateRack:
-			err := o.statefulSetAccessor.patchStatefulSet(c, &clusterChange)
+			customConfigMap := o.clusterAccessor.FindCustomConfigMap(newCluster.Namespace, newCluster.Name)
+			err = o.statefulSetAccessor.updateStatefulSet(c, customConfigMap, &clusterChange.Rack, c.UpdateStatefulSetToDesiredState)
 			if err != nil {
-				log.Error(err)
+				log.Errorf("Error while updating rack %s in cluster %s: %v", clusterChange.Rack.Name, newCluster.QualifiedName(), err)
 				return
 			}
 		case adjuster.AddRack:

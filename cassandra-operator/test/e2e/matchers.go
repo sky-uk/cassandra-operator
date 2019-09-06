@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"math"
 	"reflect"
 	"strings"
@@ -63,8 +64,8 @@ func (matcher *each) NegatedFailureMessage(actual interface{}) (message string) 
 //
 // BeCreatedWithServiceName matcher
 //
-func BeCreatedWithServiceName(expected interface{}) types.GomegaMatcher {
-	return &statefulSetShouldBeCreated{serviceName: expected.(string)}
+func BeCreatedWithServiceName(expected string) types.GomegaMatcher {
+	return &statefulSetShouldBeCreated{expected}
 }
 
 type statefulSetShouldBeCreated struct {
@@ -94,7 +95,7 @@ func (matcher *statefulSetShouldBeCreated) NegatedFailureMessage(actual interfac
 // HaveLabel matcher
 //
 func HaveLabel(key, value string) types.GomegaMatcher {
-	return &haveLabel{key, value}
+	return &haveLabel{key: key, value: value}
 }
 
 type haveLabel struct {
@@ -119,8 +120,8 @@ func (matcher *haveLabel) NegatedFailureMessage(actual interface{}) (message str
 }
 
 // HaveEvent matcher
-func HaveEvent(expected interface{}) types.GomegaMatcher {
-	return &haveEvent{expected: expected.(EventExpectation)}
+func HaveEvent(expected EventExpectation) types.GomegaMatcher {
+	return &haveEvent{expected}
 }
 
 type EventExpectation struct {
@@ -162,23 +163,11 @@ func (matcher *haveEvent) NegatedFailureMessage(actual interface{}) (message str
 //
 // HaveContainer matcher
 //
-func HaveContainer(expected interface{}) types.GomegaMatcher {
+func HaveContainer(expected ContainerExpectation) types.GomegaMatcher {
 	return &haveContainer{
-		expected: expected.(ContainerExpectation),
+		expected: expected,
 		containers: func(p coreV1.Pod) []coreV1.Container {
 			return p.Spec.Containers
-		},
-	}
-}
-
-//
-// HaveInitContainer matcher
-//
-func HaveInitContainer(expected interface{}) types.GomegaMatcher {
-	return &haveContainer{
-		expected: expected.(ContainerExpectation),
-		containers: func(p coreV1.Pod) []coreV1.Container {
-			return p.Spec.InitContainers
 		},
 	}
 }
@@ -700,4 +689,76 @@ func (m *beCreatedOnOrAfter) NegatedFailureMessage(actual interface{}) (message 
 func (m *beCreatedOnOrAfter) resource(actual interface{}) *kubernetesResource {
 	lr := actual.(*kubernetesResource)
 	return lr
+}
+
+//
+// HaveResourcesRequirements matcher
+//
+func HaveResourcesRequirements(expected *ResourceRequirementsAssertion) types.GomegaMatcher {
+	return haveResourcesRequirements{expected}
+}
+
+type ResourceRequirementsAssertion struct {
+	ContainerName                                    string
+	MemoryRequest, MemoryLimit, CPULimit, CPURequest *string
+}
+
+type haveResourcesRequirements struct {
+	expected *ResourceRequirementsAssertion
+}
+
+func (h haveResourcesRequirements) Match(actual interface{}) (success bool, err error) {
+	lr := actual.(*kubernetesResource)
+	container := h.findContainer(lr.Resource.(coreV1.Pod), h.expected.ContainerName)
+
+	if container == nil {
+		return false, fmt.Errorf("expected a container with name %s", h.expected.ContainerName)
+	}
+
+	if equal, err := h.areQuantityEqual(h.expected.MemoryRequest, container.Resources.Requests, coreV1.ResourceMemory); !equal {
+		return false, fmt.Errorf("memory request is not as expected: %v", err)
+	}
+
+	if equal, err := h.areQuantityEqual(h.expected.MemoryLimit, container.Resources.Limits, coreV1.ResourceMemory); !equal {
+		return false, fmt.Errorf("memory limit is not as expected: %v", err)
+	}
+
+	if equal, err := h.areQuantityEqual(h.expected.CPURequest, container.Resources.Requests, coreV1.ResourceCPU); !equal {
+		return false, fmt.Errorf("cpu request is not as expected: %v", err)
+	}
+
+	if equal, err := h.areQuantityEqual(h.expected.CPULimit, container.Resources.Limits, coreV1.ResourceCPU); !equal {
+		return false, fmt.Errorf("cpu limit is not as expected: %v", err)
+	}
+
+	return true, nil
+}
+
+func (h haveResourcesRequirements) areQuantityEqual(expected *string, resourceList coreV1.ResourceList, resourceName coreV1.ResourceName) (bool, error) {
+	var actual *string
+	if quantity, ok := resourceList[resourceName]; ok {
+		actual = ptr.String(quantity.String())
+	}
+
+	if !reflect.DeepEqual(expected, actual) {
+		return false, fmt.Errorf("expected %s, but got %v", ptr.StringValueOrNil(expected), ptr.StringValueOrNil(actual))
+	}
+	return true, nil
+}
+
+func (h haveResourcesRequirements) findContainer(pod coreV1.Pod, containerName string) *coreV1.Container {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == containerName {
+			return &c
+		}
+	}
+	return nil
+}
+
+func (h haveResourcesRequirements) FailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Actual pod: %s", actual.(*kubernetesResource).Resource)
+}
+
+func (h haveResourcesRequirements) NegatedFailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Actual pod: %s", actual.(*kubernetesResource).Resource)
 }

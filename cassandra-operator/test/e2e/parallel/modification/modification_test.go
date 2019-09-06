@@ -188,6 +188,48 @@ var _ = Context("Allowable cluster modifications", func() {
 		}))
 	})
 
+	It("should allow the cpu request and limits to be removed", func() {
+		// given
+		registerResourcesUsed(1)
+		AClusterWithName(clusterName).
+			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
+			UsingEmptyDir().
+			AndClusterSpec(AClusterSpec().
+				WithPodResources(&coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("999Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("1m"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("999Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("1"),
+					},
+				}).
+				Build()).
+			Exists()
+
+		// when
+		TheClusterPodResourcesSpecAreChangedTo(Namespace, clusterName, coreV1.ResourceRequirements{
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("999Mi"),
+			},
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("999Mi"),
+			},
+		})
+
+		// then
+		Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(Each(And(
+			HaveResourcesRequirements(&ResourceRequirementsAssertion{
+				ContainerName: "cassandra",
+				MemoryRequest: ptr.String("999Mi"),
+				MemoryLimit:   ptr.String("999Mi"),
+				CPURequest:    nil,
+				CPULimit:      nil,
+			}),
+		)))
+	})
+
 	Context("cluster config file changes", func() {
 		It("should trigger a rolling restart of the cluster stateful set when a custom config file is changed", func() {
 			// given
@@ -301,7 +343,6 @@ var _ = Context("Allowable cluster modifications", func() {
 		It("should allow the cluster to be created once the invalid spec has been corrected", func() {
 			// given
 			registerResourcesUsed(1)
-			clusterName = AClusterName()
 			AClusterWithName(clusterName).WithoutRacks().UsingEmptyDir().WithoutCustomConfig().IsDefined()
 
 			// when

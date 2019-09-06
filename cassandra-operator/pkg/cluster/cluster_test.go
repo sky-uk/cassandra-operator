@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
+	appsv1 "k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -411,6 +412,61 @@ var _ = Describe("modification of stateful sets", func() {
 		}
 	})
 
+	Context("the statefulset is updated to the desired state", func() {
+		var (
+			unmodifiedStatefulSet *appsv1.StatefulSet
+			currentStatefulSet    *appsv1.StatefulSet
+		)
+
+		BeforeEach(func() {
+			unmodifiedStatefulSet = &appsv1.StatefulSet{
+				TypeMeta: metaV1.TypeMeta{Kind: "statefulset", APIVersion:"v1beta2"},
+				ObjectMeta: metaV1.ObjectMeta{Name: "current-statefulset", Namespace: NAMESPACE},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas:    ptr.Int32(1),
+				},
+				Status:appsv1.StatefulSetStatus{
+					Replicas: 1,
+					Conditions: []appsv1.StatefulSetCondition{
+						{
+							Status: coreV1.ConditionTrue,
+							Message: "this is ready",
+						},
+					},
+				},
+			}
+			currentStatefulSet = unmodifiedStatefulSet.DeepCopy()
+		})
+
+		Specify("its typemeta, metadata and status should be left unchanged", func() {
+			// given
+			cluster := ACluster(clusterDef)
+			rackToUpdate := cluster.Racks()[0]
+
+			// when
+			cluster.UpdateStatefulSetToDesiredState(currentStatefulSet, &rackToUpdate, configMap)
+
+			// then
+			Expect(currentStatefulSet.TypeMeta).To(Equal(unmodifiedStatefulSet.TypeMeta))
+			Expect(currentStatefulSet.ObjectMeta).To(Equal(unmodifiedStatefulSet.ObjectMeta))
+			Expect(currentStatefulSet.Status).To(Equal(unmodifiedStatefulSet.Status))
+		})
+
+		Specify("its spec should be updated to match the target rack definition", func() {
+			// given
+			cluster := ACluster(clusterDef)
+			rackToUpdate := cluster.Racks()[0]
+
+			// when
+			cluster.UpdateStatefulSetToDesiredState(currentStatefulSet, &rackToUpdate, configMap)
+
+			// then
+			expectedStatefulSet := cluster.CreateStatefulSetForRack(&rackToUpdate, configMap)
+			Expect(currentStatefulSet.Spec).To(Equal(expectedStatefulSet.Spec))
+		})
+
+	})
+
 	Context("the custom configMap is added", func() {
 		It("should add the configMap volume and its corresponding mount to the cassandra-bootstrapper init-container", func() {
 			// given
@@ -418,8 +474,7 @@ var _ = Describe("modification of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
-			Expect(err).ToNot(HaveOccurred())
+			cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, nil, configMap)
 
 			// then
 			Expect(statefulSet.Spec.Template.Spec.Volumes).To(HaveLen(3))
@@ -435,8 +490,7 @@ var _ = Describe("modification of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
-			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
-			Expect(err).ToNot(HaveOccurred())
+			cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, nil, configMap)
 
 			// then
 			Expect(statefulSet.Spec.Template.Annotations[ConfigHashAnnotation]).ToNot(BeEmpty())
@@ -448,8 +502,7 @@ var _ = Describe("modification of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err := cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, configMap)
-			Expect(err).ToNot(HaveOccurred())
+			cluster.AddCustomConfigVolumeToStatefulSet(statefulSet, nil, configMap)
 
 			// then
 			Expect(statefulSet.Spec.Template.Spec.Volumes).To(HaveLen(3))
@@ -468,8 +521,7 @@ var _ = Describe("modification of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err := cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
-			Expect(err).ToNot(HaveOccurred())
+			cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil, nil)
 
 			// then
 			Expect(statefulSet.Spec.Template.Spec.Volumes).To(HaveLen(2))
@@ -484,8 +536,7 @@ var _ = Describe("modification of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
 			// when
-			err := cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil)
-			Expect(err).ToNot(HaveOccurred())
+			cluster.RemoveCustomConfigVolumeFromStatefulSet(statefulSet, nil, nil)
 
 			// then
 			Expect(statefulSet.Spec.Template.Annotations[ConfigHashAnnotation]).To(BeEmpty())

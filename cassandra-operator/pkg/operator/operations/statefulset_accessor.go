@@ -38,17 +38,14 @@ func (h *statefulSetAccessor) registerStatefulSet(c *cluster.Cluster, rack *v1al
 	return nil
 }
 
-func (h *statefulSetAccessor) updateStatefulSet(c *cluster.Cluster, customConfigMap *v1.ConfigMap, rack *v1alpha1.Rack, action func(*v1beta2.StatefulSet, *v1.ConfigMap) error) error {
+func (h *statefulSetAccessor) updateStatefulSet(c *cluster.Cluster, customConfigMap *v1.ConfigMap, rack *v1alpha1.Rack, doUpdate func(*v1beta2.StatefulSet, *v1alpha1.Rack, *v1.ConfigMap)) error {
 	log.Infof("Applying update for rack %s in cluster %s", rack.Name, c.QualifiedName())
 	statefulSet, err := h.clusterAccessor.GetStatefulSetForRack(c, rack)
 	if err != nil {
 		return fmt.Errorf("unable to retrieve statefulSet for rack %s: %v. Other racks will not be updated", rack.Name, err)
 	}
 
-	err = action(statefulSet, customConfigMap)
-	if err != nil {
-		return err
-	}
+	doUpdate(statefulSet, rack, customConfigMap)
 
 	updatedStatefulSet, err := h.clusterAccessor.UpdateStatefulSet(c, statefulSet)
 	if err != nil {

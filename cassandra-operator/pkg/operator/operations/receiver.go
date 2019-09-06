@@ -55,17 +55,11 @@ type Receiver struct {
 
 // NewEventReceiver creates a new Receiver
 func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
-	adj, err := adjuster.New()
-	if err != nil {
-		log.Fatalf("unable to initialise Adjuster: %v", err)
-	}
-
-	statefulsetAccessor := &statefulSetAccessor{clusterAccessor: clusterAccessor}
 	return &Receiver{
 		clusterAccessor:     clusterAccessor,
-		statefulSetAccessor: statefulsetAccessor,
+		statefulSetAccessor: &statefulSetAccessor{clusterAccessor: clusterAccessor},
 		eventRecorder:       eventRecorder,
-		adjuster:            adj,
+		adjuster:            adjuster.New(),
 		metricsPoller:       metricsPoller,
 	}
 }

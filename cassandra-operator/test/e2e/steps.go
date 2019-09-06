@@ -65,7 +65,7 @@ func (c *ClusterBuilder) AndScheduledSnapshot(snapshot *v1alpha1.Snapshot) *Clus
 
 func (c *ClusterBuilder) IsDefined() {
 	if c.clusterSpec == nil {
-		c.clusterSpec = clusterDefaultSpec()
+		c.clusterSpec = AClusterSpec().Build()
 	}
 
 	c.clusterSpec.Racks = c.racks
@@ -91,6 +91,27 @@ func (c *ClusterBuilder) Exists() {
 	log.Infof("Created cluster %s", c.clusterName)
 }
 
+type ClusterSpecBuilder struct {
+	podResources *coreV1.ResourceRequirements
+}
+
+func AClusterSpec() *ClusterSpecBuilder {
+	return &ClusterSpecBuilder{}
+}
+
+func (s *ClusterSpecBuilder) WithPodResources(podResources *coreV1.ResourceRequirements) *ClusterSpecBuilder {
+	s.podResources = podResources
+	return s
+}
+
+func (s *ClusterSpecBuilder) Build() *v1alpha1.CassandraSpec {
+	spec := clusterDefaultSpec()
+	if s.podResources != nil {
+		spec.Pod.Resources = *s.podResources
+	}
+	return spec
+}
+
 func TheClusterIsDeleted(clusterName string) {
 	deleteClusterDefinitionsWatchedByOperator(Namespace, clusterName)
 	deleteCassandraCustomConfigurationConfigMap(Namespace, clusterName)
@@ -104,6 +125,13 @@ func TheClusterPodSpecAreChangedTo(namespace, clusterName string, podSpec v1alph
 		spec.Pod.ReadinessProbe = podSpec.ReadinessProbe
 	})
 	log.Infof("Updated pod spec for cluster %s", clusterName)
+}
+
+func TheClusterPodResourcesSpecAreChangedTo(namespace, clusterName string, podResources coreV1.ResourceRequirements) {
+	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
+		spec.Pod.Resources = podResources
+	})
+	log.Infof("Updated pod resources spec for cluster %s", clusterName)
 }
 
 func TheImageImmutablePropertyIsChangedTo(namespace, clusterName, imageName string) {

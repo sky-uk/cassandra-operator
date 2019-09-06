@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-resourcesDir="${scriptDir}/kubernetes-resources"
+resourcesDir="${scriptDir}/../kubernetes-resources"
 
 function waitForDeployment {
     local count=0

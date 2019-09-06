@@ -19,3 +19,11 @@ func Bool(b bool) *bool {
 func String(s string) *string {
 	return &s
 }
+
+// StringValueOrNil return the referenced value or "<nil>" to mimic fmt.Printf("%+v", pointer)
+func StringValueOrNil(s *string) string {
+	if s == nil {
+		return "<nil>"
+	}
+	return *s
+}
