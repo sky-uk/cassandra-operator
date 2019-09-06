@@ -1,6 +1,9 @@
 ---
 name: Bug report
 about: Create a report to help us improve
+title: ''
+labels: bug, next-bug
+assignees: ''
 
 ---
 
@@ -16,6 +19,10 @@ Include code to reproduce, if relevant
 1.
 2.
 3.
+
+### Workaround, if known
+An unambiguous set of steps to unblock from this issue until a permanent fix is found
+ 
 
 ### Additional context
 Add any other context about the problem here, how is affected you.

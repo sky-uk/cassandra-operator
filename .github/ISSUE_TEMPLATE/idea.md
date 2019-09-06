@@ -1,13 +1,18 @@
 ---
-name: Feature request
+name: Idea
 about: Suggest an idea for this project
+title: ''
+labels: small-idea
+assignees: ''
 
 ---
 
-### Is your feature request related to a problem? Please describe
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## NOTE: Please assign this issue to "Planning" project 
 
-### Describe the solution you'd like
+## Describe Motivation
+A clear and concise description of driving factors behind this idea covering its benefits
+
+### Describe Requirements
 A clear and concise description of what you want to happen.
 
 ### Describe alternatives you've considered

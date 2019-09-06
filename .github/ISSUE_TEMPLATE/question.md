@@ -1,6 +1,9 @@
 ---
 name: Question
 about: Ask us a question about cassandra-operator
+title: ''
+labels: ''
+assignees: ''
 
 ---
 
