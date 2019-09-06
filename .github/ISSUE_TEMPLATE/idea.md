@@ -2,12 +2,10 @@
 name: Idea
 about: Suggest an idea for this project
 title: ''
-labels: small-idea
+labels: feature
 assignees: ''
 
 ---
-
-## NOTE: Please assign this issue to "Planning" project 
 
 ## Describe Motivation
 A clear and concise description of driving factors behind this idea covering its benefits
