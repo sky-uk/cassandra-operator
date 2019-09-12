@@ -6,7 +6,6 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sort"
 	"strings"
 
@@ -103,17 +102,11 @@ func (cass *currentClusterStateFinder) buildPodSpecFrom(statefulSet *v1beta2.Sta
 		return nil, err
 	}
 
-	storageSize, err := cass.storageSizeFrom(statefulSet, desiredCassandra)
-	if err != nil {
-		return nil, err
-	}
-
 	return &v1alpha1.Pod{
 		Image:             ptr.String(cassandraContainer.Image),
 		SidecarImage:      ptr.String(cassandraSideCarContainer.Image),
 		BootstrapperImage: ptr.String(bootstrapperContainer.Image),
 		Resources:         cassandraContainer.Resources,
-		StorageSize:       storageSize,
 		ReadinessProbe:    cass.buildProbeFrom(cassandraContainer.ReadinessProbe),
 		LivenessProbe:     cass.buildProbeFrom(cassandraContainer.LivenessProbe),
 	}, nil
@@ -121,29 +114,16 @@ func (cass *currentClusterStateFinder) buildPodSpecFrom(statefulSet *v1beta2.Sta
 
 func (cass *currentClusterStateFinder) buildRackSpecFrom(statefulSet *v1beta2.StatefulSet, desiredCassandra *v1alpha1.Cassandra) (v1alpha1.Rack, error) {
 	rackName := strings.TrimPrefix(statefulSet.Name, fmt.Sprintf("%s-", desiredCassandra.Name))
-
-	if cass.hasStorageAsEmptyDir(desiredCassandra.StorageVolumeName(), statefulSet) {
-		return v1alpha1.Rack{
-			Name:     rackName,
-			Replicas: *statefulSet.Spec.Replicas,
-		}, nil
-	}
-
-	cassandraVolumeClaim, err := cass.volumeClaimWithName(desiredCassandra.StorageVolumeName(), statefulSet)
-	if err != nil {
-		return v1alpha1.Rack{}, err
-	}
-
-	zone, err := cass.zoneAffinity(statefulSet)
+	rackStorages, err := cass.buildCassandraStorage(statefulSet)
 	if err != nil {
 		return v1alpha1.Rack{}, err
 	}
 
 	return v1alpha1.Rack{
-		Name:         rackName,
-		Replicas:     *statefulSet.Spec.Replicas,
-		StorageClass: *cassandraVolumeClaim.Spec.StorageClassName,
-		Zone:         zone,
+		Name:     rackName,
+		Replicas: *statefulSet.Spec.Replicas,
+		Zone:     cass.zoneAffinity(statefulSet),
+		Storage:  rackStorages,
 	}, nil
 }
 
@@ -161,40 +141,19 @@ func (cass *currentClusterStateFinder) datacenterFrom(statefulSet *v1beta2.State
 	return "", fmt.Errorf("no CLUSTER_DATA_CENTER env variable found in container %s", bootstrapperContainer.Name)
 }
 
-func (cass *currentClusterStateFinder) storageSizeFrom(statefulSet *v1beta2.StatefulSet, desiredCassandra *v1alpha1.Cassandra) (resource.Quantity, error) {
-	if cass.hasStorageAsEmptyDir(desiredCassandra.StorageVolumeName(), statefulSet) {
-		return resource.Quantity{}, nil
-	}
-
-	cassandraVolumeClaim, err := cass.volumeClaimWithName(desiredCassandra.StorageVolumeName(), statefulSet)
-	if err != nil {
-		return resource.Quantity{}, err
-	}
-	if val, ok := cassandraVolumeClaim.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-		return val, nil
-	}
-	return resource.Quantity{}, fmt.Errorf("no storage size information found in statefulSet %s", statefulSet.Name)
-}
-
-func (cass *currentClusterStateFinder) zoneAffinity(statefulSet *v1beta2.StatefulSet) (string, error) {
-	nodeSelectors := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-	for _, selector := range nodeSelectors {
-		for _, expr := range selector.MatchExpressions {
-			if expr.Key == "failure-domain.beta.kubernetes.io/zone" {
-				return strings.Join(expr.Values, ""), nil
+func (cass *currentClusterStateFinder) zoneAffinity(statefulSet *v1beta2.StatefulSet) string {
+	affinity := statefulSet.Spec.Template.Spec.Affinity
+	if affinity != nil && affinity.NodeAffinity != nil && affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+		nodeSelectors := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+		for _, selector := range nodeSelectors {
+			for _, expr := range selector.MatchExpressions {
+				if expr.Key == "failure-domain.beta.kubernetes.io/zone" {
+					return strings.Join(expr.Values, "")
+				}
 			}
 		}
 	}
-	return "", fmt.Errorf("no zone affinity found in statefulset %s", statefulSet.Name)
-}
-
-func (cass *currentClusterStateFinder) volumeClaimWithName(name string, statefulSet *v1beta2.StatefulSet) (*corev1.PersistentVolumeClaim, error) {
-	for _, volumeClaim := range statefulSet.Spec.VolumeClaimTemplates {
-		if volumeClaim.Name == name {
-			return &volumeClaim, nil
-		}
-	}
-	return nil, fmt.Errorf("no persistent volume claim with name %s found in statefulset %s", name, statefulSet.Name)
+	return ""
 }
 
 func (cass *currentClusterStateFinder) containerWithName(name string, statefulSet *v1beta2.StatefulSet) (*corev1.Container, error) {
@@ -235,4 +194,60 @@ func (cass *currentClusterStateFinder) buildProbeFrom(probe *corev1.Probe) *v1al
 		FailureThreshold:    ptr.Int32(probe.FailureThreshold),
 		SuccessThreshold:    ptr.Int32(probe.SuccessThreshold),
 	}
+}
+
+func (cass *currentClusterStateFinder) buildCassandraStorage(statefulSet *v1beta2.StatefulSet) ([]v1alpha1.Storage, error) {
+	var cassandraStorages []v1alpha1.Storage
+	cassandraContainer, err := cass.containerWithName(cassandraContainerName, statefulSet)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, volumeMount := range cassandraContainer.VolumeMounts {
+		if _, ok := operatorManagedVolumes[volumeMount.Name]; !ok {
+			storageSource := cass.buildStorageSource(volumeMount.Name, statefulSet)
+			if storageSource == nil {
+				return nil, fmt.Errorf("no supported volume source found for volume mount: %v", volumeMount.Name)
+			}
+
+			cassandraStorages = append(cassandraStorages, v1alpha1.Storage{
+				Path:          ptr.String(volumeMount.MountPath),
+				StorageSource: *storageSource,
+			})
+		}
+	}
+
+	return cassandraStorages, nil
+}
+
+func (cass *currentClusterStateFinder) buildStorageSource(volumeName string, statefulSet *v1beta2.StatefulSet) *v1alpha1.StorageSource {
+	if volumeClaim := cass.volumeClaimWithName(volumeName, statefulSet); volumeClaim != nil {
+		return &v1alpha1.StorageSource{
+			PersistentVolumeClaim: &volumeClaim.Spec,
+		}
+	}
+	if emptyDirVolume := cass.emptyDirVolumeWithName(volumeName, statefulSet); emptyDirVolume != nil {
+		return &v1alpha1.StorageSource{
+			EmptyDir: emptyDirVolume.EmptyDir,
+		}
+	}
+	return nil
+}
+
+func (cass *currentClusterStateFinder) volumeClaimWithName(name string, statefulSet *v1beta2.StatefulSet) *corev1.PersistentVolumeClaim {
+	for _, volumeClaim := range statefulSet.Spec.VolumeClaimTemplates {
+		if volumeClaim.Name == name {
+			return &volumeClaim
+		}
+	}
+	return nil
+}
+
+func (cass *currentClusterStateFinder) emptyDirVolumeWithName(name string, statefulSet *v1beta2.StatefulSet) *corev1.Volume {
+	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
+		if volume.Name == name && volume.EmptyDir != nil {
+			return &volume
+		}
+	}
+	return nil
 }

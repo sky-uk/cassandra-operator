@@ -34,7 +34,6 @@ const (
 	cassandraBootstrapperContainerName = "cassandra-bootstrapper"
 	cassandraSidecarContainerName      = "cassandra-sidecar"
 
-	storageVolumeMountPath       = "/var/lib/cassandra"
 	configurationVolumeMountPath = "/etc/cassandra"
 	extraLibVolumeMountPath      = "/extra-lib"
 	configurationVolumeName      = "configuration"
@@ -48,6 +47,7 @@ var (
 	sidecarMemoryLimit      resource.Quantity
 	maxSidecarCPURequest    resource.Quantity
 	sidecarCPULimit         resource.Quantity
+	operatorManagedVolumes  map[string]bool
 )
 
 func init() {
@@ -55,6 +55,9 @@ func init() {
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
 	sidecarCPULimit = resource.MustParse("100m")
+	operatorManagedVolumes = make(map[string]bool)
+	operatorManagedVolumes[configurationVolumeName] = true
+	operatorManagedVolumes[extraLibVolumeName] = true
 }
 
 // Cluster defines the properties of a Cassandra cluster which the operator should manage.
@@ -136,6 +139,7 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 					Affinity: c.createAffinityRules(rack),
 				},
 			},
+
 			VolumeClaimTemplates: c.createCassandraDataPersistentVolumeClaimForRack(rack),
 		},
 	}
@@ -378,7 +382,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 		Env: []v1.EnvVar{
 			{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"},
 		},
-		VolumeMounts: c.createVolumeMounts(),
+		VolumeMounts: c.createVolumeMounts(rack),
 	}
 }
 
@@ -459,27 +463,21 @@ func (c *Cluster) createEnvironmentVariableDefinition(rack *v1alpha1.Rack) []v1.
 func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1.Rack) []v1.PersistentVolumeClaim {
 	var persistentVolumeClaim []v1.PersistentVolumeClaim
 
-	if !*c.definition.Spec.UseEmptyDir {
+	// hardcoded to 1 storage for now
+	cassandraStorage := rack.Storage[0]
+	if cassandraStorage.PersistentVolumeClaim != nil {
 		persistentVolumeClaim = append(persistentVolumeClaim, v1.PersistentVolumeClaim{
 			ObjectMeta: c.objectMetadata(c.definition.StorageVolumeName(), RackLabel, rack.Name, "app", c.definition.Name),
-			Spec: v1.PersistentVolumeClaimSpec{
-				StorageClassName: &rack.StorageClass,
-				AccessModes:      []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
-				Resources: v1.ResourceRequirements{
-					Requests: v1.ResourceList{
-						v1.ResourceStorage: c.definition.Spec.Pod.StorageSize,
-					},
-				},
-			},
+			Spec:       *cassandraStorage.StorageSource.PersistentVolumeClaim,
 		})
 	}
-
 	return persistentVolumeClaim
 }
 
-func (c *Cluster) createVolumeMounts() []v1.VolumeMount {
+func (c *Cluster) createVolumeMounts(rack *v1alpha1.Rack) []v1.VolumeMount {
 	mounts := []v1.VolumeMount{
-		{Name: c.definition.StorageVolumeName(), MountPath: storageVolumeMountPath},
+		// hardcoded to 1 storage for now
+		{Name: c.definition.StorageVolumeName(), MountPath: *rack.Storage[0].Path},
 		{Name: configurationVolumeName, MountPath: configurationVolumeMountPath},
 		{Name: extraLibVolumeName, MountPath: extraLibVolumeMountPath},
 	}

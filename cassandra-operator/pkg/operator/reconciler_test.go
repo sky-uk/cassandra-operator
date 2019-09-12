@@ -240,10 +240,7 @@ var _ = Describe("reconciliation", func() {
 						Namespace: desiredCassandra.Namespace,
 					},
 				}
-				desiredCassandra.Spec.Racks = []v1alpha1.Rack{
-					{Name: "a", Replicas: 1, StorageClass: "rack-storage-a", Zone: "rack-zone"},
-					{Name: "b", Replicas: 1, StorageClass: "rack-storage-b", Zone: "rack-zone"},
-				}
+				desiredCassandra.Spec.Racks = []v1alpha1.Rack{rackSpec("a"), rackSpec("b")}
 				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
 				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 			})
@@ -263,11 +260,8 @@ var _ = Describe("reconciliation", func() {
 				Expect(result).To(Equal(reconcile.Result{}))
 			})
 
-			It("should dispatch an AddCustomConfig event when some statefulsets", func() {
-				desiredCassandra.Spec.Racks = []v1alpha1.Rack{
-					{Name: "a", Replicas: 1, StorageClass: "rack-storage-a", Zone: "rack-zone"},
-					{Name: "b", Replicas: 1, StorageClass: "rack-storage-b", Zone: "rack-zone"},
-				}
+			It("should dispatch an AddCustomConfig event when some statefulsets do not have a configMap", func() {
+				desiredCassandra.Spec.Racks = []v1alpha1.Rack{rackSpec("a"), rackSpec("b")}
 				configHashes := map[string]string{"a": "some hash"}
 
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
@@ -482,7 +476,7 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 		ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
 		Spec: v1alpha1.CassandraSpec{
 			Datacenter: ptr.String("my-datacenter"),
-			Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "rack-storage-a", Zone: "rack-zone"}},
+			Racks:      []v1alpha1.Rack{rackSpec("a")},
 			Pod: v1alpha1.Pod{
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -492,12 +486,27 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 						corev1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				},
-				StorageSize: resource.MustParse("2Gi"),
 			},
 		},
 	}
 	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
 	return cassandra
+}
+
+func rackSpec(name string) v1alpha1.Rack {
+	return v1alpha1.Rack{
+		Name:     name,
+		Zone:     "zone1",
+		Replicas: 1,
+		Storage: []v1alpha1.Storage{
+			{
+				Path: ptr.String("cassandra-home"),
+				StorageSource: v1alpha1.StorageSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		},
+	}
 }
 
 // mocks

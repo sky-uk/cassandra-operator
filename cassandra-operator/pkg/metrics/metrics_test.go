@@ -398,7 +398,7 @@ func aCluster(clusterName, namespace string) *cluster.Cluster {
 	clusterDef := v1alpha1.Cassandra{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 		Spec: v1alpha1.CassandraSpec{
-			Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+			Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}},
 			Pod: v1alpha1.Pod{
 				Resources: coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
@@ -408,7 +408,6 @@ func aCluster(clusterName, namespace string) *cluster.Cluster {
 						coreV1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				},
-				StorageSize: resource.MustParse("1Gi"),
 			},
 		},
 	}

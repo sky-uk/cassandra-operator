@@ -33,13 +33,30 @@ func TestCreation(t *testing.T) {
 
 func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multipleRacksCluster, emptyDirCluster *TestCluster) {
 	multipleRacksCluster = &TestCluster{
-		Name:                multipleRacksClusterName,
-		Racks:               []v1alpha1.Rack{Rack("a", 2), Rack("b", 1)},
+		Name: multipleRacksClusterName,
+		Racks: []v1alpha1.Rack{
+			ARack("a", 2).
+				WithStorage(APersistentVolume().
+					OfSize("100Mi").
+					WithStorageClass("standard-zone-a").
+					AtPath("/var/lib/pv-cassandra-home")).
+				Build(),
+			ARack("b", 1).
+				WithStorage(APersistentVolume().
+					OfSize("100Mi").
+					WithStorageClass("standard-zone-b").
+					AtPath("/var/lib/pv-cassandra-home")).
+				Build(),
+		},
 		ExtraConfigFileName: "extraConfigFile",
 	}
 	emptyDirCluster = &TestCluster{
-		Name:  emptyDirClusterName,
-		Racks: []v1alpha1.Rack{RackWithEmptyDir("a", 1)},
+		Name: emptyDirClusterName,
+		Racks: []v1alpha1.Rack{
+			ARack("a", 1).
+				WithStorage(AnEmptyDir().AtPath("/var/lib/emptydir-cassandra-home")).
+				Build(),
+		},
 	}
 	return
 }
@@ -62,7 +79,6 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 					coreV1.ResourceMemory: resource.MustParse("987Mi"),
 				},
 			},
-			StorageSize: resource.MustParse("100Mi"),
 			LivenessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
 				TimeoutSeconds:      ptr.Int32(7),
@@ -172,6 +188,37 @@ var _ = Context("When a cluster with a given name doesn't already exist", func()
 		Expect(UniqueNodesUsed(Namespace, multipleRacksCluster.Name)).Should(HaveLen(3))
 	})
 
+	It("should setup the correct persistent volumes in the cassandra containers", func() {
+		By("creating persistent volume at the given path")
+		Expect(StatefulSetsForCluster(Namespace, multipleRacksCluster.Name)()).Should(
+			Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+
+		By("not creating an emptyDir volume at the same path")
+		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(
+			Each(Not(HaveEmptyDirVolumeMountAtPath("/var/lib/pv-cassandra-home"))))
+	})
+
+	It("should setup the correct empty dir volumes in the cassandra containers", func() {
+		By("creating an emptyDir volume at the given path")
+		Expect(PodsForCluster(Namespace, emptyDirCluster.Name)()).Should(
+			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/emptydir-cassandra-home")))
+
+		By("not creating a persistent volume claim")
+		Expect(PersistentVolumeClaimsForCluster(Namespace, emptyDirCluster.Name)()).Should(BeEmpty())
+	})
+
+	It("should add an annotation named customConfigHash for clusters with custom config", func() {
+		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(Each(
+			HaveAnnotation("clusterConfigHash"),
+		))
+	})
+
+	It("should not add an annotation named customConfigHash for clusters without custom config", func() {
+		Expect(PodsForCluster(Namespace, emptyDirCluster.Name)()).Should(Each(
+			Not(HaveAnnotation("clusterConfigHash")),
+		))
+	})
+
 	It("should report metrics for all clusters", func() {
 		By("exposing node and rack information in metrics")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
@@ -186,22 +233,6 @@ var _ = Context("When a cluster with a given name doesn't already exist", func()
 			ClusterSizeMetric(Namespace, emptyDirCluster.Name, 1),
 			LiveAndNormalNodeMetric(Namespace, emptyDirCluster.Name, PodName(emptyDirCluster.Name, "a", 0), "a", 1),
 		}))
-	})
-
-	It("should not create persistent volume claims for an emptydir cluster", func() {
-		Expect(PersistentVolumeClaimsForCluster(Namespace, emptyDirCluster.Name)()).Should(BeEmpty())
-	})
-
-	It("should add an annotation named customConfigHash for clusters with custom config", func() {
-		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(Each(
-			HaveAnnotation("clusterConfigHash"),
-		))
-	})
-
-	It("should not add an annotation named customConfigHash for clusters without custom config", func() {
-		Expect(PodsForCluster(Namespace, emptyDirCluster.Name)()).Should(Each(
-			Not(HaveAnnotation("clusterConfigHash")),
-		))
 	})
 
 	It("should generate events informing of cluster creation", func() {

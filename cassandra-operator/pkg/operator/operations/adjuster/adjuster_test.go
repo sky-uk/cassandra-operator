@@ -3,6 +3,7 @@ package adjuster
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/PaesslerAG/jsonpath"
@@ -19,7 +20,7 @@ import (
 )
 
 const (
-	clusterConfigHash                 = "$.spec.template.metadata.annotations.clusterConfigHash"
+	clusterConfigHash = "$.spec.template.metadata.annotations.clusterConfigHash"
 )
 
 func TestCluster(t *testing.T) {
@@ -49,7 +50,7 @@ var _ = Describe("cluster events", func() {
 		oldCluster = &v1alpha1.Cassandra{
 			Spec: v1alpha1.CassandraSpec{
 				Datacenter: ptr.String("ADatacenter"),
-				Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
 					Image: ptr.String("anImage"),
 					Resources: v1.ResourceRequirements{
@@ -62,7 +63,6 @@ var _ = Describe("cluster events", func() {
 							v1.ResourceCPU:    resource.MustParse("100m"),
 						},
 					},
-					StorageSize:    resource.MustParse("1Gi"),
 					LivenessProbe:  livenessProbe.DeepCopy(),
 					ReadinessProbe: readinessProbe.DeepCopy(),
 				},
@@ -75,7 +75,7 @@ var _ = Describe("cluster events", func() {
 
 	Context("a config map hash annotation patch is requested for rack", func() {
 		It("should produce an UpdateRack change with the new config map hash", func() {
-			rack := v1alpha1.Rack{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}
+			rack := v1alpha1.Rack{Name: "a", Replicas: 1, Zone: "some-zone"}
 			configMap := v1.ConfigMap{
 				Data: map[string]string{
 					"test": "value",
@@ -218,8 +218,8 @@ var _ = Describe("cluster events", func() {
 
 		Context("multiple-rack cluster", func() {
 			It("should produce an UpdateRack change for each changed rack", func() {
-				oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "another-storage", Zone: "another-zone"}, {Name: "c", Replicas: 1, StorageClass: "yet-another-storage", Zone: "yet-another-zone"}}
-				newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "another-storage", Zone: "another-zone"}, {Name: "c", Replicas: 3, StorageClass: "yet-another-storage", Zone: "yet-another-zone"}}
+				oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}, {Name: "c", Replicas: 1, Zone: "yet-another-zone"}}
+				newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}, {Name: "c", Replicas: 3, Zone: "yet-another-zone"}}
 				changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
 
 				Expect(err).ToNot(HaveOccurred())
@@ -232,8 +232,8 @@ var _ = Describe("cluster events", func() {
 
 	Context("both pod resource and scale-up changes are detected", func() {
 		It("should produce an UpdateRack change for all racks", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "another-storage", Zone: "another-zone"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 3, StorageClass: "another-storage", Zone: "another-zone"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}}
+			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 3, Zone: "another-zone"}}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceCPU] = resource.MustParse("1")
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("999Mi")
 
@@ -306,7 +306,7 @@ var _ = Describe("cluster events", func() {
 
 	Context("a new rack definition is added", func() {
 		It("should produce an AddRack change for the new rack", func() {
-			newRack := v1alpha1.Rack{Name: "b", Replicas: 2, Zone: "zone-b", StorageClass: "storage-class-b"}
+			newRack := v1alpha1.Rack{Name: "b", Replicas: 2, Zone: "zone-b"}
 			newCluster.Spec.Racks = append(newCluster.Spec.Racks, newRack)
 
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
@@ -318,11 +318,11 @@ var _ = Describe("cluster events", func() {
 
 	Context("correct ordering of changes", func() {
 		It("should perform add operations before update operations", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a", StorageClass: "storage-class-a"}, {Name: "b", Replicas: 1, Zone: "zone-b", StorageClass: "storage-class-b"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}}
 			newCluster.Spec.Racks = []v1alpha1.Rack{
-				{Name: "a", Replicas: 1, Zone: "zone-a", StorageClass: "storage-class-a"},
-				{Name: "b", Replicas: 1, Zone: "zone-b", StorageClass: "storage-class-b"},
-				{Name: "c", Replicas: 1, Zone: "zone-c", StorageClass: "storage-class-c"},
+				{Name: "a", Replicas: 1, Zone: "zone-a"},
+				{Name: "b", Replicas: 1, Zone: "zone-b"},
+				{Name: "c", Replicas: 1, Zone: "zone-c"},
 			}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("3Gi")
 
@@ -341,8 +341,8 @@ var _ = Describe("cluster events", func() {
 		})
 
 		It("should treat a scale up and update as a single update operation", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a", StorageClass: "storage-class-a"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, Zone: "zone-a", StorageClass: "storage-class-a"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}}
+			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, Zone: "zone-a"}}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("3Gi")
 
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
@@ -354,8 +354,8 @@ var _ = Describe("cluster events", func() {
 		})
 
 		It("should order racks changes in the order in which the racks were defined in the old cluster state", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a", StorageClass: "storage-class-a"}, {Name: "b", Replicas: 1, Zone: "zone-b", StorageClass: "storage-class-b"}, {Name: "c", Replicas: 1, Zone: "zone-c", StorageClass: "storage-class-c"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "c", Replicas: 1, Zone: "zone-c", StorageClass: "storage-class-c"}, {Name: "a", Replicas: 1, Zone: "zone-a", StorageClass: "storage-class-a"}, {Name: "b", Replicas: 1, Zone: "zone-b", StorageClass: "storage-class-b"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}, {Name: "c", Replicas: 1, Zone: "zone-c"}}
+			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "c", Replicas: 1, Zone: "zone-c"}, {Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceCPU] = resource.MustParse("101m")
 
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
@@ -381,14 +381,14 @@ func HaveClusterChangeWithoutJSONKey(rack v1alpha1.Rack, changeType ClusterChang
 }
 
 type haveClusterChange struct {
-	rack              v1alpha1.Rack
-	changeType        ClusterChangeType
+	rack       v1alpha1.Rack
+	changeType ClusterChangeType
 }
 
 func (matcher *haveClusterChange) Match(actual interface{}) (success bool, err error) {
 	changes := actual.([]ClusterChange)
 	if change := matcher.findClusterChange(&matcher.rack, changes); change != nil {
-		if change.Rack != matcher.rack {
+		if !reflect.DeepEqual(change.Rack, matcher.rack) {
 			return false, fmt.Errorf("expected rack %v to match, but found %v", matcher.rack, change.Rack)
 		}
 

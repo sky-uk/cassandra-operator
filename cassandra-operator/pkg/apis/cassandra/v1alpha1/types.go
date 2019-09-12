@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// required for dep management
@@ -41,6 +40,9 @@ const (
 
 	// DefaultRetentionPolicyCleanupTimeoutSeconds is the default for Cassandra.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds
 	DefaultRetentionPolicyCleanupTimeoutSeconds = 10
+
+	// DefaultStorageVolumeMountPath is the default location for Cassandra data storage
+	DefaultStorageVolumeMountPath = "/var/lib/cassandra"
 )
 
 // +genclient
@@ -88,9 +90,8 @@ type Pod struct {
 	SidecarImage *string `json:"sidecarImage,omitempty"`
 
 	// +optional
-	Image       *string                     `json:"image,omitempty"`
-	StorageSize resource.Quantity           `json:"storageSize"`
-	Resources   coreV1.ResourceRequirements `json:"resources"`
+	Image     *string                     `json:"image,omitempty"`
+	Resources coreV1.ResourceRequirements `json:"resources"`
 	// +optional
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
 	// +optional
@@ -112,10 +113,30 @@ type CassandraList struct {
 
 // Rack defines the properties of a rack in the cluster
 type Rack struct {
-	Name         string `json:"name"`
-	Zone         string `json:"zone"`
-	StorageClass string `json:"storageClass"`
-	Replicas     int32  `json:"replicas"`
+	Name     string    `json:"name"`
+	Zone     string    `json:"zone"`
+	Replicas int32     `json:"replicas"`
+	Storage  []Storage `json:"storage"`
+}
+
+// Storage defines the storage properties shared by pods in the same rack.
+// Only one type of volume may be specified.
+type Storage struct {
+	// The full path to the volume in the pod
+	Path          *string `json:"path,omitempty"`
+	StorageSource `json:",inline"`
+}
+
+// StorageSource represents the volume source to use as storage
+// Only one of its members may be specified.
+// Supported volume sources are expected to be a subset of the volume types defined in `coreV1.VolumeSource`
+type StorageSource struct {
+	// The volume as persistent volume
+	// +optional
+	PersistentVolumeClaim *coreV1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
+	// The volume as an empty directory
+	// +optional
+	EmptyDir *coreV1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
 // Snapshot defines the snapshot creation and deletion configuration
@@ -209,8 +230,14 @@ func (rp RetentionPolicy) Equal(other RetentionPolicy) bool {
 func (r Rack) Equal(other Rack) bool {
 	return r.Name == other.Name &&
 		r.Zone == other.Zone &&
-		r.StorageClass == other.StorageClass &&
-		r.Replicas == other.Replicas
+		r.Replicas == other.Replicas &&
+		cmp.Equal(r.Storage, other.Storage)
+}
+
+// Equal checks equality of two Storage. This is useful for testing checking equality cmp.Equal
+func (ss Storage) Equal(other Storage) bool {
+	return reflect.DeepEqual(ss.Path, other.Path) &&
+		reflect.DeepEqual(ss.StorageSource, other.StorageSource)
 }
 
 // Equal checks equality of two Pods. This is useful for checking equality with cmp.Equal
@@ -220,7 +247,6 @@ func (p Pod) Equal(other Pod) bool {
 		reflect.DeepEqual(p.Image, other.Image) &&
 		reflect.DeepEqual(p.LivenessProbe, other.LivenessProbe) &&
 		reflect.DeepEqual(p.ReadinessProbe, other.ReadinessProbe) &&
-		p.StorageSize.Cmp(other.StorageSize) == 0 &&
 		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceMemory) &&
 		resourcesAreEqual(p.Resources.Limits, other.Resources.Limits, coreV1.ResourceMemory) &&
 		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceCPU) &&

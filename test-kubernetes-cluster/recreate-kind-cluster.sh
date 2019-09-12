@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -e
-scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 function setup_volume_on_node() {
     local node=$1
@@ -225,7 +224,7 @@ EOF
 
 # node image officially supported for v0.5.1 - see https://github.com/kubernetes-sigs/kind/releases/tag/v0.5.1
 KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.11.10@sha256:bb22258625199ba5e47fb17a8a8a7601e536cd03456b42c1ee32672302b1f909"}
-kind create cluster --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
+kind create cluster --loglevel=info --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
 export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
 kubectl config rename-context "kubernetes-admin@kind" "kind"
 

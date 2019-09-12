@@ -3,6 +3,7 @@ package helpers
 import (
 	"reflect"
 
+	coreV1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -47,6 +48,20 @@ func SetDefaultsForCassandra(clusterDefinition *v1alpha1.Cassandra) {
 	setDefaultsForSnapshot(clusterDefinition.Spec.Snapshot)
 	setDefaultsForImages(clusterDefinition)
 	setDefaultsForProbes(clusterDefinition)
+	setDefaultsForStorage(clusterDefinition)
+}
+
+func setDefaultsForStorage(clusterDefinition *v1alpha1.Cassandra) {
+	for i := range clusterDefinition.Spec.Racks {
+		for j := range clusterDefinition.Spec.Racks[i].Storage {
+			if clusterDefinition.Spec.Racks[i].Storage[j].PersistentVolumeClaim != nil && clusterDefinition.Spec.Racks[i].Storage[j].PersistentVolumeClaim.AccessModes == nil {
+				clusterDefinition.Spec.Racks[i].Storage[j].PersistentVolumeClaim.AccessModes = []coreV1.PersistentVolumeAccessMode{coreV1.ReadWriteOnce}
+			}
+			if clusterDefinition.Spec.Racks[i].Storage[j].Path == nil {
+				clusterDefinition.Spec.Racks[i].Storage[j].Path = ptr.String(v1alpha1.DefaultStorageVolumeMountPath)
+			}
+		}
+	}
 }
 
 func setDefaultsForDatacenter(clusterDefinition *v1alpha1.Cassandra) {

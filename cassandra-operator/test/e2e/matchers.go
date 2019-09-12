@@ -358,6 +358,120 @@ func (matcher *haveStorageCapacity) NegatedFailureMessage(actual interface{}) (m
 }
 
 //
+// HaveEmptyDirVolumeMountAtPath
+//
+func HaveEmptyDirVolumeMountAtPath(path string) types.GomegaMatcher {
+	return &haveEmptyDirVolumeMount{path: path, containerName: "cassandra"}
+}
+
+type haveEmptyDirVolumeMount struct {
+	path          string
+	containerName string
+}
+
+func (matcher *haveEmptyDirVolumeMount) Match(actual interface{}) (success bool, err error) {
+	lr := actual.(*kubernetesResource)
+	pod := lr.Resource.(coreV1.Pod)
+	mount := matcher.findMount(pod)
+	if mount == nil {
+		return false, nil
+	}
+
+	volume := matcher.findVolume(mount.Name, pod)
+	if volume == nil {
+		return false, nil
+	} else if volume.EmptyDir == nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (matcher *haveEmptyDirVolumeMount) findVolume(volumeName string, pod coreV1.Pod) *coreV1.Volume {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == volumeName {
+			return &volume
+		}
+	}
+	return nil
+}
+
+func (matcher *haveEmptyDirVolumeMount) findMount(pod coreV1.Pod) *coreV1.VolumeMount {
+	for _, container := range pod.Spec.Containers {
+		if container.Name == matcher.containerName {
+			for _, mount := range container.VolumeMounts {
+				if mount.MountPath == matcher.path {
+					return &mount
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (matcher *haveEmptyDirVolumeMount) FailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected emptyDir volume mounted at path %s. Actual: %s", matcher.path, actual)
+}
+
+func (matcher *haveEmptyDirVolumeMount) NegatedFailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Not expected emptyDir volume mounted at path %s. Actual: %s", matcher.path, actual)
+}
+
+//
+// HavePersistentVolumeMountAtPath
+//
+func HavePersistentVolumeMountAtPath(path string) types.GomegaMatcher {
+	return &havePersistentVolumeMountAtPath{path: path, containerName: "cassandra"}
+}
+
+type havePersistentVolumeMountAtPath struct {
+	path          string
+	containerName string
+}
+
+func (matcher *havePersistentVolumeMountAtPath) Match(actual interface{}) (success bool, err error) {
+	lr := actual.(*kubernetesResource)
+	ss := lr.Resource.(v1beta2.StatefulSet)
+	mount := matcher.findMount(ss.Spec.Template.Spec.Containers)
+	if mount == nil {
+		return false, nil
+	}
+	if claim := matcher.findClaim(mount.Name, &ss); claim == nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (matcher *havePersistentVolumeMountAtPath) findMount(containers []coreV1.Container) *coreV1.VolumeMount {
+	for _, container := range containers {
+		if container.Name == matcher.containerName {
+			for _, mount := range container.VolumeMounts {
+				if mount.MountPath == matcher.path {
+					return &mount
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (matcher *havePersistentVolumeMountAtPath) findClaim(name string, statefulSet *v1beta2.StatefulSet) *coreV1.PersistentVolumeClaim {
+	for _, volumeClaim := range statefulSet.Spec.VolumeClaimTemplates {
+		if volumeClaim.Name == name {
+			return &volumeClaim
+		}
+	}
+	return nil
+}
+
+func (matcher *havePersistentVolumeMountAtPath) FailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Expected persistent volume mounted at path %s. Actual: %v", matcher.path, actual)
+}
+
+func (matcher *havePersistentVolumeMountAtPath) NegatedFailureMessage(actual interface{}) (message string) {
+	return fmt.Sprintf("Not expected persistent volume mounted at path %s. Actual: %v", matcher.path, actual)
+}
+
+//
 // ReportAClusterWith matcher
 //
 func ReportAClusterWith(expected interface{}) types.GomegaMatcher {

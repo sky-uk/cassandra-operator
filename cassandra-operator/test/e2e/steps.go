@@ -7,110 +7,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"time"
 )
-
-type ClusterBuilder struct {
-	clusterName         string
-	racks               []v1alpha1.Rack
-	extraConfigFile     *ExtraConfigFile
-	useEmptyDir         bool
-	clusterSpec         *v1alpha1.CassandraSpec
-	withoutCustomConfig bool
-	snapshot            *v1alpha1.Snapshot
-}
-
-func AClusterWithName(clusterName string) *ClusterBuilder {
-	return &ClusterBuilder{clusterName: clusterName}
-}
-
-func (c *ClusterBuilder) AndRacks(racks []v1alpha1.Rack) *ClusterBuilder {
-	c.racks = racks
-	return c
-}
-
-func (c *ClusterBuilder) WithoutRacks() *ClusterBuilder {
-	return c.AndRacks([]v1alpha1.Rack{})
-}
-
-func (c *ClusterBuilder) AndCustomConfig(extraConfigFile *ExtraConfigFile) *ClusterBuilder {
-	c.extraConfigFile = extraConfigFile
-	return c
-}
-
-func (c *ClusterBuilder) UsingEmptyDir() *ClusterBuilder {
-	c.useEmptyDir = true
-	return c
-}
-
-func (c *ClusterBuilder) AndClusterSpec(clusterSpec *v1alpha1.CassandraSpec) *ClusterBuilder {
-	c.clusterSpec = clusterSpec
-	return c
-}
-
-func (c *ClusterBuilder) WithoutCustomConfig() *ClusterBuilder {
-	c.withoutCustomConfig = true
-	return c
-}
-
-func (c *ClusterBuilder) AndScheduledSnapshot(snapshot *v1alpha1.Snapshot) *ClusterBuilder {
-	c.snapshot = snapshot
-	return c
-}
-
-func (c *ClusterBuilder) IsDefined() {
-	if c.clusterSpec == nil {
-		c.clusterSpec = AClusterSpec().Build()
-	}
-
-	c.clusterSpec.Racks = c.racks
-	c.clusterSpec.Snapshot = c.snapshot
-
-	if c.useEmptyDir {
-		c.clusterSpec.UseEmptyDir = ptr.Bool(true)
-		// void values that do not apply
-		c.clusterSpec.Pod.StorageSize = resource.MustParse("0")
-	}
-
-	if !c.withoutCustomConfig {
-		_, err := customCassandraConfigMap(Namespace, c.clusterName, c.extraConfigFile)
-		gomega.Expect(err).ToNot(gomega.HaveOccurred())
-	}
-	_, err := cassandraResource(Namespace, c.clusterName, c.clusterSpec)
-	gomega.Expect(err).ToNot(gomega.HaveOccurred())
-}
-
-func (c *ClusterBuilder) Exists() {
-	c.IsDefined()
-	EventuallyClusterIsCreatedWithRacks(Namespace, c.clusterName, c.racks)
-	log.Infof("Created cluster %s", c.clusterName)
-}
-
-type ClusterSpecBuilder struct {
-	podResources *coreV1.ResourceRequirements
-}
-
-func AClusterSpec() *ClusterSpecBuilder {
-	return &ClusterSpecBuilder{}
-}
-
-func (s *ClusterSpecBuilder) WithPodResources(podResources *coreV1.ResourceRequirements) *ClusterSpecBuilder {
-	s.podResources = podResources
-	return s
-}
-
-func (s *ClusterSpecBuilder) Build() *v1alpha1.CassandraSpec {
-	spec := clusterDefaultSpec()
-	if s.podResources != nil {
-		spec.Pod.Resources = *s.podResources
-	}
-	return spec
-}
 
 func TheClusterIsDeleted(clusterName string) {
 	deleteClusterDefinitionsWatchedByOperator(Namespace, clusterName)
@@ -223,7 +124,7 @@ func mutateCassandraSpec(namespace, clusterName string, mutator func(*v1alpha1.C
 	var cassAfterMutation *v1alpha1.Cassandra
 	cassAfterMutation, err = CassandraClientset.CoreV1alpha1().Cassandras(namespace).Update(cass)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
-	log.Infof(spew.Sprintf("Updated cassandra spec for cluster %s, before: %+v, \nafter: %+v", clusterName, cassBeforeMutation, cassAfterMutation))
+	log.Info(spew.Sprintf("Updated cassandra spec for cluster %s, before: %+v, \nafter: %+v", clusterName, cassBeforeMutation, cassAfterMutation))
 }
 
 func EventuallyClusterIsCreatedWithRacks(namespace string, clusterName string, racks []v1alpha1.Rack) {

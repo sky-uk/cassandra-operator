@@ -247,7 +247,7 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 		ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
 		Spec: v1alpha1.CassandraSpec{
 			Datacenter: ptr.String("my-datacenter"),
-			Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "rack-storage", Zone: "rack-zone"}},
+			Racks:      []v1alpha1.Rack{rackSpec("a")},
 			Pod: v1alpha1.Pod{
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -259,7 +259,6 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 						corev1.ResourceCPU:    resource.MustParse("100m"),
 					},
 				},
-				StorageSize: resource.MustParse("2Gi"),
 			},
 		},
 	}
@@ -269,10 +268,42 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 
 func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
 	cassandra := aClusterDefinition()
-	cassandra.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1}}
 	cassandra.Spec.UseEmptyDir = ptr.Bool(true)
-	cassandra.Spec.Pod.StorageSize = resource.Quantity{}
+	cassandra.Spec.Racks = []v1alpha1.Rack{{
+		Name:     "a",
+		Replicas: 1,
+		Storage: []v1alpha1.Storage{
+			{
+				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
+				StorageSource: v1alpha1.StorageSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		},
+	}}
 	return cassandra
+}
+
+func rackSpec(name string) v1alpha1.Rack {
+	return v1alpha1.Rack{
+		Name:     name,
+		Zone:     "storage Zone",
+		Replicas: 1,
+		Storage: []v1alpha1.Storage{
+			{
+				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
+				StorageSource: v1alpha1.StorageSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1000m"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func aClusterDefinitionWithPersistenceVolumes() *v1alpha1.Cassandra {

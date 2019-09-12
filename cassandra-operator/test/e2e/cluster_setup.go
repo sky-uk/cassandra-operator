@@ -37,6 +37,243 @@ type TestCluster struct {
 	SnapshotConfig      *v1alpha1.Snapshot
 }
 
+type ClusterBuilder struct {
+	clusterName         string
+	racks               []v1alpha1.Rack
+	extraConfigFile     *ExtraConfigFile
+	useEmptyDir         bool
+	clusterSpec         *v1alpha1.CassandraSpec
+	withoutCustomConfig bool
+	snapshot            *v1alpha1.Snapshot
+}
+
+type ClusterSpecBuilder struct {
+	podResources *coreV1.ResourceRequirements
+}
+
+type RackSpecBuilder struct {
+	rackName string
+	replicas int32
+	storages []v1alpha1.Storage
+	emptyDir bool
+}
+
+type EmptyDirStorageBuilder struct {
+	path *string
+}
+
+type PersistentVolumeStorageBuilder struct {
+	path         *string
+	storageClass string
+	storageSize  string
+}
+
+//
+// ClusterBuilder
+//
+
+func AClusterWithName(clusterName string) *ClusterBuilder {
+	return &ClusterBuilder{clusterName: clusterName}
+}
+
+func (c *ClusterBuilder) AndRacks(racks []v1alpha1.Rack) *ClusterBuilder {
+	c.racks = racks
+	return c
+}
+
+func (c *ClusterBuilder) WithoutRacks() *ClusterBuilder {
+	return c.AndRacks([]v1alpha1.Rack{})
+}
+
+func (c *ClusterBuilder) AndCustomConfig(extraConfigFile *ExtraConfigFile) *ClusterBuilder {
+	c.extraConfigFile = extraConfigFile
+	return c
+}
+
+func (c *ClusterBuilder) UsingEmptyDir() *ClusterBuilder {
+	c.useEmptyDir = true
+	return c
+}
+
+func (c *ClusterBuilder) AndClusterSpec(clusterSpec *v1alpha1.CassandraSpec) *ClusterBuilder {
+	c.clusterSpec = clusterSpec
+	return c
+}
+
+func (c *ClusterBuilder) WithoutCustomConfig() *ClusterBuilder {
+	c.withoutCustomConfig = true
+	return c
+}
+
+func (c *ClusterBuilder) AndScheduledSnapshot(snapshot *v1alpha1.Snapshot) *ClusterBuilder {
+	c.snapshot = snapshot
+	return c
+}
+
+func (c *ClusterBuilder) IsDefined() {
+	if c.clusterSpec == nil {
+		c.clusterSpec = AClusterSpec().Build()
+	}
+
+	c.clusterSpec.Racks = c.racks
+	c.clusterSpec.Snapshot = c.snapshot
+
+	if c.useEmptyDir {
+		c.clusterSpec.UseEmptyDir = ptr.Bool(true)
+	}
+
+	if !c.withoutCustomConfig {
+		_, err := customCassandraConfigMap(Namespace, c.clusterName, c.extraConfigFile)
+		gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	}
+	_, err := cassandraResource(Namespace, c.clusterName, c.clusterSpec)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+}
+
+func (c *ClusterBuilder) Exists() {
+	c.IsDefined()
+	EventuallyClusterIsCreatedWithRacks(Namespace, c.clusterName, c.racks)
+	log.Infof("Created cluster %s", c.clusterName)
+}
+
+//
+// ClusterSpecBuilder
+//
+
+func AClusterSpec() *ClusterSpecBuilder {
+	return &ClusterSpecBuilder{}
+}
+
+func (s *ClusterSpecBuilder) WithPodResources(podResources *coreV1.ResourceRequirements) *ClusterSpecBuilder {
+	s.podResources = podResources
+	return s
+}
+
+func (s *ClusterSpecBuilder) Build() *v1alpha1.CassandraSpec {
+	spec := clusterDefaultSpec()
+	if s.podResources != nil {
+		spec.Pod.Resources = *s.podResources
+	}
+	return spec
+}
+
+//
+// StorageBuilder
+//
+
+type StorageBuilder interface {
+	Build() v1alpha1.Storage
+}
+
+//
+// PersistentVolumeStorageBuilder
+//
+
+func APersistentVolume() *PersistentVolumeStorageBuilder {
+	return &PersistentVolumeStorageBuilder{}
+}
+
+func (pv *PersistentVolumeStorageBuilder) AtPath(path string) *PersistentVolumeStorageBuilder {
+	pv.path = ptr.String(path)
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) WithStorageClass(storageClass string) *PersistentVolumeStorageBuilder {
+	pv.storageClass = storageClass
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) OfSize(storageSize string) *PersistentVolumeStorageBuilder {
+	pv.storageSize = storageSize
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) Build() v1alpha1.Storage {
+	if pv.storageSize == "" {
+		pv.storageSize = podStorageSize
+	}
+	return v1alpha1.Storage{
+		Path: pv.path,
+		StorageSource: v1alpha1.StorageSource{
+			PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
+				StorageClassName: ptr.String(pv.storageClass),
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceStorage: resource.MustParse(pv.storageSize),
+					},
+				},
+			},
+		},
+	}
+}
+
+//
+// EmptyDirStorageBuilder
+//
+
+func AnEmptyDir() *EmptyDirStorageBuilder {
+	return &EmptyDirStorageBuilder{}
+}
+
+func (e *EmptyDirStorageBuilder) AtPath(path string) *EmptyDirStorageBuilder {
+	e.path = ptr.String(path)
+	return e
+}
+
+func (e *EmptyDirStorageBuilder) Build() v1alpha1.Storage {
+	return v1alpha1.Storage{
+		Path: e.path,
+		StorageSource: v1alpha1.StorageSource{
+			EmptyDir: &coreV1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
+//
+// RackSpecBuilder
+//
+
+func ARack(name string, replicas int32) *RackSpecBuilder {
+	return &RackSpecBuilder{rackName: name, replicas: replicas}
+}
+
+func (r *RackSpecBuilder) WithEmptyDir() *RackSpecBuilder {
+	return r.WithStorage(AnEmptyDir())
+}
+
+func (r *RackSpecBuilder) WithPersistentVolume() *RackSpecBuilder {
+	return r.WithStorage(APersistentVolume().WithStorageClass(fmt.Sprintf("%s%s", storageClassPrefix, r.rackName)))
+}
+
+func (r *RackSpecBuilder) WithStorage(storageBuilder StorageBuilder) *RackSpecBuilder {
+	storage := storageBuilder.Build()
+	r.storages = append(r.storages, storage)
+	// TODO remove this hack along with spec.useEmptyDir
+	if storage.EmptyDir != nil {
+		r.emptyDir = true
+	}
+	return r
+}
+
+func (r *RackSpecBuilder) Build() v1alpha1.Rack {
+	// TODO simplify once rules around zone and storage class when spec.useEmptyDir no longer apply
+	if r.emptyDir {
+		return v1alpha1.Rack{
+			Name:     r.rackName,
+			Replicas: r.replicas,
+			Zone:     "",
+			Storage:  r.storages,
+		}
+	} else {
+		return v1alpha1.Rack{
+			Name:     r.rackName,
+			Replicas: r.replicas,
+			Zone:     fmt.Sprintf("%s%s", dataCenterRegion, r.rackName),
+			Storage:  r.storages,
+		}
+	}
+}
+
 func AClusterName() string {
 	clusterName := fmt.Sprintf("mycluster-%s", randomString(5))
 	log.Infof("Generating cluster name %s", clusterName)
@@ -48,19 +285,11 @@ func PodName(clusterName, rack string, count int) string {
 }
 
 func Rack(rackName string, replicas int32) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:         rackName,
-		Replicas:     replicas,
-		StorageClass: fmt.Sprintf("%s%s", storageClassPrefix, rackName),
-		Zone:         fmt.Sprintf("%s%s", dataCenterRegion, rackName),
-	}
+	return ARack(rackName, replicas).WithPersistentVolume().Build()
 }
 
 func RackWithEmptyDir(rackName string, replicas int32) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     rackName,
-		Replicas: replicas,
-	}
+	return ARack(rackName, replicas).WithEmptyDir().Build()
 }
 
 func SnapshotSchedule(cron string) *v1alpha1.Snapshot {
@@ -87,7 +316,6 @@ func clusterDefaultSpec() *v1alpha1.CassandraSpec {
 					coreV1.ResourceMemory: resource.MustParse(PodMemory),
 				},
 			},
-			StorageSize: resource.MustParse(podStorageSize),
 			LivenessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
 				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),

@@ -66,7 +66,7 @@ var _ = Describe("creation of stateful sets", func() {
 		clusterDef = &v1alpha1.Cassandra{
 			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
 			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks: []v1alpha1.Rack{rackSpec("a"), rackSpec("b")},
 				Pod: v1alpha1.Pod{
 					Resources: coreV1.ResourceRequirements{
 						Requests: coreV1.ResourceList{
@@ -78,7 +78,6 @@ var _ = Describe("creation of stateful sets", func() {
 							coreV1.ResourceCPU:    resource.MustParse("100m"),
 						},
 					},
-					StorageSize: resource.MustParse("1Gi"),
 					ReadinessProbe: &v1alpha1.Probe{
 						FailureThreshold:    ptr.Int32(3),
 						InitialDelaySeconds: ptr.Int32(30),
@@ -157,82 +156,105 @@ var _ = Describe("creation of stateful sets", func() {
 		Expect(volumes).To(haveExactly(1, matchingEmptyDir("extra-lib")))
 	})
 
-	It("should mount a persistent volume claim into the main container if useEmptyDir is not set", func() {
-		// given
-		cluster := ACluster(clusterDef)
+	Describe("Mounts into main container", func() {
+		Context("using persistent volume as storage", func() {
+			It("should mount a persistent volume claim at the default path", func() {
+				// given
+				cluster := ACluster(clusterDef)
 
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
-		// then
-		Expect(statefulSet.Spec.Template.Spec.Volumes).To(haveExactly(0, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
+				// then
+				Expect(statefulSet.Spec.Template.Spec.Volumes).To(haveExactly(0, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
 
-		mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
-		Expect(mainContainerVolumeMounts).To(HaveLen(3))
-		Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name), "/var/lib/cassandra")))
+				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
+				Expect(mainContainerVolumeMounts).To(HaveLen(3))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name), "/var/lib/cassandra")))
+			})
+
+			It("should mount a persistent volume claim at the given path", func() {
+				// given
+				clusterDef.Spec.Racks[0].Storage[0].Path = ptr.String("/my-cassandra-home")
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				Expect(statefulSet.Spec.Template.Spec.Volumes).To(haveExactly(0, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
+
+				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
+				Expect(mainContainerVolumeMounts).To(HaveLen(3))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name), "/my-cassandra-home")))
+			})
+		})
+
+		Context("using emptyDir as storage", func() {
+			It("should mount an emptyDir into the main container if useEmptyDir is set", func() {
+				// given
+				clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				volumes := statefulSet.Spec.Template.Spec.Volumes
+				Expect(volumes).To(HaveLen(3))
+				Expect(volumes).To(haveExactly(1, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
+
+				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
+				Expect(mainContainerVolumeMounts).To(HaveLen(3))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name), "/var/lib/cassandra")))
+			})
+
+			It("should mount the configuration and extra-lib volumes in the main container", func() {
+				// given
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
+
+				// then
+				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
+				Expect(mainContainerVolumeMounts).To(HaveLen(3))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("configuration", "/etc/cassandra")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("extra-lib", "/extra-lib")))
+			})
+		})
 	})
 
-	It("should mount an emptyDir into the main container if useEmptyDir is set", func() {
-		// given
-		clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
-		clusterDef.Spec.Pod.StorageSize = resource.MustParse("0")
-		cluster := ACluster(clusterDef)
+	Describe("Affinity rules", func() {
+		It("should define zone specific affinity rules if useEmptyDir is not set", func() {
+			// given
+			cluster := ACluster(clusterDef)
 
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
-		// then
-		volumes := statefulSet.Spec.Template.Spec.Volumes
-		Expect(volumes).To(HaveLen(3))
-		Expect(volumes).To(haveExactly(1, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name))))
+			// then
+			nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
+			Expect(nodeAffinity).NotTo(BeNil())
+			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+			Expect(nodeSelectorTerms).To(HaveLen(1))
+			matchExpr := nodeSelectorTerms[0].MatchExpressions[0]
+			Expect(matchExpr.Key).To(Equal("failure-domain.beta.kubernetes.io/zone"))
+			Expect(matchExpr.Values).To(ConsistOf([]string{cluster.Racks()[0].Zone}))
+		})
 
-		mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
-		Expect(mainContainerVolumeMounts).To(HaveLen(3))
-		Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%s", clusterDef.Name), "/var/lib/cassandra")))
-	})
+		It("should not define zone specific affinity rules if useEmptyDir is set", func() {
+			// given
+			clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
+			cluster := ACluster(clusterDef)
 
-	It("should mount the configuration and extra-lib volumes in the main container", func() {
-		// given
-		cluster := ACluster(clusterDef)
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
 
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
-
-		// then
-		mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
-		Expect(mainContainerVolumeMounts).To(HaveLen(3))
-		Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("configuration", "/etc/cassandra")))
-		Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("extra-lib", "/extra-lib")))
-	})
-
-	It("should define zone specific affinity rules if useEmptyDir is not set", func() {
-		// given
-		cluster := ACluster(clusterDef)
-
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
-
-		// then
-		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
-		Expect(nodeAffinity).NotTo(BeNil())
-		nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-		Expect(nodeSelectorTerms).To(HaveLen(1))
-		matchExpr := nodeSelectorTerms[0].MatchExpressions[0]
-		Expect(matchExpr.Key).To(Equal("failure-domain.beta.kubernetes.io/zone"))
-		Expect(matchExpr.Values).To(ConsistOf([]string{cluster.Racks()[0].Zone}))
-	})
-
-	It("should not define zone specific affinity rules if useEmptyDir is set", func() {
-		// given
-		clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
-		cluster := ACluster(clusterDef)
-
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], configMap)
-
-		// then
-		nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
-		Expect(nodeAffinity).To(BeNil())
+			// then
+			nodeAffinity := statefulSet.Spec.Template.Spec.Affinity.NodeAffinity
+			Expect(nodeAffinity).To(BeNil())
+		})
 	})
 
 	Context("a cluster with a custom configMap is created", func() {
@@ -394,7 +416,7 @@ var _ = Describe("modification of stateful sets", func() {
 		clusterDef = &v1alpha1.Cassandra{
 			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
 			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks: []v1alpha1.Rack{rackSpec("a"), rackSpec("b")},
 				Pod: v1alpha1.Pod{
 					Resources: coreV1.ResourceRequirements{
 						Requests: coreV1.ResourceList{
@@ -406,7 +428,6 @@ var _ = Describe("modification of stateful sets", func() {
 							coreV1.ResourceCPU:    resource.MustParse("100m"),
 						},
 					},
-					StorageSize: resource.MustParse("1Gi"),
 				},
 			},
 		}
@@ -420,16 +441,16 @@ var _ = Describe("modification of stateful sets", func() {
 
 		BeforeEach(func() {
 			unmodifiedStatefulSet = &appsv1.StatefulSet{
-				TypeMeta: metaV1.TypeMeta{Kind: "statefulset", APIVersion:"v1beta2"},
+				TypeMeta:   metaV1.TypeMeta{Kind: "statefulset", APIVersion: "v1beta2"},
 				ObjectMeta: metaV1.ObjectMeta{Name: "current-statefulset", Namespace: NAMESPACE},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas:    ptr.Int32(1),
+					Replicas: ptr.Int32(1),
 				},
-				Status:appsv1.StatefulSetStatus{
+				Status: appsv1.StatefulSetStatus{
 					Replicas: 1,
 					Conditions: []appsv1.StatefulSetCondition{
 						{
-							Status: coreV1.ConditionTrue,
+							Status:  coreV1.ConditionTrue,
 							Message: "this is ready",
 						},
 					},
@@ -554,7 +575,7 @@ var _ = Describe("creation of snapshot job", func() {
 		clusterDef = &v1alpha1.Cassandra{
 			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
 			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
 					Resources: coreV1.ResourceRequirements{
 						Requests: coreV1.ResourceList{
@@ -566,7 +587,6 @@ var _ = Describe("creation of snapshot job", func() {
 							coreV1.ResourceCPU:    resource.MustParse("100m"),
 						},
 					},
-					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{
 					Schedule:       "01 23 * * *",
@@ -690,7 +710,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		clusterDef = &v1alpha1.Cassandra{
 			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
 			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
 					Resources: coreV1.ResourceRequirements{
 						Requests: coreV1.ResourceList{
@@ -702,7 +722,6 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 							coreV1.ResourceCPU:    resource.MustParse("100m"),
 						},
 					},
-					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{
 					Schedule:       "1 23 * * *",

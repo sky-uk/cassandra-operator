@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/robfig/cron"
@@ -46,32 +47,75 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 
 	useEmptyDir := *c.Spec.UseEmptyDir
 	for _, rack := range c.Spec.Racks {
-		fldPath = fldPath.Child(rack.Name)
-		allErrs = validateUnsignedInt(allErrs, fldPath.Child("Replicas"), rack.Replicas, 1)
-		if rack.StorageClass == "" && !useEmptyDir {
+		rackFieldPath := fldPath.Child(rack.Name)
+		allErrs = validateUnsignedInt(allErrs, rackFieldPath.Child("Replicas"), rack.Replicas, 1)
+		if len(rack.Storage) == 0 {
 			allErrs = append(
 				allErrs,
 				field.Required(
-					fldPath.Child("StorageClass"),
-					"because spec.useEmptyDir is false",
+					rackFieldPath.Child("Storage"),
+					"at least one storage is required",
 				),
 			)
 		}
-		if rack.StorageClass != "" && useEmptyDir {
+		if len(rack.Storage) > 1 {
 			allErrs = append(
 				allErrs,
-				field.Invalid(
-					fldPath.Child("StorageClass"),
-					rack.StorageClass,
-					"must be set to \"\" when spec.useEmptyDir is true",
+				field.Forbidden(
+					rackFieldPath.Child("Storage"),
+					"no more than one storage per rack is allowed",
 				),
 			)
 		}
+
+		for i := range rack.Storage {
+			storage := rack.Storage[i]
+			storageFieldPath := rackFieldPath.Child("Storage").Index(i)
+			if storage.Path == nil {
+				allErrs = append(
+					allErrs,
+					field.Required(
+						storageFieldPath.Child("Path"),
+						"a volume path is required",
+					),
+				)
+			}
+			if storage.PersistentVolumeClaim != nil && storage.EmptyDir != nil {
+				allErrs = append(
+					allErrs,
+					field.Forbidden(
+						storageFieldPath,
+						"only one storage source per storage is allowed",
+					),
+				)
+			}
+			if storage.PersistentVolumeClaim == nil && storage.EmptyDir == nil {
+				allErrs = append(
+					allErrs,
+					field.Required(
+						storageFieldPath,
+						"one storage source is required",
+					),
+				)
+			}
+			if storage.PersistentVolumeClaim != nil {
+				if _, ok := storage.PersistentVolumeClaim.Resources.Requests[coreV1.ResourceStorage]; !ok {
+					allErrs = append(
+						allErrs,
+						field.Required(
+							storageFieldPath.Child("persistentVolumeClaim.resources[storage]"),
+							"a storage size is required",
+						),
+					)
+				}
+			}
+		}
+
 		if rack.Zone == "" && !useEmptyDir {
 			allErrs = append(
 				allErrs,
 				field.Required(
-					fldPath.Child("Zone"),
+					rackFieldPath.Child("Zone"),
 					"because spec.useEmptyDir is false",
 				),
 			)
@@ -80,7 +124,7 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 			allErrs = append(
 				allErrs,
 				field.Invalid(
-					fldPath.Child("Zone"),
+					rackFieldPath.Child("Zone"),
 					rack.Zone,
 					"must be set to \"\" when spec.useEmptyDir is true",
 				),
@@ -129,26 +173,6 @@ func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.Erro
 				fldPath.Child("Resources.Requests.Cpu"),
 				c.Spec.Pod.Resources.Requests.Cpu().String(),
 				fmt.Sprintf("must not be greater than spec.Pod.Resources.Limits.Cpu (%s)", c.Spec.Pod.Resources.Limits.Cpu().String()),
-			),
-		)
-	}
-	if !*c.Spec.UseEmptyDir && c.Spec.Pod.StorageSize.IsZero() {
-		allErrs = append(
-			allErrs,
-			field.Invalid(
-				fldPath.Child("StorageSize"),
-				c.Spec.Pod.StorageSize.String(),
-				"must be > 0 when spec.useEmptyDir is false",
-			),
-		)
-	}
-	if *c.Spec.UseEmptyDir && !c.Spec.Pod.StorageSize.IsZero() {
-		allErrs = append(
-			allErrs,
-			field.Invalid(
-				fldPath.Child("StorageSize"),
-				c.Spec.Pod.StorageSize.String(),
-				"must be 0 when spec.useEmptyDir is true",
 			),
 		)
 	}
@@ -368,33 +392,21 @@ func validatePodUpdate(fldPath *field.Path, old, new *v1alpha1.Pod) field.ErrorL
 			),
 		)
 	}
-	if diff := old.StorageSize.Cmp(new.StorageSize); diff != 0 {
-		allErrs = append(
-			allErrs,
-			field.Forbidden(
-				fldPath.Child("StorageSize"),
-				fmt.Sprintf(
-					"This field can not be changed: current: %s, new: %s",
-					old.StorageSize.String(),
-					new.StorageSize.String(),
-				),
-			),
-		)
-	}
 	return allErrs
 }
 
 func validateRackUpdate(fldPath *field.Path, old, new *v1alpha1.Rack) field.ErrorList {
 	var allErrs field.ErrorList
-	if new.StorageClass != old.StorageClass {
+	// reject all storage updates until we know better
+	if !reflect.DeepEqual(new.Storage, old.Storage) {
 		allErrs = append(
 			allErrs,
 			field.Forbidden(
-				fldPath.Child("StorageClass"),
+				fldPath.Child("Storage"),
 				fmt.Sprintf(
 					"This field can not be changed: current: %v, new: %v",
-					old.StorageClass,
-					new.StorageClass,
+					old.Storage,
+					new.Storage,
 				),
 			),
 		)

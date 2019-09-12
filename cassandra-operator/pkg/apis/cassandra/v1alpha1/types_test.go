@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+	"fmt"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
@@ -28,7 +30,6 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when cpu limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("1") }),
 			Entry("when memory request value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
 			Entry("when memory limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
-			Entry("when storage size value is the same but using a different amount", func(pod, _ *Pod) { pod.StorageSize = resource.MustParse("1024Mi") }),
 		)
 
 		DescribeTable("inequality",
@@ -39,8 +40,6 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.SidecarImage = ptr.String("another image") }),
 			Entry("when one pod has a nil cassandra image", func(pod, _ *Pod) { pod.Image = nil }),
 			Entry("when pods have different cassandra images", func(pod, _ *Pod) { pod.Image = ptr.String("another image") }),
-			Entry("when one pod has no storage size", func(pod, _ *Pod) { pod.StorageSize = resource.Quantity{} }),
-			Entry("when pods have different storage sizes", func(pod, _ *Pod) { pod.StorageSize = resource.MustParse("10Gi") }),
 			Entry("when one pod has no cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
 			Entry("when one pod has no cpu limit", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
 			Entry("when pods have different number of cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("10") }),
@@ -90,14 +89,31 @@ var _ = Describe("Cassandra Types", func() {
 	Context("Rack", func() {
 		DescribeTable("equality",
 			rackEqualityCheck,
-			Entry("if all fields are equal", func(rack *Rack) {}),
+			Entry("all fields are equal", func(rack *Rack) {}),
+			// TODO work out whether we want to implement the low level comparaison logic given the multiple of fields there is
+			// and the fact that the object is not under our control (e.g new fields added in newever K8 versions)
+			PEntry("storage request value is the same but using a different amount", func(rack *Rack) {
+				rack.Storage[0].StorageSource.PersistentVolumeClaim.Resources.Requests[coreV1.ResourceStorage] = resource.MustParse("1Gi")
+			}),
 		)
 		DescribeTable("inequality",
 			rackInequalityCheck,
 			Entry("when one rack has a different name", func(rack *Rack) { rack.Name = "otherName" }),
 			Entry("when one rack has a different zone", func(rack *Rack) { rack.Zone = "otherZone" }),
-			Entry("when one rack has a different storage class", func(rack *Rack) { rack.StorageClass = "other Storage class" }),
+			Entry("when one rack has a different storage class", func(rack *Rack) {
+				rack.Storage[0].StorageSource.PersistentVolumeClaim.StorageClassName = ptr.String("other Storage class")
+			}),
 			Entry("when one rack has a different number of replicas", func(rack *Rack) { rack.Replicas = 10 }),
+			Entry("when one rack has a different volume type", func(rack *Rack) {
+				rack.Storage[0].StorageSource.PersistentVolumeClaim = nil
+				rack.Storage[0].StorageSource.EmptyDir = &coreV1.EmptyDirVolumeSource{}
+			}),
+			Entry("when one rack has a different storage size", func(rack *Rack) {
+				rack.Storage[0].StorageSource.PersistentVolumeClaim.Resources.Requests[coreV1.ResourceStorage] = resource.MustParse("2000m")
+			}),
+			Entry("when one rack has a different storage path", func(rack *Rack) {
+				rack.Storage[0].Path = ptr.String("anotherpath")
+			}),
 		)
 	})
 
@@ -144,6 +160,106 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one cassandra has a different pod spec", func(cass *CassandraSpec) { cass.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("30") }),
 		)
 	})
+
+	Describe("Unmarshalling Cassandra spec", func() {
+		It("should unmarshall pod spec with resource requirements", func() {
+			cassandraDef := `
+{
+        "pod": {
+            "image": "cassandra:3.11",
+            "resources": {
+                "limits": {
+                    "memory": "2Gi"
+                },
+                "requests": {
+                    "cpu": "1m",
+                    "memory": "1Gi"
+                }
+            },
+            "storageSize": "0"
+        }
+}
+`
+			cassandra := CassandraSpec{}
+			err := json.Unmarshal([]byte(cassandraDef), &cassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*cassandra.Pod.Image).To(Equal("cassandra:3.11"))
+			Expect(cassandra.Pod.Resources.Requests.Cpu().String()).To(Equal("1m"))
+			Expect(cassandra.Pod.Resources.Requests.Memory().String()).To(Equal("1Gi"))
+			Expect(cassandra.Pod.Resources.Limits).To(HaveKey(coreV1.ResourceMemory))
+			Expect(cassandra.Pod.Resources.Limits.Memory().String()).To(Equal("2Gi"))
+			Expect(cassandra.Pod.Resources.Limits).To(Not(HaveKey(coreV1.ResourceCPU)))
+		})
+
+		It("should unmarshall rack spec with empty dir storage", func() {
+			cassandraDef := `
+   {
+        "racks": [
+            {
+                "name": "a",
+                "replicas": 1,
+                "storage": [
+                    {
+                        "emptyDir": {},
+                        "path": "/var/lib/cassandra"
+                    }
+                ],
+                "storageClass": "",
+                "zone": ""
+            }
+        ],
+        "useEmptyDir": true
+    }`
+			cassandra := CassandraSpec{}
+			err := json.Unmarshal([]byte(cassandraDef), &cassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cassandra.Racks).To(HaveLen(1))
+			Expect(cassandra.Racks[0].Storage).To(HaveLen(1))
+			Expect(cassandra.Racks[0].Storage[0].Path).To(Equal(ptr.String("/var/lib/cassandra")))
+			Expect(cassandra.Racks[0].Storage[0].StorageSource).NotTo(BeNil())
+			Expect(cassandra.Racks[0].Storage[0].StorageSource.PersistentVolumeClaim).To(BeNil())
+			Expect(cassandra.Racks[0].Storage[0].StorageSource.EmptyDir).NotTo(BeNil())
+		})
+
+		It("should unmarshall a rack spec with persistent volume", func() {
+			cassandraDef := `
+   {
+        "racks": [
+            {
+                "name": "a",
+                "replicas": 1,
+                "storage": [
+                    {
+                        "path": "/var/lib/cassandra",
+                        "persistentVolumeClaim": {
+                            "resources": {
+                                "requests": {
+                                    "storage": "1Gi"
+                                }
+                            },
+                            "storageClassName": "standard-zone-a"
+                        }
+                    }
+                ],
+                "storageClass": "unused",
+                "zone": "eu-west-1a"
+            }
+        ]
+    }`
+
+			cassandra := CassandraSpec{}
+			err := json.Unmarshal([]byte(cassandraDef), &cassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cassandra.Racks).To(HaveLen(1))
+			Expect(cassandra.Racks[0].Storage).To(HaveLen(1))
+			Expect(cassandra.Racks[0].Storage[0].Path).To(Equal(ptr.String("/var/lib/cassandra")))
+			Expect(cassandra.Racks[0].Storage[0].StorageSource).NotTo(BeNil())
+			pvcSpec := cassandra.Racks[0].Storage[0].StorageSource.PersistentVolumeClaim
+			Expect(pvcSpec).NotTo(BeNil())
+			Expect(pvcSpec.Resources.Requests[coreV1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+			Expect(*pvcSpec.StorageClassName).To(Equal("standard-zone-a"))
+		})
+	})
 })
 
 func cassandraEqualityCheck(mutate func(cassandra *CassandraSpec)) {
@@ -172,7 +288,7 @@ func cassandraComparisonCheck(mutate func(cassandra *CassandraSpec), expectCheck
 
 	mutate(cassandra1)
 
-	Expect(expectCheck(cassandra1, cassandra2)).To(BeTrue())
+	Expect(expectCheck(cassandra1, cassandra2)).To(BeTrue(), fmt.Sprintf("Cassandra1: %v\n Cassandra2: %v", cassandra1, cassandra2))
 }
 
 func snapshotEqualityCheck(mutate func(snapshot *Snapshot)) {
@@ -195,7 +311,7 @@ func snapshotComparisonCheck(mutate func(snapshot *Snapshot), expectCheck func(s
 
 	mutate(snapshot1)
 
-	Expect(expectCheck(snapshot1, snapshot2)).To(BeTrue())
+	Expect(expectCheck(snapshot1, snapshot2)).To(BeTrue(), fmt.Sprintf("Snapshot1: %v\n Snapshot2: %v", snapshot1, snapshot2))
 }
 
 func rackEqualityCheck(mutate func(rack *Rack)) {
@@ -218,7 +334,7 @@ func rackComparisonCheck(mutate func(rack *Rack), expectCheck func(rack, otherRa
 
 	mutate(rack1)
 
-	Expect(expectCheck(rack1, rack2)).To(BeTrue())
+	Expect(expectCheck(rack1, rack2)).To(BeTrue(), fmt.Sprintf("Rack1: %v\n Rack2: %v", rack1, rack2))
 }
 func podEqualityCheck(mutate func(pod, otherPod *Pod)) {
 	podsEqual := func(pod, otherPod *Pod) bool {
@@ -258,7 +374,6 @@ func podSpec() *Pod {
 				coreV1.ResourceCPU:    resource.MustParse("1000m"),
 			},
 		},
-		StorageSize: resource.MustParse("1Gi"),
 		LivenessProbe: &Probe{
 			SuccessThreshold:    ptr.Int32(1),
 			PeriodSeconds:       ptr.Int32(2),
@@ -278,10 +393,23 @@ func podSpec() *Pod {
 
 func rackSpec(name string) *Rack {
 	return &Rack{
-		Name:         name,
-		Zone:         "storage Zone",
-		StorageClass: "storage Class",
-		Replicas:     1,
+		Name:     name,
+		Zone:     "storage Zone",
+		Replicas: 1,
+		Storage: []Storage{
+			{
+				Path: ptr.String("/var/lib/cassandra"),
+				StorageSource: StorageSource{
+					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
+						Resources: coreV1.ResourceRequirements{
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceStorage: resource.MustParse("1000m"),
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

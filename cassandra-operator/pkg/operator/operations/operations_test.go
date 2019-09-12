@@ -44,7 +44,7 @@ var _ = Describe("operations to execute based on event", func() {
 		oldClusterDef = &v1alpha1.Cassandra{
 			ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
 			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
 				Pod: v1alpha1.Pod{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -54,7 +54,6 @@ var _ = Describe("operations to execute based on event", func() {
 							corev1.ResourceMemory: resource.MustParse("1Gi"),
 						},
 					},
-					StorageSize: resource.MustParse("1Gi"),
 				},
 				Snapshot: &v1alpha1.Snapshot{
 					Schedule:       "2 * * * *",

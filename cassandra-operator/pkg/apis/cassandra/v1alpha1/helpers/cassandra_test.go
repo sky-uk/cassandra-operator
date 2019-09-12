@@ -21,13 +21,16 @@ func TestHelpers(t *testing.T) {
 
 var _ = Describe("Cassandra Helpers", func() {
 
-	Context("Cassandra.Spec", func() {
+	Describe("Cassandra.Spec", func() {
 		var clusterDef *v1alpha1.Cassandra
 		BeforeEach(func() {
 			clusterDef = &v1alpha1.Cassandra{
 				ObjectMeta: metaV1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
 				Spec: v1alpha1.CassandraSpec{
-					Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}, {Name: "b", Replicas: 1, StorageClass: "some-storage", Zone: "some-zone"}},
+					Racks: []v1alpha1.Rack{
+						rackWithPersistentVolume("a"),
+						rackWithPersistentVolume("b"),
+					},
 					Pod: v1alpha1.Pod{
 						Resources: coreV1.ResourceRequirements{
 							Requests: coreV1.ResourceList{
@@ -39,13 +42,12 @@ var _ = Describe("Cassandra Helpers", func() {
 								coreV1.ResourceCPU:    resource.MustParse("100m"),
 							},
 						},
-						StorageSize: resource.MustParse("1Gi"),
 					},
 				},
 			}
 		})
 
-		Context("Snapshot", func() {
+		Describe("Defaulting Snapshot", func() {
 			Context("TimeoutSeconds", func() {
 				It("should default to 10", func() {
 					clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{}
@@ -137,7 +139,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Context("Defaulting datacenter", func() {
+		Describe("Defaulting datacenter", func() {
 			It("should default Datacenter to dc1", func() {
 				clusterDef.Spec.Datacenter = nil
 				SetDefaultsForCassandra(clusterDef)
@@ -150,7 +152,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Context("Defaulting useEmptyDir", func() {
+		Describe("Defaulting useEmptyDir", func() {
 			It("should default UseEmptyDir to false", func() {
 				clusterDef.Spec.UseEmptyDir = nil
 				SetDefaultsForCassandra(clusterDef)
@@ -163,7 +165,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Context("Defaulting images", func() {
+		Describe("Defaulting images", func() {
 			It("should use the 3.11 version of the apache cassandra image if one is not supplied for the cluster", func() {
 				clusterDef.Spec.Pod.Image = nil
 				SetDefaultsForCassandra(clusterDef)
@@ -219,7 +221,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Context("Defaulting liveness probe", func() {
+		Describe("Defaulting liveness probe", func() {
 			It("should set the default liveness probe values if it is not configured for the cluster", func() {
 				clusterDef.Spec.Pod.LivenessProbe = nil
 				SetDefaultsForCassandra(clusterDef)
@@ -257,7 +259,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Context("Defaulting readiness probe", func() {
+		Describe("Defaulting readiness probe", func() {
 
 			It("should set the default readiness probe values if it is not configured for the cluster", func() {
 				clusterDef.Spec.Pod.ReadinessProbe = nil
@@ -296,9 +298,39 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
+		Describe("Defaulting storage", func() {
+			It("should set access mode to read/write once when not set", func() {
+				clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes = nil
+
+				SetDefaultsForCassandra(clusterDef)
+				Expect(clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes).To(ConsistOf(coreV1.ReadWriteOnce))
+			})
+
+			It("should preserve access mode when already set", func() {
+				clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes = []coreV1.PersistentVolumeAccessMode{coreV1.ReadWriteMany}
+
+				SetDefaultsForCassandra(clusterDef)
+				Expect(clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes).To(ConsistOf(coreV1.ReadWriteMany))
+			})
+
+			It("should preserve path when set", func() {
+				clusterDef.Spec.Racks[0].Storage[0].Path = ptr.String("/custom-cassandra-home")
+
+				SetDefaultsForCassandra(clusterDef)
+				Expect(*clusterDef.Spec.Racks[0].Storage[0].Path).To(Equal("/custom-cassandra-home"))
+			})
+
+			It("should set path to default cassandra installation when not set", func() {
+				clusterDef.Spec.Racks[0].Storage[0].Path = nil
+
+				SetDefaultsForCassandra(clusterDef)
+				Expect(*clusterDef.Spec.Racks[0].Storage[0].Path).To(Equal("/var/lib/cassandra"))
+			})
+		})
+
 	})
 
-	Context("Snapshot Retention", func() {
+	Describe("Snapshot Retention", func() {
 		var snapshot *v1alpha1.Snapshot
 		BeforeEach(func() {
 			snapshot = &v1alpha1.Snapshot{
@@ -334,7 +366,7 @@ var _ = Describe("Cassandra Helpers", func() {
 		})
 	})
 
-	Context("Snapshot Properties", func() {
+	Describe("Snapshot Properties", func() {
 		var (
 			snapshotTimeout = int32(10)
 			snapshot1       *v1alpha1.Snapshot
@@ -404,7 +436,7 @@ var _ = Describe("Cassandra Helpers", func() {
 		})
 	})
 
-	Context("Snapshot Cleanup Properties", func() {
+	Describe("Snapshot Cleanup Properties", func() {
 		var (
 			cleanupTimeout = int32(10)
 			snapshot1      *v1alpha1.Snapshot
@@ -486,3 +518,27 @@ var _ = Describe("Cassandra Helpers", func() {
 		})
 	})
 })
+
+func rackWithPersistentVolume(name string) v1alpha1.Rack {
+	return v1alpha1.Rack{
+		Name:     name,
+		Zone:     "storage Zone",
+		Replicas: 1,
+		Storage: []v1alpha1.Storage{
+			{
+				Path: ptr.String("/var/lib/cassandra"),
+				StorageSource: v1alpha1.StorageSource{
+					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
+						AccessModes: []coreV1.PersistentVolumeAccessMode{coreV1.ReadWriteOnce},
+						Resources: coreV1.ResourceRequirements{
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceStorage: resource.MustParse("1000m"),
+							},
+						},
+						StorageClassName: ptr.String("standard-zone"),
+					},
+				},
+			},
+		},
+	}
+}
