@@ -33,7 +33,7 @@ func defineCluster(multipleNodeClusterName string) *TestCluster {
 }
 
 func createCluster(multipleNodeCluster *TestCluster) {
-	AClusterWithName(multipleNodeCluster.Name).AndRacks(multipleNodeCluster.Racks).UsingEmptyDir().Exists()
+	AClusterWithName(multipleNodeCluster.Name).AndRacks(multipleNodeCluster.Racks).Exists()
 }
 
 var _ = SequentialTestBeforeSuite(func() {

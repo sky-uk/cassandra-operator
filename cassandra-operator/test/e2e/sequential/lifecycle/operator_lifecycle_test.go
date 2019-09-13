@@ -52,7 +52,7 @@ var _ = Context("When an operator is restarted", func() {
 
 	It("should detect a cluster exists", func() {
 		// given
-		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).Exists()
 
 		// when
 		theOperatorIsRestarted()

@@ -44,7 +44,6 @@ func SnapshotCleanupPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v
 
 func SetDefaultsForCassandra(clusterDefinition *v1alpha1.Cassandra) {
 	setDefaultsForDatacenter(clusterDefinition)
-	setDefaultsForUseEmptyDir(clusterDefinition)
 	setDefaultsForSnapshot(clusterDefinition.Spec.Snapshot)
 	setDefaultsForImages(clusterDefinition)
 	setDefaultsForProbes(clusterDefinition)
@@ -67,12 +66,6 @@ func setDefaultsForStorage(clusterDefinition *v1alpha1.Cassandra) {
 func setDefaultsForDatacenter(clusterDefinition *v1alpha1.Cassandra) {
 	if clusterDefinition.Spec.Datacenter == nil {
 		clusterDefinition.Spec.Datacenter = ptr.String(v1alpha1.DefaultDatacenterName)
-	}
-}
-
-func setDefaultsForUseEmptyDir(clusterDefinition *v1alpha1.Cassandra) {
-	if clusterDefinition.Spec.UseEmptyDir == nil {
-		clusterDefinition.Spec.UseEmptyDir = ptr.Bool(false)
 	}
 }
 

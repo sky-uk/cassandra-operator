@@ -41,7 +41,6 @@ type ClusterBuilder struct {
 	clusterName         string
 	racks               []v1alpha1.Rack
 	extraConfigFile     *ExtraConfigFile
-	useEmptyDir         bool
 	clusterSpec         *v1alpha1.CassandraSpec
 	withoutCustomConfig bool
 	snapshot            *v1alpha1.Snapshot
@@ -55,7 +54,6 @@ type RackSpecBuilder struct {
 	rackName string
 	replicas int32
 	storages []v1alpha1.Storage
-	emptyDir bool
 }
 
 type EmptyDirStorageBuilder struct {
@@ -90,11 +88,6 @@ func (c *ClusterBuilder) AndCustomConfig(extraConfigFile *ExtraConfigFile) *Clus
 	return c
 }
 
-func (c *ClusterBuilder) UsingEmptyDir() *ClusterBuilder {
-	c.useEmptyDir = true
-	return c
-}
-
 func (c *ClusterBuilder) AndClusterSpec(clusterSpec *v1alpha1.CassandraSpec) *ClusterBuilder {
 	c.clusterSpec = clusterSpec
 	return c
@@ -117,10 +110,6 @@ func (c *ClusterBuilder) IsDefined() {
 
 	c.clusterSpec.Racks = c.racks
 	c.clusterSpec.Snapshot = c.snapshot
-
-	if c.useEmptyDir {
-		c.clusterSpec.UseEmptyDir = ptr.Bool(true)
-	}
 
 	if !c.withoutCustomConfig {
 		_, err := customCassandraConfigMap(Namespace, c.clusterName, c.extraConfigFile)
@@ -248,29 +237,15 @@ func (r *RackSpecBuilder) WithPersistentVolume() *RackSpecBuilder {
 func (r *RackSpecBuilder) WithStorage(storageBuilder StorageBuilder) *RackSpecBuilder {
 	storage := storageBuilder.Build()
 	r.storages = append(r.storages, storage)
-	// TODO remove this hack along with spec.useEmptyDir
-	if storage.EmptyDir != nil {
-		r.emptyDir = true
-	}
 	return r
 }
 
 func (r *RackSpecBuilder) Build() v1alpha1.Rack {
-	// TODO simplify once rules around zone and storage class when spec.useEmptyDir no longer apply
-	if r.emptyDir {
-		return v1alpha1.Rack{
-			Name:     r.rackName,
-			Replicas: r.replicas,
-			Zone:     "",
-			Storage:  r.storages,
-		}
-	} else {
-		return v1alpha1.Rack{
-			Name:     r.rackName,
-			Replicas: r.replicas,
-			Zone:     fmt.Sprintf("%s%s", dataCenterRegion, r.rackName),
-			Storage:  r.storages,
-		}
+	return v1alpha1.Rack{
+		Name:     r.rackName,
+		Replicas: r.replicas,
+		Zone:     fmt.Sprintf("%s%s", dataCenterRegion, r.rackName),
+		Storage:  r.storages,
 	}
 }
 
@@ -301,8 +276,7 @@ func SnapshotSchedule(cron string) *v1alpha1.Snapshot {
 
 func clusterDefaultSpec() *v1alpha1.CassandraSpec {
 	return &v1alpha1.CassandraSpec{
-		Racks:       []v1alpha1.Rack{},
-		UseEmptyDir: ptr.Bool(false),
+		Racks: []v1alpha1.Rack{},
 		Pod: v1alpha1.Pod{
 			BootstrapperImage: &CassandraBootstrapperImageName,
 			SidecarImage:      &CassandraSidecarImageName,

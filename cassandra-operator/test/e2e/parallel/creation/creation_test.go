@@ -94,7 +94,7 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 		},
 	}).AndRacks(multipleRacksCluster.Racks).AndCustomConfig(extraFile).IsDefined()
 
-	AClusterWithName(emptyDirCluster.Name).AndRacks(emptyDirCluster.Racks).UsingEmptyDir().WithoutCustomConfig().IsDefined()
+	AClusterWithName(emptyDirCluster.Name).AndRacks(emptyDirCluster.Racks).WithoutCustomConfig().IsDefined()
 }
 
 var _ = ParallelTestBeforeSuite(func() []TestCluster {

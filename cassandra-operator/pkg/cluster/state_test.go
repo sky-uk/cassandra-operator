@@ -268,7 +268,6 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 
 func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
 	cassandra := aClusterDefinition()
-	cassandra.Spec.UseEmptyDir = ptr.Bool(true)
 	cassandra.Spec.Racks = []v1alpha1.Rack{{
 		Name:     "a",
 		Replicas: 1,
@@ -300,6 +299,22 @@ func rackSpec(name string) v1alpha1.Rack {
 							},
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+func rackSpecWithEmptyDir(name string) v1alpha1.Rack {
+	return v1alpha1.Rack{
+		Name:     name,
+		Zone:     "storage Zone",
+		Replicas: 1,
+		Storage: []v1alpha1.Storage{
+			{
+				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
+				StorageSource: v1alpha1.StorageSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
 		},

@@ -36,7 +36,7 @@ var _ = Context("Cluster untriggered modifications", func() {
 		// given
 		registerResourcesUsed(2)
 		racks := []v1alpha1.Rack{RackWithEmptyDir("a", 1), RackWithEmptyDir("b", 1)}
-		AClusterWithName(clusterName).AndRacks(racks).UsingEmptyDir().Exists()
+		AClusterWithName(clusterName).AndRacks(racks).Exists()
 
 		// when
 		aNodeIsOffline(Namespace, PodName(clusterName, "b", 0))

@@ -45,7 +45,6 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 		return allErrs
 	}
 
-	useEmptyDir := *c.Spec.UseEmptyDir
 	for _, rack := range c.Spec.Racks {
 		rackFieldPath := fldPath.Child(rack.Name)
 		allErrs = validateUnsignedInt(allErrs, rackFieldPath.Child("Replicas"), rack.Replicas, 1)
@@ -109,26 +108,6 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 					)
 				}
 			}
-		}
-
-		if rack.Zone == "" && !useEmptyDir {
-			allErrs = append(
-				allErrs,
-				field.Required(
-					rackFieldPath.Child("Zone"),
-					"because spec.useEmptyDir is false",
-				),
-			)
-		}
-		if rack.Zone != "" && useEmptyDir {
-			allErrs = append(
-				allErrs,
-				field.Invalid(
-					rackFieldPath.Child("Zone"),
-					rack.Zone,
-					"must be set to \"\" when spec.useEmptyDir is true",
-				),
-			)
 		}
 	}
 	return allErrs
@@ -321,19 +300,6 @@ func ValidateCassandraUpdate(old, new *v1alpha1.Cassandra) field.ErrorList {
 					"This field can not be changed: current: %q, new: %q",
 					*old.Spec.Datacenter,
 					*new.Spec.Datacenter,
-				),
-			),
-		)
-	}
-	if *old.Spec.UseEmptyDir != *new.Spec.UseEmptyDir {
-		allErrs = append(
-			allErrs,
-			field.Forbidden(
-				fldPath.Child("UseEmptyDir"),
-				fmt.Sprintf(
-					"This field can not be changed: current: %v, new: %v",
-					*old.Spec.UseEmptyDir,
-					*new.Spec.UseEmptyDir,
 				),
 			),
 		)

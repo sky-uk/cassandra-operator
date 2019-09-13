@@ -62,9 +62,7 @@ type CassandraSpec struct {
 	// +optional
 	Datacenter *string `json:"datacenter,omitempty"`
 	Racks      []Rack  `json:"racks"`
-	// +optional
-	UseEmptyDir *bool `json:"useEmptyDir,omitempty"`
-	Pod         Pod   `json:"pod"`
+	Pod        Pod     `json:"pod"`
 	// +optional
 	Snapshot *Snapshot `json:"snapshot,omitempty"`
 }
@@ -203,7 +201,6 @@ func (c *Cassandra) CustomConfigMapName() string {
 // Equal checks equality of two CassandraSpecs. This is useful for checking equality with cmp.Equal
 func (cs CassandraSpec) Equal(other CassandraSpec) bool {
 	return reflect.DeepEqual(cs.Datacenter, other.Datacenter) &&
-		reflect.DeepEqual(cs.UseEmptyDir, other.UseEmptyDir) &&
 		cmp.Equal(sortedRacks(cs.Racks), sortedRacks(other.Racks)) &&
 		cmp.Equal(cs.Pod, other.Pod) &&
 		cmp.Equal(cs.Snapshot, other.Snapshot)

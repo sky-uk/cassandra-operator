@@ -51,7 +51,6 @@ func (cass *currentClusterStateFinder) findClusterStateFor(desiredCassandra *v1a
 	if err != nil {
 		return nil, err
 	}
-	useEmptyDir := cass.hasStorageAsEmptyDir(desiredCassandra.StorageVolumeName(), anyRack)
 
 	cassandra := &v1alpha1.Cassandra{
 		ObjectMeta: metav1.ObjectMeta{
@@ -59,10 +58,9 @@ func (cass *currentClusterStateFinder) findClusterStateFor(desiredCassandra *v1a
 			Name:      desiredCassandra.Name,
 		},
 		Spec: v1alpha1.CassandraSpec{
-			Datacenter:  ptr.String(datacenter),
-			Racks:       racks,
-			Pod:         *pod,
-			UseEmptyDir: ptr.Bool(useEmptyDir),
+			Datacenter: ptr.String(datacenter),
+			Racks:      racks,
+			Pod:        *pod,
 		},
 	}
 	return cassandra, nil
@@ -172,15 +170,6 @@ func (cass *currentClusterStateFinder) initContainerWithName(name string, statef
 		}
 	}
 	return nil, fmt.Errorf("no init container with name %s found in statefulset %s", name, statefulSet.Name)
-}
-
-func (cass *currentClusterStateFinder) hasStorageAsEmptyDir(name string, statefulSet *v1beta2.StatefulSet) bool {
-	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
-		if volume.Name == name && volume.EmptyDir != nil {
-			return true
-		}
-	}
-	return false
 }
 
 func (cass *currentClusterStateFinder) buildProbeFrom(probe *corev1.Probe) *v1alpha1.Probe {

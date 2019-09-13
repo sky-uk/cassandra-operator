@@ -151,7 +151,6 @@ var _ = Describe("Cassandra Types", func() {
 		DescribeTable("inequality",
 			cassandraInequalityCheck,
 			Entry("when one cassandra has a different datacenter", func(cass *CassandraSpec) { cass.Datacenter = ptr.String("otherDc") }),
-			Entry("when one cassandra has empty dir enabled", func(cass *CassandraSpec) { cass.UseEmptyDir = ptr.Bool(true) }),
 			Entry("when one cassandra has no racks", func(cass *CassandraSpec) { cass.Racks = nil }),
 			Entry("when one cassandra has an empty racks list", func(cass *CassandraSpec) { cass.Racks = []Rack{} }),
 			Entry("when one cassandra has a different number of racks", func(cass *CassandraSpec) { cass.Racks = []Rack{*rackSpec("a")} }),
@@ -204,11 +203,9 @@ var _ = Describe("Cassandra Types", func() {
                         "path": "/var/lib/cassandra"
                     }
                 ],
-                "storageClass": "",
                 "zone": ""
             }
-        ],
-        "useEmptyDir": true
+        ]
     }`
 			cassandra := CassandraSpec{}
 			err := json.Unmarshal([]byte(cassandraDef), &cassandra)
@@ -241,7 +238,6 @@ var _ = Describe("Cassandra Types", func() {
                         }
                     }
                 ],
-                "storageClass": "unused",
                 "zone": "eu-west-1a"
             }
         ]
@@ -278,11 +274,10 @@ func cassandraInequalityCheck(mutate func(cassandra *CassandraSpec)) {
 
 func cassandraComparisonCheck(mutate func(cassandra *CassandraSpec), expectCheck func(cassandra, otherCassandraSpec *CassandraSpec) bool) {
 	cassandra1 := &CassandraSpec{
-		Datacenter:  ptr.String("dc"),
-		UseEmptyDir: ptr.Bool(false),
-		Pod:         *podSpec(),
-		Racks:       []Rack{*rackSpec("a"), *rackSpec("b")},
-		Snapshot:    snapshotSpec(),
+		Datacenter: ptr.String("dc"),
+		Pod:        *podSpec(),
+		Racks:      []Rack{*rackSpec("a"), *rackSpec("b")},
+		Snapshot:   snapshotSpec(),
 	}
 	cassandra2 := cassandra1.DeepCopy()
 

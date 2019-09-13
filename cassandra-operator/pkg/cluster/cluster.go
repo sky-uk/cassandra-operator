@@ -135,7 +135,7 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 						c.createCassandraContainer(rack),
 						c.createCassandraSidecarContainer(rack),
 					},
-					Volumes:  c.createPodVolumes(),
+					Volumes:  c.createPodVolumes(rack),
 					Affinity: c.createAffinityRules(rack),
 				},
 			},
@@ -171,9 +171,7 @@ func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
 				},
 			},
 		},
-	}
-	if !*c.definition.Spec.UseEmptyDir {
-		affinity.NodeAffinity = &v1.NodeAffinity{
+		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
@@ -187,7 +185,7 @@ func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
 					},
 				},
 			},
-		}
+		},
 	}
 	return &affinity
 }
@@ -463,23 +461,29 @@ func (c *Cluster) createEnvironmentVariableDefinition(rack *v1alpha1.Rack) []v1.
 func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1.Rack) []v1.PersistentVolumeClaim {
 	var persistentVolumeClaim []v1.PersistentVolumeClaim
 
-	// hardcoded to 1 storage for now
-	cassandraStorage := rack.Storage[0]
-	if cassandraStorage.PersistentVolumeClaim != nil {
-		persistentVolumeClaim = append(persistentVolumeClaim, v1.PersistentVolumeClaim{
-			ObjectMeta: c.objectMetadata(c.definition.StorageVolumeName(), RackLabel, rack.Name, "app", c.definition.Name),
-			Spec:       *cassandraStorage.StorageSource.PersistentVolumeClaim,
-		})
+	for i := range rack.Storage {
+		cassandraStorage := rack.Storage[i]
+		if cassandraStorage.PersistentVolumeClaim != nil {
+			persistentVolumeClaim = append(persistentVolumeClaim, v1.PersistentVolumeClaim{
+				ObjectMeta: c.objectMetadata(fmt.Sprintf("cassandra-storage-%d", i), RackLabel, rack.Name, "app", c.definition.Name),
+				Spec:       *cassandraStorage.StorageSource.PersistentVolumeClaim,
+			})
+		}
 	}
 	return persistentVolumeClaim
 }
 
 func (c *Cluster) createVolumeMounts(rack *v1alpha1.Rack) []v1.VolumeMount {
 	mounts := []v1.VolumeMount{
-		// hardcoded to 1 storage for now
-		{Name: c.definition.StorageVolumeName(), MountPath: *rack.Storage[0].Path},
 		{Name: configurationVolumeName, MountPath: configurationVolumeMountPath},
 		{Name: extraLibVolumeName, MountPath: extraLibVolumeMountPath},
+	}
+
+	for i := range rack.Storage {
+		mounts = append(mounts, v1.VolumeMount{
+			Name:      fmt.Sprintf("cassandra-storage-%d", i),
+			MountPath: *rack.Storage[i].Path,
+		})
 	}
 
 	return mounts
@@ -492,16 +496,17 @@ func (c *Cluster) createCustomConfigVolumeMount() v1.VolumeMount {
 	}
 }
 
-func (c *Cluster) createPodVolumes() []v1.Volume {
+func (c *Cluster) createPodVolumes(rack *v1alpha1.Rack) []v1.Volume {
 	volumes := []v1.Volume{
 		emptyDir("configuration"),
 		emptyDir("extra-lib"),
 	}
 
-	if *c.definition.Spec.UseEmptyDir {
-		volumes = append(volumes, emptyDir(c.definition.StorageVolumeName()))
+	for i := range rack.Storage {
+		if rack.Storage[i].EmptyDir != nil {
+			volumes = append(volumes, emptyDir(fmt.Sprintf("cassandra-storage-%d", i)))
+		}
 	}
-
 	return volumes
 }
 

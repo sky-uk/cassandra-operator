@@ -139,7 +139,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		registerResourcesUsed(3)
 		AClusterWithName(clusterName).
 			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1), RackWithEmptyDir("b", 1)}).
-			UsingEmptyDir().Exists()
+			Exists()
 
 		// when
 		TheRackReplicationIsChangedTo(Namespace, clusterName, "a", 2)
@@ -161,7 +161,7 @@ var _ = Context("Allowable cluster modifications", func() {
 	It("should create a new stateful set when a new rack is added to the cluster definition", func() {
 		// given
 		registerResourcesUsed(2)
-		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).UsingEmptyDir().Exists()
+		AClusterWithName(clusterName).AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).Exists()
 		rackAHash := ClusterConfigHashForRack(Namespace, clusterName, "a")
 
 		// when
@@ -193,7 +193,6 @@ var _ = Context("Allowable cluster modifications", func() {
 		registerResourcesUsed(1)
 		AClusterWithName(clusterName).
 			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
-			UsingEmptyDir().
 			AndClusterSpec(AClusterSpec().
 				WithPodResources(&coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
@@ -343,7 +342,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		It("should allow the cluster to be created once the invalid spec has been corrected", func() {
 			// given
 			registerResourcesUsed(1)
-			AClusterWithName(clusterName).WithoutRacks().UsingEmptyDir().WithoutCustomConfig().IsDefined()
+			AClusterWithName(clusterName).WithoutRacks().WithoutCustomConfig().IsDefined()
 
 			// when
 			ANewRackIsAddedForCluster(Namespace, clusterName, RackWithEmptyDir("a", 1))

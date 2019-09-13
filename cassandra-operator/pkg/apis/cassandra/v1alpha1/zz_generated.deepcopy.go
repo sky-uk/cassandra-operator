@@ -85,11 +85,6 @@ func (in *CassandraSpec) DeepCopyInto(out *CassandraSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.UseEmptyDir != nil {
-		in, out := &in.UseEmptyDir, &out.UseEmptyDir
-		*out = new(bool)
-		**out = **in
-	}
 	in.Pod.DeepCopyInto(&out.Pod)
 	if in.Snapshot != nil {
 		in, out := &in.Snapshot, &out.Snapshot

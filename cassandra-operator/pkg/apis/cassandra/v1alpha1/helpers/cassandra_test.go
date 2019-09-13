@@ -152,19 +152,6 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 		})
 
-		Describe("Defaulting useEmptyDir", func() {
-			It("should default UseEmptyDir to false", func() {
-				clusterDef.Spec.UseEmptyDir = nil
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.UseEmptyDir).To(BeFalse())
-			})
-			It("should not overwrite UseEmptyDir ", func() {
-				clusterDef.Spec.UseEmptyDir = ptr.Bool(true)
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.UseEmptyDir).To(BeTrue())
-			})
-		})
-
 		Describe("Defaulting images", func() {
 			It("should use the 3.11 version of the apache cassandra image if one is not supplied for the cluster", func() {
 				clusterDef.Spec.Pod.Image = nil

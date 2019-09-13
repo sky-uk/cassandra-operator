@@ -117,7 +117,6 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage is required",
 			"spec.Racks.rack1.Storage: Required value: at least one storage is required",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				c.Spec.Racks[0].Storage = []v1alpha1.Storage{}
 			},
 		),
@@ -125,7 +124,6 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage must contain one storage source",
 			"spec.Racks.rack1.Storage[0]: Required value: one storage source is required",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				c.Spec.Racks[0].Storage[0].StorageSource = v1alpha1.StorageSource{}
 			},
 		),
@@ -133,16 +131,15 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage  may contain at most one volume type",
 			"spec.Racks.rack1.Storage[0]: Forbidden: only one storage source per storage is allowed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				c.Spec.Racks[0].Storage[0].StorageSource = v1alpha1.StorageSource{
 					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
-						Resources:coreV1.ResourceRequirements{
+						Resources: coreV1.ResourceRequirements{
 							Requests: coreV1.ResourceList{
 								coreV1.ResourceStorage: resource.MustParse("100Gi"),
 							},
 						},
 					},
-					EmptyDir:              &coreV1.EmptyDirVolumeSource{},
+					EmptyDir: &coreV1.EmptyDirVolumeSource{},
 				}
 			},
 		),
@@ -150,7 +147,6 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage size is required",
 			"spec.Racks.rack1.Storage[0].persistentVolumeClaim.resources[storage]: Required value: a storage size is required",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				delete(c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.Resources.Requests, coreV1.ResourceStorage)
 			},
 		),
@@ -158,7 +154,6 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage path is required",
 			"spec.Racks.rack1.Storage[0].Path: Required value: a volume path is required",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				c.Spec.Racks[0].Storage[0].Path = nil
 			},
 		),
@@ -167,7 +162,6 @@ var _ = Describe("ValidateCassandra", func() {
 			"Rack storage may not contain more than one storage (for now)",
 			"spec.Racks.rack1.Storage: Forbidden: no more than one storage per rack is allowed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
 				otherStorage := v1alpha1.Storage{
 					Path: ptr.String("some path"),
 					StorageSource: v1alpha1.StorageSource{
@@ -175,15 +169,6 @@ var _ = Describe("ValidateCassandra", func() {
 					},
 				}
 				c.Spec.Racks[0].Storage = append(c.Spec.Racks[0].Storage, otherStorage)
-			},
-		),
-		// TODO I don't think this is a valid requirement and one that we won't be able to enforce when supporting multiple volumes
-		Entry(
-			"Rack.Zone must not be empty when UseEmptyDir=false",
-			"spec.Racks.rack1.Zone: Required value: because spec.useEmptyDir is false",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(false)
-				c.Spec.Racks[0].Zone = ""
 			},
 		),
 		Entry(
@@ -394,24 +379,6 @@ var _ = Describe("ValidateCassandra", func() {
 			},
 		),
 	)
-	DescribeTable(
-		"failure cases when usingEmpty",
-		func(expectedMessage string, mutate func(*v1alpha1.Cassandra)) {
-			c := aValidCassandraUsingEmptyDir()
-			mutate(c)
-			err := validation.ValidateCassandra(c).ToAggregate()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal(expectedMessage))
-		},
-		Entry(
-			"Rack.Zone must not be empty when UseEmptyDir=false",
-			"spec.Racks.rack1.Zone: Invalid value: \"eu-west1-a\": must be set to \"\" when spec.useEmptyDir is true",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(true)
-				c.Spec.Racks[0].Zone = "eu-west1-a"
-			},
-		),
-	)
 })
 
 var _ = Describe("ValidateCassandraUpdate", func() {
@@ -609,14 +576,6 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			},
 		),
 		Entry(
-			"UseEmptyDir",
-			"spec.UseEmptyDir: Forbidden: This field can not be changed: current: false, new: true",
-			func(c *v1alpha1.Cassandra) {
-				c.Spec.UseEmptyDir = ptr.Bool(true)
-				makeCompatibleWithUsingEmptyDir(c)
-			},
-		),
-		Entry(
 			"Rack deletion",
 			"spec.Racks: Forbidden: Rack deletion is not supported. Missing Racks: rack2",
 			func(c *v1alpha1.Cassandra) {
@@ -640,18 +599,6 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 	)
 })
 
-func aValidCassandraUsingEmptyDir() *v1alpha1.Cassandra {
-	cassandra := aValidCassandra().DeepCopy()
-	makeCompatibleWithUsingEmptyDir(cassandra)
-	return cassandra
-}
-
-func makeCompatibleWithUsingEmptyDir(cassandra *v1alpha1.Cassandra) {
-	for i := range cassandra.Spec.Racks {
-		cassandra.Spec.Racks[i].Zone = ""
-	}
-}
-
 func aValidCassandra() *v1alpha1.Cassandra {
 	return &v1alpha1.Cassandra{
 		ObjectMeta: metav1.ObjectMeta{
@@ -659,9 +606,8 @@ func aValidCassandra() *v1alpha1.Cassandra {
 			Namespace: "ns1",
 		},
 		Spec: v1alpha1.CassandraSpec{
-			Datacenter:  ptr.String("dc1"),
-			UseEmptyDir: ptr.Bool(false),
-			Racks:       []v1alpha1.Rack{rackSpec("rack1"), rackSpec("rack2")},
+			Datacenter: ptr.String("dc1"),
+			Racks:      []v1alpha1.Rack{rackSpec("rack1"), rackSpec("rack2")},
 			Pod: v1alpha1.Pod{
 				Image: ptr.String("cassandra:3.11.4"),
 				Resources: coreV1.ResourceRequirements{

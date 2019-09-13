@@ -81,7 +81,6 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						CleanupTimeoutSeconds: &timeout,
 					},
 				}).
-				UsingEmptyDir().
 				Exists()
 			clusterCreatedTime := time.Now()
 
@@ -137,7 +136,6 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			registerResourcesUsed(1)
 			AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
-				UsingEmptyDir().
 				Exists()
 
 			// wait long enough to ensure we see all events related to cluster creation, so we can filter these out later
@@ -202,7 +200,6 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						CleanupTimeoutSeconds: &timeout,
 					},
 				}).
-				UsingEmptyDir().
 				Exists()
 
 			// wait long enough to ensure we see all events related to cluster creation, so we can filter these out later
@@ -255,7 +252,6 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						CleanupTimeoutSeconds: &timeout,
 					},
 				}).
-				UsingEmptyDir().
 				Exists()
 
 			// wait long enough to ensure we see all events related to cluster creation, so we can filter these out later
