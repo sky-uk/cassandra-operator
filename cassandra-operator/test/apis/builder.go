@@ -1,0 +1,524 @@
+package apis
+
+import (
+	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	coreV1 "k8s.io/api/core/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type CassandraBuilder struct {
+	name      string
+	namespace string
+	spec      *CassandraSpecBuilder
+}
+
+type CassandraSpecBuilder struct {
+	datacenter *string
+	racks      []*RackSpecBuilder
+	pod        *PodSpecBuilder
+	snapshot   *SnapshotSpecBuilder
+}
+
+type PodSpecBuilder struct {
+	resources                               *coreV1.ResourceRequirements
+	image                                   *string
+	bootstrapperImage                       *string
+	sidecarImage                            *string
+	cassandraReadinessPeriod                *int32
+	cassandraReadinessTimeout               *int32
+	cassandraInitialDelay                   *int32
+	cassandraReadinessProbeFailureThreshold *int32
+	cassandraReadinessProbeSuccessThreshold *int32
+	cassandraLivenessPeriod                 *int32
+	cassandraLivenessTimeout                *int32
+	cassandraLivenessProbeFailureThreshold  *int32
+	cassandraLivenessProbeSuccessThreshold  *int32
+}
+
+type SnapshotSpecBuilder struct {
+	retentionPolicy *RetentionPolicySpecBuilder
+	timeoutSeconds  *int32
+	keyspaces       []string
+	schedule        string
+	image           *string
+}
+
+type RetentionPolicySpecBuilder struct {
+	timeoutSeconds      *int32
+	cleanupSchedule     string
+	retentionPeriodDays *int32
+	enabled             bool
+}
+
+type RackSpecBuilder struct {
+	rackName string
+	replicas int32
+	zone     string
+	storages []StorageBuilder
+}
+
+type EmptyDirStorageBuilder struct {
+	path *string
+}
+
+type PersistentVolumeStorageBuilder struct {
+	path         *string
+	storageClass string
+	storageSize  string
+}
+
+//
+// CassandraSpecBuilder
+//
+
+func ACassandra() *CassandraBuilder {
+	return &CassandraBuilder{}
+}
+
+func (cass *CassandraBuilder) WithDefaults() *CassandraBuilder {
+	return cass.
+		WithName("my-cluster").
+		WithNamespace("my-namespace").
+		WithSpec(ACassandraSpec().WithDefaults())
+}
+
+func (cass *CassandraBuilder) WithSpec(spec *CassandraSpecBuilder) *CassandraBuilder {
+	cass.spec = spec
+	return cass
+}
+
+func (cass *CassandraBuilder) WithName(name string) *CassandraBuilder {
+	cass.name = name
+	return cass
+}
+
+func (cass *CassandraBuilder) WithNamespace(name string) *CassandraBuilder {
+	cass.namespace = name
+	return cass
+}
+
+func (cass *CassandraBuilder) Build() *v1alpha1.Cassandra {
+	return &v1alpha1.Cassandra{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name:      cass.name,
+			Namespace: cass.namespace,
+		},
+		Spec: *cass.spec.Build(),
+	}
+}
+
+//
+// CassandraSpecBuilder
+//
+
+func ACassandraSpec() *CassandraSpecBuilder {
+	return &CassandraSpecBuilder{}
+}
+
+func (cs *CassandraSpecBuilder) ForDatacenter(datacenter string) *CassandraSpecBuilder {
+	cs.datacenter = ptr.String(datacenter)
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithPod(pod *PodSpecBuilder) *CassandraSpecBuilder {
+	cs.pod = pod
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithSnapshot(snapshot *SnapshotSpecBuilder) *CassandraSpecBuilder {
+	cs.snapshot = snapshot
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithRack(rack *RackSpecBuilder) *CassandraSpecBuilder {
+	cs.racks = append(cs.racks, rack)
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithRacks(racks ...*RackSpecBuilder) *CassandraSpecBuilder {
+	cs.racks = racks
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithNoSnapshot() *CassandraSpecBuilder {
+	cs.snapshot = nil
+	return cs
+}
+
+func (cs *CassandraSpecBuilder) WithDefaults() *CassandraSpecBuilder {
+	return cs.ForDatacenter("my-dc").
+		WithPod(APod().WithDefaults()).
+		WithRack(ARack("a", 1).WithDefaults()).
+		WithRack(ARack("b", 1).WithDefaults()).
+		WithSnapshot(ASnapshot().WithDefaults())
+}
+
+func (cs *CassandraSpecBuilder) Build() *v1alpha1.CassandraSpec {
+	var racks []v1alpha1.Rack
+	for _, rackBuilder := range cs.racks {
+		racks = append(racks, rackBuilder.Build())
+	}
+	var snapshot *v1alpha1.Snapshot
+	if cs.snapshot != nil {
+		snapshot = cs.snapshot.Build()
+	}
+	return &v1alpha1.CassandraSpec{
+		Datacenter: cs.datacenter,
+		Racks:      racks,
+		Pod:        *cs.pod.Build(),
+		Snapshot:   snapshot,
+	}
+}
+
+//
+// RetentionPolicySpecBuilder
+//
+
+func ARetentionPolicy() *RetentionPolicySpecBuilder {
+	return &RetentionPolicySpecBuilder{}
+}
+
+func (rp *RetentionPolicySpecBuilder) WithDefaults() *RetentionPolicySpecBuilder {
+	return rp.
+		thatIsEnabled().
+		WithRetentionPeriodDays(1).
+		WithTimeoutSeconds(0).
+		WithCleanupScheduled("1 23 * * *")
+}
+
+func (rp *RetentionPolicySpecBuilder) thatIsDisabled() *RetentionPolicySpecBuilder {
+	rp.enabled = false
+	return rp
+}
+
+func (rp *RetentionPolicySpecBuilder) thatIsEnabled() *RetentionPolicySpecBuilder {
+	rp.enabled = true
+	return rp
+}
+
+func (rp *RetentionPolicySpecBuilder) WithRetentionPeriodDays(days int32) *RetentionPolicySpecBuilder {
+	rp.retentionPeriodDays = ptr.Int32(days)
+	return rp
+}
+
+func (rp *RetentionPolicySpecBuilder) WithCleanupScheduled(schedule string) *RetentionPolicySpecBuilder {
+	rp.cleanupSchedule = schedule
+	return rp
+}
+
+func (rp *RetentionPolicySpecBuilder) WithTimeoutSeconds(seconds int32) *RetentionPolicySpecBuilder {
+	rp.timeoutSeconds = ptr.Int32(seconds)
+	return rp
+}
+
+func (rp *RetentionPolicySpecBuilder) Build() *v1alpha1.RetentionPolicy {
+	return &v1alpha1.RetentionPolicy{
+		Enabled:               ptr.Bool(rp.enabled),
+		RetentionPeriodDays:   rp.retentionPeriodDays,
+		CleanupTimeoutSeconds: rp.timeoutSeconds,
+		CleanupSchedule:       rp.cleanupSchedule,
+	}
+}
+
+//
+// SnapshotSpecBuilder
+//
+
+func ASnapshot() *SnapshotSpecBuilder {
+	return &SnapshotSpecBuilder{}
+}
+
+func (snap *SnapshotSpecBuilder) WithDefaults() *SnapshotSpecBuilder {
+	return snap.
+		WithImage("skyuk/cassandra-snapshot:latest").
+		WithSchedule("1 23 * * *").
+		WithKeyspaces([]string{"keyspace1", "keyspace2"}).
+		WithTimeoutSeconds(1)
+}
+
+func (snap *SnapshotSpecBuilder) WithRetentionPolicy(policy *RetentionPolicySpecBuilder) *SnapshotSpecBuilder {
+	snap.retentionPolicy = policy
+	return snap
+}
+
+func (snap *SnapshotSpecBuilder) WithKeyspaces(keyspaces []string) *SnapshotSpecBuilder {
+	snap.keyspaces = keyspaces
+	return snap
+}
+
+func (snap *SnapshotSpecBuilder) WithSchedule(schedule string) *SnapshotSpecBuilder {
+	snap.schedule = schedule
+	return snap
+}
+
+func (snap *SnapshotSpecBuilder) WithTimeoutSeconds(seconds int32) *SnapshotSpecBuilder {
+	snap.timeoutSeconds = ptr.Int32(seconds)
+	return snap
+}
+
+func (snap *SnapshotSpecBuilder) WithImage(snapshotImage string) *SnapshotSpecBuilder {
+	snap.image = ptr.String(snapshotImage)
+	return snap
+}
+
+func (snap *SnapshotSpecBuilder) Build() *v1alpha1.Snapshot {
+	var retentionPolicy *v1alpha1.RetentionPolicy
+	if snap.retentionPolicy != nil {
+		retentionPolicy = snap.retentionPolicy.Build()
+	}
+	return &v1alpha1.Snapshot{
+		Image:           snap.image,
+		Schedule:        snap.schedule,
+		Keyspaces:       snap.keyspaces,
+		TimeoutSeconds:  snap.timeoutSeconds,
+		RetentionPolicy: retentionPolicy,
+	}
+}
+
+//
+// PodSpecBuilder
+//
+
+func APod() *PodSpecBuilder {
+	return &PodSpecBuilder{}
+}
+
+func (p *PodSpecBuilder) WithDefaults() *PodSpecBuilder {
+	return p.
+		WithImageName("cassandra:3.11").
+		WithBootstrapperImageName("BootstrapperImage").
+		WithSidecarImageName("SidecarImage").
+		WithResources(&coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("1Gi"),
+				coreV1.ResourceCPU:    resource.MustParse("0"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+		}).
+		WithCassandraLivenessProbeSuccessThreshold(1).
+		WithCassandraLivenessPeriod(2).
+		WithCassandraInitialDelay(3).
+		WithCassandraLivenessProbeFailureThreshold(4).
+		WithCassandraLivenessTimeout(4).
+		WithCassandraReadinessProbeSuccessThreshold(1).
+		WithCassandraReadinessPeriod(2).
+		WithCassandraReadinessProbeFailureThreshold(4).
+		WithCassandraReadinessTimeout(5)
+}
+
+func (p *PodSpecBuilder) WithResources(podResources *coreV1.ResourceRequirements) *PodSpecBuilder {
+	p.resources = podResources
+	return p
+}
+
+func (p *PodSpecBuilder) WithImageName(image string) *PodSpecBuilder {
+	p.image = ptr.String(image)
+	return p
+}
+
+func (p *PodSpecBuilder) WithBootstrapperImageName(image string) *PodSpecBuilder {
+	p.bootstrapperImage = ptr.String(image)
+	return p
+}
+
+func (p *PodSpecBuilder) WithSidecarImageName(image string) *PodSpecBuilder {
+	p.sidecarImage = ptr.String(image)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraInitialDelay(delay int32) *PodSpecBuilder {
+	p.cassandraInitialDelay = ptr.Int32(delay)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraLivenessPeriod(period int32) *PodSpecBuilder {
+	p.cassandraLivenessPeriod = ptr.Int32(period)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraLivenessTimeout(timeout int32) *PodSpecBuilder {
+	p.cassandraLivenessTimeout = ptr.Int32(timeout)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraLivenessProbeFailureThreshold(threshold int32) *PodSpecBuilder {
+	p.cassandraLivenessProbeFailureThreshold = ptr.Int32(threshold)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraLivenessProbeSuccessThreshold(threshold int32) *PodSpecBuilder {
+	p.cassandraLivenessProbeSuccessThreshold = ptr.Int32(threshold)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraReadinessPeriod(period int32) *PodSpecBuilder {
+	p.cassandraReadinessPeriod = ptr.Int32(period)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraReadinessTimeout(timeout int32) *PodSpecBuilder {
+	p.cassandraReadinessTimeout = ptr.Int32(timeout)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraReadinessProbeFailureThreshold(threshold int32) *PodSpecBuilder {
+	p.cassandraReadinessProbeFailureThreshold = ptr.Int32(threshold)
+	return p
+}
+
+func (p *PodSpecBuilder) WithCassandraReadinessProbeSuccessThreshold(threshold int32) *PodSpecBuilder {
+	p.cassandraReadinessProbeSuccessThreshold = ptr.Int32(threshold)
+	return p
+}
+
+func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
+	return &v1alpha1.Pod{
+		BootstrapperImage: p.bootstrapperImage,
+		SidecarImage:      p.sidecarImage,
+		Image:             p.image,
+		Resources:         *p.resources,
+		LivenessProbe: &v1alpha1.Probe{
+			SuccessThreshold:    p.cassandraLivenessProbeSuccessThreshold,
+			FailureThreshold:    p.cassandraLivenessProbeFailureThreshold,
+			InitialDelaySeconds: p.cassandraInitialDelay,
+			PeriodSeconds:       p.cassandraLivenessPeriod,
+			TimeoutSeconds:      p.cassandraLivenessTimeout,
+		},
+		ReadinessProbe: &v1alpha1.Probe{
+			SuccessThreshold:    p.cassandraReadinessProbeSuccessThreshold,
+			FailureThreshold:    p.cassandraReadinessProbeFailureThreshold,
+			InitialDelaySeconds: p.cassandraInitialDelay,
+			PeriodSeconds:       p.cassandraReadinessPeriod,
+			TimeoutSeconds:      p.cassandraReadinessTimeout,
+		},
+	}
+}
+
+//
+// StorageBuilder
+//
+
+type StorageBuilder interface {
+	Build() v1alpha1.Storage
+}
+
+//
+// PersistentVolumeStorageBuilder
+//
+
+func APersistentVolume() *PersistentVolumeStorageBuilder {
+	return &PersistentVolumeStorageBuilder{}
+}
+
+func (pv *PersistentVolumeStorageBuilder) AtPath(path string) *PersistentVolumeStorageBuilder {
+	pv.path = ptr.String(path)
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) WithStorageClass(storageClass string) *PersistentVolumeStorageBuilder {
+	pv.storageClass = storageClass
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) OfSize(storageSize string) *PersistentVolumeStorageBuilder {
+	pv.storageSize = storageSize
+	return pv
+}
+
+func (pv *PersistentVolumeStorageBuilder) Build() v1alpha1.Storage {
+	return v1alpha1.Storage{
+		Path: pv.path,
+		StorageSource: v1alpha1.StorageSource{
+			PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
+				StorageClassName: ptr.String(pv.storageClass),
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceStorage: resource.MustParse(pv.storageSize),
+					},
+				},
+			},
+		},
+	}
+}
+
+//
+// EmptyDirStorageBuilder
+//
+
+func AnEmptyDir() *EmptyDirStorageBuilder {
+	return &EmptyDirStorageBuilder{}
+}
+
+func (e *EmptyDirStorageBuilder) AtPath(path string) *EmptyDirStorageBuilder {
+	e.path = ptr.String(path)
+	return e
+}
+
+func (e *EmptyDirStorageBuilder) Build() v1alpha1.Storage {
+	return v1alpha1.Storage{
+		Path: e.path,
+		StorageSource: v1alpha1.StorageSource{
+			EmptyDir: &coreV1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
+//
+// RackSpecBuilder
+//
+
+func ARack(name string, replicas int32) *RackSpecBuilder {
+	return &RackSpecBuilder{rackName: name, replicas: replicas}
+}
+
+func (r *RackSpecBuilder) WithDefaults() *RackSpecBuilder {
+	return r.
+		WithZone(fmt.Sprintf("%s%s", "eu-west-1", r.rackName)).
+		WithStorage(
+			APersistentVolume().
+				AtPath("/var/lib/cassandra").
+				OfSize("1Gi").
+				WithStorageClass(fmt.Sprintf("%s%s", "standard-zone-", r.rackName)))
+}
+
+func (r *RackSpecBuilder) WithEmptyDir() *RackSpecBuilder {
+	return r.WithStorage(AnEmptyDir())
+}
+
+func (r *RackSpecBuilder) WithPersistentVolume() *RackSpecBuilder {
+	return r.WithStorage(APersistentVolume())
+}
+
+func (r *RackSpecBuilder) WithZone(zone string) *RackSpecBuilder {
+	r.zone = zone
+	return r
+}
+
+func (r *RackSpecBuilder) WithStorage(builder StorageBuilder) *RackSpecBuilder {
+	r.storages = append(r.storages, builder)
+	return r
+}
+
+func (r *RackSpecBuilder) WithStorages(builders ...StorageBuilder) *RackSpecBuilder {
+	r.storages = builders
+	return r
+}
+
+func (r *RackSpecBuilder) Build() v1alpha1.Rack {
+	var storages []v1alpha1.Storage
+	for _, builder := range r.storages {
+		storages = append(storages, builder.Build())
+	}
+	return v1alpha1.Rack{
+		Name:     r.rackName,
+		Replicas: r.replicas,
+		Zone:     r.zone,
+		Storage:  storages,
+	}
+}

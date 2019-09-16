@@ -3,12 +3,11 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
@@ -242,87 +241,42 @@ func aStatefulSetWithAnnotation(name string, annotations map[string]string) v1be
 	}
 }
 
+func aClusterDefinitionWithPersistenceVolumes() *v1alpha1.Cassandra {
+	return aClusterDefinition()
+}
+
 func aClusterDefinition() *v1alpha1.Cassandra {
-	cassandra := &v1alpha1.Cassandra{
-		ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
-		Spec: v1alpha1.CassandraSpec{
-			Datacenter: ptr.String("my-datacenter"),
-			Racks:      []v1alpha1.Rack{rackSpec("a")},
-			Pod: v1alpha1.Pod{
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-					},
-				},
-			},
-		},
-	}
+	cassandra := apis.ACassandra().
+		WithDefaults().
+		WithName("mycluster").
+		WithNamespace("mynamespace").
+		WithSpec(apis.ACassandraSpec().
+			WithDefaults().
+			WithNoSnapshot().
+			WithRacks(apis.ARack("a", 1).WithDefaults())).
+		Build()
 	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
 	return cassandra
 }
 
 func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
-	cassandra := aClusterDefinition()
-	cassandra.Spec.Racks = []v1alpha1.Rack{{
-		Name:     "a",
-		Replicas: 1,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
-				StorageSource: v1alpha1.StorageSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		},
-	}}
+	cassandra := apis.ACassandra().
+		WithDefaults().
+		WithName("mycluster").
+		WithNamespace("mynamespace").
+		WithSpec(apis.ACassandraSpec().
+			WithDefaults().
+			WithNoSnapshot().
+			WithRacks(apis.ARack("a", 1).
+				WithDefaults().
+				WithStorages(apis.AnEmptyDir()))).
+		Build()
+	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
 	return cassandra
 }
 
 func rackSpec(name string) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     name,
-		Zone:     "storage Zone",
-		Replicas: 1,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
-				StorageSource: v1alpha1.StorageSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resource.MustParse("1000m"),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func rackSpecWithEmptyDir(name string) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     name,
-		Zone:     "storage Zone",
-		Replicas: 1,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String(v1alpha1.DefaultStorageVolumeMountPath),
-				StorageSource: v1alpha1.StorageSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		},
-	}
-}
-
-func aClusterDefinitionWithPersistenceVolumes() *v1alpha1.Cassandra {
-	return aClusterDefinition()
+	return apis.ARack(name, 1).WithDefaults().Build()
 }
 
 // mocks

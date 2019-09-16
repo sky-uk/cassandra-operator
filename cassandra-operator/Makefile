@@ -23,7 +23,7 @@ projectDir := $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
 buildDir := $(projectDir)/build
 image := cassandra-operator
 junitReportDir := $(buildDir)/junit-reports
-pkgs := $(shell go list ./... | grep -v /vendor/ | grep -v /pkg/apis/ | grep -v /pkg/client/ | grep -v /test/e2e)
+pkgs := $(shell go list ./... | grep -v /vendor/ | grep -v /pkg/apis/ | grep -v /pkg/client/ | grep -v /test/)
 testPkgs := $(shell go list ./... | grep /test/e2e)
 
 include $(projectDir)/../MakefileDocker

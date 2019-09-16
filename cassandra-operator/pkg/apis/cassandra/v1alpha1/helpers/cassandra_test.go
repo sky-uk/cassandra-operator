@@ -1,17 +1,15 @@
 package helpers
 
 import (
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
+	coreV1 "k8s.io/api/core/v1"
 )
 
 func TestHelpers(t *testing.T) {
@@ -24,27 +22,7 @@ var _ = Describe("Cassandra Helpers", func() {
 	Describe("Cassandra.Spec", func() {
 		var clusterDef *v1alpha1.Cassandra
 		BeforeEach(func() {
-			clusterDef = &v1alpha1.Cassandra{
-				ObjectMeta: metaV1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
-				Spec: v1alpha1.CassandraSpec{
-					Racks: []v1alpha1.Rack{
-						rackWithPersistentVolume("a"),
-						rackWithPersistentVolume("b"),
-					},
-					Pod: v1alpha1.Pod{
-						Resources: coreV1.ResourceRequirements{
-							Requests: coreV1.ResourceList{
-								coreV1.ResourceMemory: resource.MustParse("1Gi"),
-								coreV1.ResourceCPU:    resource.MustParse("100m"),
-							},
-							Limits: coreV1.ResourceList{
-								coreV1.ResourceMemory: resource.MustParse("1Gi"),
-								coreV1.ResourceCPU:    resource.MustParse("100m"),
-							},
-						},
-					},
-				},
-			}
+			clusterDef = apis.ACassandra().WithDefaults().Build()
 		})
 
 		Describe("Defaulting Snapshot", func() {
@@ -166,7 +144,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 
 			It("should use the latest version of the cassandra bootstrapper image if one is not supplied for the cluster", func() {
-				clusterDef.Spec.Pod.Image = nil
+				clusterDef.Spec.Pod.BootstrapperImage = nil
 				SetDefaultsForCassandra(clusterDef)
 				Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("skyuk/cassandra-bootstrapper:latest"))
 			})
@@ -380,18 +358,21 @@ var _ = Describe("Cassandra Helpers", func() {
 
 		It("should be found equal when only retention policy is different", func() {
 			snapshot1.RetentionPolicy = &v1alpha1.RetentionPolicy{CleanupSchedule: "01 10 * * *"}
+			snapshot2.RetentionPolicy = &v1alpha1.RetentionPolicy{CleanupSchedule: "01 11 * * *"}
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeFalse())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeFalse())
 		})
 
 		It("should be found different when schedule is different", func() {
-			snapshot1.Schedule = "01 10 * * *"
+			snapshot1.Schedule = "1 10 * * *"
+			snapshot2.Schedule = "2 10 * * *"
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when one has no timeout", func() {
 			snapshot1.TimeoutSeconds = nil
+			snapshot2.TimeoutSeconds = ptr.Int32(1)
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
@@ -405,12 +386,14 @@ var _ = Describe("Cassandra Helpers", func() {
 
 		It("should be found different when keyspaces list are different", func() {
 			snapshot1.Keyspaces = []string{"keyspace2"}
+			snapshot2.Keyspaces = []string{"keyspace1", "keyspace2"}
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when a snapshot has no keyspace", func() {
 			snapshot1.Keyspaces = nil
+			snapshot2.Keyspaces = []string{"keyspace1", "keyspace2"}
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
@@ -425,34 +408,16 @@ var _ = Describe("Cassandra Helpers", func() {
 
 	Describe("Snapshot Cleanup Properties", func() {
 		var (
-			cleanupTimeout = int32(10)
-			snapshot1      *v1alpha1.Snapshot
-			snapshot2      *v1alpha1.Snapshot
+			snapshot1 *v1alpha1.Snapshot
+			snapshot2 *v1alpha1.Snapshot
 		)
 
 		BeforeEach(func() {
-			snapshot1 = &v1alpha1.Snapshot{
-				Schedule:       "01 23 * * *",
-				TimeoutSeconds: &cleanupTimeout,
-				Keyspaces:      []string{"keyspace1", "keyspace2"},
-				RetentionPolicy: &v1alpha1.RetentionPolicy{
-					Enabled:               ptr.Bool(true),
-					CleanupSchedule:       "11 11 * * *",
-					CleanupTimeoutSeconds: ptr.Int32(10),
-					RetentionPeriodDays:   ptr.Int32(7),
-				},
-			}
-			snapshot2 = &v1alpha1.Snapshot{
-				Schedule:       "01 23 * * *",
-				TimeoutSeconds: &cleanupTimeout,
-				Keyspaces:      []string{"keyspace1", "keyspace2"},
-				RetentionPolicy: &v1alpha1.RetentionPolicy{
-					Enabled:               ptr.Bool(true),
-					CleanupSchedule:       "11 11 * * *",
-					CleanupTimeoutSeconds: ptr.Int32(10),
-					RetentionPeriodDays:   ptr.Int32(7),
-				},
-			}
+			snapshot1 = apis.ASnapshot().
+				WithDefaults().
+				WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults()).
+				Build()
+			snapshot2 = snapshot1.DeepCopy()
 		})
 
 		It("should be found equal when snapshots have the same properties values", func() {
@@ -470,62 +435,44 @@ var _ = Describe("Cassandra Helpers", func() {
 
 		It("should be found equal even when one is not enabled", func() {
 			snapshot1.RetentionPolicy.Enabled = ptr.Bool(false)
+			snapshot2.RetentionPolicy.Enabled = ptr.Bool(true)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeFalse())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeFalse())
 		})
 
 		It("should be found different when the cleanup schedule is different", func() {
 			snapshot1.RetentionPolicy.CleanupSchedule = "01 10 * * *"
+			snapshot2.RetentionPolicy.CleanupSchedule = "01 11 * * *"
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when one has no retention period", func() {
 			snapshot1.RetentionPolicy.RetentionPeriodDays = nil
+			snapshot2.RetentionPolicy.RetentionPeriodDays = ptr.Int32(10)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when retention period have different values", func() {
 			snapshot1.RetentionPolicy.RetentionPeriodDays = ptr.Int32(1)
+			snapshot2.RetentionPolicy.RetentionPeriodDays = ptr.Int32(2)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when one has no cleanup timeout", func() {
 			snapshot1.RetentionPolicy.CleanupTimeoutSeconds = nil
+			snapshot2.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(21)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 
 		It("should be found different when cleanup timeout have different values", func() {
 			snapshot1.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(30)
+			snapshot2.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(31)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 	})
 })
-
-func rackWithPersistentVolume(name string) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     name,
-		Zone:     "storage Zone",
-		Replicas: 1,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String("/var/lib/cassandra"),
-				StorageSource: v1alpha1.StorageSource{
-					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
-						AccessModes: []coreV1.PersistentVolumeAccessMode{coreV1.ReadWriteOnce},
-						Resources: coreV1.ResourceRequirements{
-							Requests: coreV1.ResourceList{
-								coreV1.ResourceStorage: resource.MustParse("1000m"),
-							},
-						},
-						StorageClassName: ptr.String("standard-zone"),
-					},
-				},
-			},
-		},
-	}
-}

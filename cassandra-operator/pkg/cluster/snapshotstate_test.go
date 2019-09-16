@@ -6,6 +6,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"k8s.io/api/batch/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"testing"
@@ -60,13 +61,17 @@ var _ = Describe("current snapshot state", func() {
 			)
 
 			BeforeEach(func() {
-				currentCassandra = aClusterDefinition()
-				currentCassandra.Spec.Snapshot = &v1alpha1.Snapshot{
-					Image:          ptr.String("some image"),
-					Schedule:       "* * * * 1",
-					TimeoutSeconds: ptr.Int32(1),
-					Keyspaces:      []string{"keyspaces"},
-				}
+				currentCassandra = apis.ACassandra().WithDefaults().WithSpec(
+					apis.ACassandraSpec().
+						WithDefaults().
+						WithSnapshot(
+							apis.ASnapshot().
+								WithDefaults().
+								WithSchedule("* * * * 1").
+								WithTimeoutSeconds(1).
+								WithKeyspaces([]string{"keyspaces"}).
+								WithImage("some image"))).
+					Build()
 				desiredCassandra = currentCassandra.DeepCopy()
 				desiredCassandra.Spec.Snapshot = nil
 
@@ -137,18 +142,19 @@ var _ = Describe("current snapshot state", func() {
 			)
 
 			BeforeEach(func() {
-				currentCassandra = aClusterDefinition()
-				currentCassandra.Spec.Snapshot = &v1alpha1.Snapshot{
-					Image:          ptr.String("some-image"),
-					Schedule:       "* * * * 1",
-					TimeoutSeconds: ptr.Int32(10),
-					RetentionPolicy: &v1alpha1.RetentionPolicy{
-						CleanupSchedule:       "* * * * 1",
-						CleanupTimeoutSeconds: ptr.Int32(1),
-						RetentionPeriodDays:   ptr.Int32(60),
-						Enabled:               ptr.Bool(true),
-					},
-				}
+				currentCassandra = apis.ACassandra().WithDefaults().WithSpec(
+					apis.ACassandraSpec().
+						WithDefaults().
+						WithSnapshot(
+							apis.ASnapshot().
+								WithDefaults().
+								WithRetentionPolicy(
+									apis.ARetentionPolicy().
+										WithDefaults().
+										WithTimeoutSeconds(1).
+										WithCleanupScheduled("* * * * 1").
+										WithRetentionPeriodDays(60)))).
+					Build()
 				desiredCassandra = currentCassandra.DeepCopy()
 				desiredCassandra.Spec.Snapshot.RetentionPolicy = nil
 			})

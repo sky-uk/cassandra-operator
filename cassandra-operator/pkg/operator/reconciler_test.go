@@ -11,8 +11,8 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/api/apps/v1beta2"
 	corev1 "k8s.io/api/core/v1"
@@ -472,41 +472,18 @@ var _ = Describe("reconciliation", func() {
 })
 
 func aClusterDefinition() *v1alpha1.Cassandra {
-	cassandra := &v1alpha1.Cassandra{
-		ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
-		Spec: v1alpha1.CassandraSpec{
-			Datacenter: ptr.String("my-datacenter"),
-			Racks:      []v1alpha1.Rack{rackSpec("a")},
-			Pod: v1alpha1.Pod{
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-			},
-		},
-	}
+	cassandra := apis.ACassandra().
+		WithDefaults().
+		WithSpec(apis.ACassandraSpec().
+			WithDefaults().
+			WithRacks(apis.ARack("a", 1).WithDefaults())).
+		Build()
 	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
 	return cassandra
 }
 
 func rackSpec(name string) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     name,
-		Zone:     "zone1",
-		Replicas: 1,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String("cassandra-home"),
-				StorageSource: v1alpha1.StorageSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		},
-	}
+	return apis.ARack(name, 1).WithDefaults().WithStorages(apis.AnEmptyDir()).Build()
 }
 
 // mocks

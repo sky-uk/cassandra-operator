@@ -193,8 +193,8 @@ var _ = Context("Allowable cluster modifications", func() {
 		registerResourcesUsed(1)
 		AClusterWithName(clusterName).
 			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
-			AndClusterSpec(AClusterSpec().
-				WithPodResources(&coreV1.ResourceRequirements{
+			AndPodSpec(DefaultPodSpec().
+				WithResources(&coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
 						coreV1.ResourceMemory: resource.MustParse("999Mi"),
 						coreV1.ResourceCPU:    resource.MustParse("1m"),

@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"reflect"
 	"strconv"
 	"testing"
@@ -63,42 +64,12 @@ var _ = Describe("creation of stateful sets", func() {
 		},
 	}
 	BeforeEach(func() {
-		clusterDef = &v1alpha1.Cassandra{
-			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
-			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{rackSpec("a"), rackSpec("b")},
-				Pod: v1alpha1.Pod{
-					Resources: coreV1.ResourceRequirements{
-						Requests: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-						Limits: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-					},
-					ReadinessProbe: &v1alpha1.Probe{
-						FailureThreshold:    ptr.Int32(3),
-						InitialDelaySeconds: ptr.Int32(30),
-						PeriodSeconds:       ptr.Int32(30),
-						SuccessThreshold:    ptr.Int32(1),
-						TimeoutSeconds:      ptr.Int32(5),
-					},
-					LivenessProbe: &v1alpha1.Probe{
-						FailureThreshold:    ptr.Int32(3),
-						InitialDelaySeconds: ptr.Int32(30),
-						PeriodSeconds:       ptr.Int32(15),
-						SuccessThreshold:    ptr.Int32(1),
-						TimeoutSeconds:      ptr.Int32(5),
-					},
-				},
-			},
-		}
+		clusterDef = apis.ACassandra().WithDefaults().WithName(CLUSTER).WithNamespace(NAMESPACE).Build()
 	})
 
 	It("should add init containers for config initialisation and bootstrapping", func() {
 		// given
+		clusterDef.Spec.Pod.BootstrapperImage = ptr.String("skyuk/cassandra-bootstrapper:latest")
 		cluster := ACluster(clusterDef)
 
 		// when
@@ -127,6 +98,8 @@ var _ = Describe("creation of stateful sets", func() {
 	})
 
 	It("should define environment variables for pod memory and cpu in bootstrapper init-container", func() {
+		clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Gi")
+		clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("100m")
 		cluster := ACluster(clusterDef)
 
 		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
@@ -221,22 +194,15 @@ var _ = Describe("creation of stateful sets", func() {
 
 		Context("using emptyDir as storage", func() {
 			BeforeEach(func() {
-				clusterDef = &v1alpha1.Cassandra{
-					ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
-					Spec: v1alpha1.CassandraSpec{
-						Racks: []v1alpha1.Rack{rackSpecWithEmptyDir("a"), rackSpecWithEmptyDir("b")},
-						Pod: v1alpha1.Pod{
-							Resources: coreV1.ResourceRequirements{
-								Requests: coreV1.ResourceList{
-									coreV1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-								Limits: coreV1.ResourceList{
-									coreV1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-							},
-						},
-					},
-				}
+				clusterDef = apis.ACassandra().
+					WithDefaults().
+					WithSpec(apis.ACassandraSpec().
+						WithDefaults().
+						WithRacks(
+							apis.ARack("a", 1).WithDefaults().WithStorages(apis.AnEmptyDir()),
+							apis.ARack("b", 1).WithDefaults().WithStorages(apis.AnEmptyDir()),
+						)).
+					Build()
 				v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
 			})
 
@@ -463,24 +429,7 @@ var _ = Describe("modification of stateful sets", func() {
 		},
 	}
 	BeforeEach(func() {
-		clusterDef = &v1alpha1.Cassandra{
-			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
-			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{rackSpec("a"), rackSpec("b")},
-				Pod: v1alpha1.Pod{
-					Resources: coreV1.ResourceRequirements{
-						Requests: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-						Limits: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-					},
-				},
-			},
-		}
+		clusterDef = apis.ACassandra().WithDefaults().WithName(CLUSTER).WithNamespace(NAMESPACE).Build()
 	})
 
 	Context("the statefulset is updated to the desired state", func() {
@@ -622,28 +571,17 @@ var _ = Describe("creation of snapshot job", func() {
 	)
 
 	BeforeEach(func() {
-		clusterDef = &v1alpha1.Cassandra{
-			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
-			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
-				Pod: v1alpha1.Pod{
-					Resources: coreV1.ResourceRequirements{
-						Requests: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-						Limits: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-					},
-				},
-				Snapshot: &v1alpha1.Snapshot{
-					Schedule:       "01 23 * * *",
-					TimeoutSeconds: &snapshotTimeout,
-				},
-			},
-		}
+		clusterDef = apis.ACassandra().
+			WithDefaults().
+			WithName(CLUSTER).
+			WithNamespace(NAMESPACE).
+			WithSpec(apis.ACassandraSpec().WithDefaults().WithSnapshot(
+				apis.ASnapshot().
+					WithDefaults().
+					WithSchedule("01 23 * * *").
+					WithTimeoutSeconds(snapshotTimeout))).
+			Build()
+
 	})
 
 	It("should create a cronjob named after the cluster that will trigger at the specified schedule", func() {
@@ -682,6 +620,8 @@ var _ = Describe("creation of snapshot job", func() {
 	})
 
 	It("should create a cronjob that will trigger a snapshot creation for the whole cluster when no keyspace specified", func() {
+		clusterDef.Spec.Snapshot.Keyspaces = nil
+		clusterDef.Spec.Snapshot.TimeoutSeconds = &snapshotTimeout
 		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
@@ -700,6 +640,7 @@ var _ = Describe("creation of snapshot job", func() {
 
 	It("should create a cronjob that will trigger a snapshot creation for the specified keyspaces", func() {
 		clusterDef.Spec.Snapshot.Keyspaces = []string{"keyspace1", "keyspace50"}
+		clusterDef.Spec.Snapshot.TimeoutSeconds = &snapshotTimeout
 		cluster := ACluster(clusterDef)
 
 		cronJob := cluster.CreateSnapshotJob()
@@ -751,40 +692,24 @@ var _ = Describe("creation of snapshot job", func() {
 var _ = Describe("creation of snapshot cleanup job", func() {
 	var (
 		clusterDef      *v1alpha1.Cassandra
-		snapshotTimeout = int32(10)
 		cleanupTimeout  = int32(5)
 		retentionPeriod = int32(1)
 	)
 
 	BeforeEach(func() {
-		clusterDef = &v1alpha1.Cassandra{
-			ObjectMeta: metaV1.ObjectMeta{Name: CLUSTER, Namespace: NAMESPACE},
-			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
-				Pod: v1alpha1.Pod{
-					Resources: coreV1.ResourceRequirements{
-						Requests: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-						Limits: coreV1.ResourceList{
-							coreV1.ResourceMemory: resource.MustParse("1Gi"),
-							coreV1.ResourceCPU:    resource.MustParse("100m"),
-						},
-					},
-				},
-				Snapshot: &v1alpha1.Snapshot{
-					Schedule:       "1 23 * * *",
-					TimeoutSeconds: &snapshotTimeout,
-					RetentionPolicy: &v1alpha1.RetentionPolicy{
-						Enabled:               ptr.Bool(true),
-						RetentionPeriodDays:   &retentionPeriod,
-						CleanupSchedule:       "0 9 * * *",
-						CleanupTimeoutSeconds: &cleanupTimeout,
-					},
-				},
-			},
-		}
+		clusterDef = apis.ACassandra().WithDefaults().WithSpec(
+			apis.ACassandraSpec().
+				WithDefaults().
+				WithSnapshot(
+					apis.ASnapshot().
+						WithDefaults().
+						WithRetentionPolicy(
+							apis.ARetentionPolicy().
+								WithDefaults().
+								WithRetentionPeriodDays(retentionPeriod).
+								WithTimeoutSeconds(cleanupTimeout).
+								WithCleanupScheduled("0 9 * * *")))).
+			Build()
 	})
 
 	It("should not create a cleanup job if no retention policy is specified in the cluster spec", func() {

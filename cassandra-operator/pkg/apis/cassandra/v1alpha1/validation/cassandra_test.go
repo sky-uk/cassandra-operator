@@ -2,19 +2,18 @@ package validation_test
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/validation"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
+	coreV1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestValidation(t *testing.T) {
@@ -101,35 +100,35 @@ var _ = Describe("ValidateCassandra", func() {
 		),
 		Entry(
 			"Rack.Replicas must be positive",
-			"spec.Racks.rack1.Replicas: Invalid value: -1: must be >= 1",
+			"spec.Racks.a.Replicas: Invalid value: -1: must be >= 1",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Replicas = -1
 			},
 		),
 		Entry(
 			"Rack.Replicas must be >= 1",
-			"spec.Racks.rack1.Replicas: Invalid value: 0: must be >= 1",
+			"spec.Racks.a.Replicas: Invalid value: 0: must be >= 1",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Replicas = 0
 			},
 		),
 		Entry(
 			"Rack storage is required",
-			"spec.Racks.rack1.Storage: Required value: at least one storage is required",
+			"spec.Racks.a.Storage: Required value: at least one storage is required",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage = []v1alpha1.Storage{}
 			},
 		),
 		Entry(
 			"Rack storage must contain one storage source",
-			"spec.Racks.rack1.Storage[0]: Required value: one storage source is required",
+			"spec.Racks.a.Storage[0]: Required value: one storage source is required",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].StorageSource = v1alpha1.StorageSource{}
 			},
 		),
 		Entry(
 			"Rack storage  may contain at most one volume type",
-			"spec.Racks.rack1.Storage[0]: Forbidden: only one storage source per storage is allowed",
+			"spec.Racks.a.Storage[0]: Forbidden: only one storage source per storage is allowed",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].StorageSource = v1alpha1.StorageSource{
 					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
@@ -145,14 +144,14 @@ var _ = Describe("ValidateCassandra", func() {
 		),
 		Entry(
 			"Rack storage size is required",
-			"spec.Racks.rack1.Storage[0].persistentVolumeClaim.resources[storage]: Required value: a storage size is required",
+			"spec.Racks.a.Storage[0].persistentVolumeClaim.resources[storage]: Required value: a storage size is required",
 			func(c *v1alpha1.Cassandra) {
 				delete(c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.Resources.Requests, coreV1.ResourceStorage)
 			},
 		),
 		Entry(
 			"Rack storage path is required",
-			"spec.Racks.rack1.Storage[0].Path: Required value: a volume path is required",
+			"spec.Racks.a.Storage[0].Path: Required value: a volume path is required",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].Path = nil
 			},
@@ -160,7 +159,7 @@ var _ = Describe("ValidateCassandra", func() {
 		// TODO support for multiple volumes would be allowed soon
 		Entry(
 			"Rack storage may not contain more than one storage (for now)",
-			"spec.Racks.rack1.Storage: Forbidden: no more than one storage per rack is allowed",
+			"spec.Racks.a.Storage: Forbidden: no more than one storage per rack is allowed",
 			func(c *v1alpha1.Cassandra) {
 				otherStorage := v1alpha1.Storage{
 					Path: ptr.String("some path"),
@@ -556,42 +555,42 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 		),
 		Entry(
 			"Datacenter",
-			"spec.Datacenter: Forbidden: This field can not be changed: current: \"dc1\", new: \"a-different-datacenter\"",
+			"spec.Datacenter: Forbidden: This field can not be changed: current: \"my-dc\", new: \"a-different-datacenter\"",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Datacenter = ptr.String("a-different-datacenter")
 			},
 		),
 		Entry(
 			"Pod.Image",
-			"spec.Pod.Image: Forbidden: This field can not be changed: current: \"cassandra:3.11.4\", new: \"a-different/image:1.2.3\"",
+			"spec.Pod.Image: Forbidden: This field can not be changed: current: \"cassandra:3.11\", new: \"a-different/image:1.2.3\"",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Image = ptr.String("a-different/image:1.2.3")
 			},
 		),
 		Entry(
 			"Rack Storage",
-			"spec.Racks.rack1.Storage: Forbidden: This field can not be changed",
+			"spec.Racks.a.Storage: Forbidden: This field can not be changed",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].Path = ptr.String("some other path")
 			},
 		),
 		Entry(
 			"Rack deletion",
-			"spec.Racks: Forbidden: Rack deletion is not supported. Missing Racks: rack2",
+			"spec.Racks: Forbidden: Rack deletion is not supported. Missing Racks: b",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks = c.Spec.Racks[:1]
 			},
 		),
 		Entry(
 			"Rack.Zone",
-			"spec.Racks.rack1.Zone: Forbidden: This field can not be changed: current: zone1, new: new-zone",
+			"spec.Racks.a.Zone: Forbidden: This field can not be changed: current: eu-west-1a, new: new-zone",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Zone = "new-zone"
 			},
 		),
 		Entry(
 			"Rack.Replicas decrease (scale-in)",
-			"spec.Racks.rack1.Replicas: Forbidden: This field can not be decremented (scale-in is not yet supported): current: 2, new: 1",
+			"spec.Racks.a.Replicas: Forbidden: This field can not be decremented (scale-in is not yet supported): current: 2, new: 1",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Replicas -= 1
 			},
@@ -600,73 +599,18 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 })
 
 func aValidCassandra() *v1alpha1.Cassandra {
-	return &v1alpha1.Cassandra{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster1",
-			Namespace: "ns1",
-		},
-		Spec: v1alpha1.CassandraSpec{
-			Datacenter: ptr.String("dc1"),
-			Racks:      []v1alpha1.Rack{rackSpec("rack1"), rackSpec("rack2")},
-			Pod: v1alpha1.Pod{
-				Image: ptr.String("cassandra:3.11.4"),
-				Resources: coreV1.ResourceRequirements{
-					Requests: coreV1.ResourceList{
-						coreV1.ResourceCPU:    resource.MustParse("0"),
-						coreV1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-					Limits: coreV1.ResourceList{
-						coreV1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-				LivenessProbe: &v1alpha1.Probe{
-					FailureThreshold:    ptr.Int32(1),
-					InitialDelaySeconds: ptr.Int32(1),
-					PeriodSeconds:       ptr.Int32(1),
-					SuccessThreshold:    ptr.Int32(1),
-					TimeoutSeconds:      ptr.Int32(1),
-				},
-				ReadinessProbe: &v1alpha1.Probe{
-					FailureThreshold:    ptr.Int32(1),
-					InitialDelaySeconds: ptr.Int32(1),
-					PeriodSeconds:       ptr.Int32(1),
-					SuccessThreshold:    ptr.Int32(1),
-					TimeoutSeconds:      ptr.Int32(1),
-				},
-			},
-			Snapshot: &v1alpha1.Snapshot{
-				Schedule:       "1 23 * * *",
-				Keyspaces:      []string{"keyspace1", "keyspace2"},
-				TimeoutSeconds: ptr.Int32(1),
-				RetentionPolicy: &v1alpha1.RetentionPolicy{
-					Enabled:               ptr.Bool(true),
-					RetentionPeriodDays:   ptr.Int32(1),
-					CleanupTimeoutSeconds: ptr.Int32(0),
-					CleanupSchedule:       "1 23 * * *",
-				},
-			},
-		},
-	}
+	return apis.ACassandra().
+		WithDefaults().
+		WithSpec(apis.ACassandraSpec().
+			WithDefaults().
+			WithSnapshot(apis.ASnapshot().WithDefaults().WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults())).
+			WithRacks(
+				apis.ARack("a", 2).WithDefaults(),
+				apis.ARack("b", 2).WithDefaults(),
+			)).
+		Build()
 }
 
 func rackSpec(name string) v1alpha1.Rack {
-	return v1alpha1.Rack{
-		Name:     name,
-		Zone:     "zone1",
-		Replicas: 2,
-		Storage: []v1alpha1.Storage{
-			{
-				Path: ptr.String("cassandra-home"),
-				StorageSource: v1alpha1.StorageSource{
-					PersistentVolumeClaim: &coreV1.PersistentVolumeClaimSpec{
-						Resources: coreV1.ResourceRequirements{
-							Requests: coreV1.ResourceList{
-								coreV1.ResourceStorage: resource.MustParse("100Gi"),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	return apis.ARack(name, 2).WithDefaults().Build()
 }

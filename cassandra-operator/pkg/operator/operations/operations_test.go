@@ -3,6 +3,7 @@ package operations
 import (
 	"fmt"
 	"github.com/onsi/gomega/types"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
@@ -21,7 +22,6 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,37 +36,17 @@ var _ = Describe("operations to execute based on event", func() {
 		fakes         *mockAccessor
 		oldClusterDef *v1alpha1.Cassandra
 		newClusterDef *v1alpha1.Cassandra
-		timeout       = int32(1)
-		sevenDays     = int32(7)
 	)
 
 	BeforeEach(func() {
-		oldClusterDef = &v1alpha1.Cassandra{
-			ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "mynamespace"},
-			Spec: v1alpha1.CassandraSpec{
-				Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "some-zone"}},
-				Pod: v1alpha1.Pod{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-						},
-					},
-				},
-				Snapshot: &v1alpha1.Snapshot{
-					Schedule:       "2 * * * *",
-					TimeoutSeconds: &timeout,
-					RetentionPolicy: &v1alpha1.RetentionPolicy{
-						Enabled:               ptr.Bool(true),
-						CleanupSchedule:       "1 * * * *",
-						CleanupTimeoutSeconds: &timeout,
-						RetentionPeriodDays:   &sevenDays,
-					},
-				},
-			},
-		}
+		oldClusterDef = apis.ACassandra().WithDefaults().WithSpec(
+			apis.ACassandraSpec().
+				WithDefaults().
+				WithSnapshot(
+					apis.ASnapshot().
+						WithDefaults().
+						WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults()))).
+			Build()
 		v1alpha1helpers.SetDefaultsForCassandra(oldClusterDef)
 		newClusterDef = oldClusterDef.DeepCopy()
 

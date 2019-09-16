@@ -3,6 +3,7 @@ package creation
 import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"path/filepath"
 	"testing"
 	"time"
@@ -35,14 +36,16 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 	multipleRacksCluster = &TestCluster{
 		Name: multipleRacksClusterName,
 		Racks: []v1alpha1.Rack{
-			ARack("a", 2).
-				WithStorage(APersistentVolume().
+			apis.ARack("a", 2).
+				WithZone("eu-west-1a").
+				WithStorage(apis.APersistentVolume().
 					OfSize("100Mi").
 					WithStorageClass("standard-zone-a").
 					AtPath("/var/lib/pv-cassandra-home")).
 				Build(),
-			ARack("b", 1).
-				WithStorage(APersistentVolume().
+			apis.ARack("b", 1).
+				WithZone("eu-west-1b").
+				WithStorage(apis.APersistentVolume().
 					OfSize("100Mi").
 					WithStorageClass("standard-zone-b").
 					AtPath("/var/lib/pv-cassandra-home")).
@@ -53,8 +56,9 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 	emptyDirCluster = &TestCluster{
 		Name: emptyDirClusterName,
 		Racks: []v1alpha1.Rack{
-			ARack("a", 1).
-				WithStorage(AnEmptyDir().AtPath("/var/lib/emptydir-cassandra-home")).
+			apis.ARack("a", 1).
+				WithZone("eu-west-1a").
+				WithStorage(apis.AnEmptyDir().AtPath("/var/lib/emptydir-cassandra-home")).
 				Build(),
 		},
 	}
@@ -64,35 +68,38 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster) {
 	extraFile := &ExtraConfigFile{Name: multipleRacksCluster.ExtraConfigFileName, Content: "some content"}
 
-	AClusterWithName(multipleRacksCluster.Name).AndClusterSpec(&v1alpha1.CassandraSpec{
-		Datacenter: ptr.String("custom-dc"),
-		Pod: v1alpha1.Pod{
-			BootstrapperImage: &CassandraBootstrapperImageName,
-			SidecarImage:      &CassandraSidecarImageName,
-			Image:             &CassandraImageName,
-			Resources: coreV1.ResourceRequirements{
-				Requests: coreV1.ResourceList{
-					coreV1.ResourceMemory: resource.MustParse("987Mi"),
-					coreV1.ResourceCPU:    resource.MustParse("1m"),
+	AClusterWithName(multipleRacksCluster.Name).
+		AndCustomConfig(extraFile).
+		AndClusterSpec(&v1alpha1.CassandraSpec{
+			Datacenter: ptr.String("custom-dc"),
+			Racks:      multipleRacksCluster.Racks,
+			Pod: v1alpha1.Pod{
+				BootstrapperImage: &CassandraBootstrapperImageName,
+				SidecarImage:      &CassandraSidecarImageName,
+				Image:             &CassandraImageName,
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("987Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("1m"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("987Mi"),
+					},
 				},
-				Limits: coreV1.ResourceList{
-					coreV1.ResourceMemory: resource.MustParse("987Mi"),
+				LivenessProbe: &v1alpha1.Probe{
+					FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
+					TimeoutSeconds:      ptr.Int32(7),
+					InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
+					PeriodSeconds:       ptr.Int32(CassandraLivenessPeriod),
+				},
+				ReadinessProbe: &v1alpha1.Probe{
+					FailureThreshold:    ptr.Int32(CassandraReadinessProbeFailureThreshold),
+					TimeoutSeconds:      ptr.Int32(6),
+					InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
+					PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
 				},
 			},
-			LivenessProbe: &v1alpha1.Probe{
-				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
-				TimeoutSeconds:      ptr.Int32(7),
-				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
-				PeriodSeconds:       ptr.Int32(CassandraLivenessPeriod),
-			},
-			ReadinessProbe: &v1alpha1.Probe{
-				FailureThreshold:    ptr.Int32(CassandraReadinessProbeFailureThreshold),
-				TimeoutSeconds:      ptr.Int32(6),
-				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
-				PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
-			},
-		},
-	}).AndRacks(multipleRacksCluster.Racks).AndCustomConfig(extraFile).IsDefined()
+		}).IsDefined()
 
 	AClusterWithName(emptyDirCluster.Name).AndRacks(emptyDirCluster.Racks).WithoutCustomConfig().IsDefined()
 }

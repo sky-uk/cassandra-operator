@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -10,12 +11,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
-	coreV1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	metricstesting "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics/testing"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/stub"
@@ -395,22 +390,7 @@ func (jh *jolokiaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func aCluster(clusterName, namespace string) *cluster.Cluster {
-	clusterDef := v1alpha1.Cassandra{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
-		Spec: v1alpha1.CassandraSpec{
-			Racks: []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}},
-			Pod: v1alpha1.Pod{
-				Resources: coreV1.ResourceRequirements{
-					Requests: coreV1.ResourceList{
-						coreV1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-					Limits: coreV1.ResourceList{
-						coreV1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-			},
-		},
-	}
-	v1alpha1helpers.SetDefaultsForCassandra(&clusterDef)
-	return cluster.New(&clusterDef)
+	clusterDef := apis.ACassandra().WithDefaults().WithName(clusterName).WithNamespace(namespace).Build()
+	v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
+	return cluster.New(clusterDef)
 }
