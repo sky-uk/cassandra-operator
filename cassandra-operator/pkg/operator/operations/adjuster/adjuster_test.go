@@ -3,6 +3,7 @@ package adjuster
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"reflect"
 	"testing"
 
@@ -33,27 +34,15 @@ var _ = Describe("cluster events", func() {
 	var adjuster *Adjuster
 
 	BeforeEach(func() {
-		livenessProbe := &v1alpha1.Probe{
-			FailureThreshold:    ptr.Int32(3),
-			InitialDelaySeconds: ptr.Int32(30),
-			PeriodSeconds:       ptr.Int32(30),
-			SuccessThreshold:    ptr.Int32(1),
-			TimeoutSeconds:      ptr.Int32(5),
-		}
-		readinessProbe := &v1alpha1.Probe{
-			FailureThreshold:    ptr.Int32(3),
-			InitialDelaySeconds: ptr.Int32(30),
-			PeriodSeconds:       ptr.Int32(15),
-			SuccessThreshold:    ptr.Int32(1),
-			TimeoutSeconds:      ptr.Int32(5),
-		}
-		oldCluster = &v1alpha1.Cassandra{
-			Spec: v1alpha1.CassandraSpec{
-				Datacenter: ptr.String("ADatacenter"),
-				Racks:      []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}},
-				Pod: v1alpha1.Pod{
-					Image: ptr.String("anImage"),
-					Resources: v1.ResourceRequirements{
+		oldCluster = apis.ACassandra().WithDefaults().WithSpec(
+			apis.ACassandraSpec().
+				WithDefaults().
+				WithDatacenter("ADatacenter").
+				WithRacks(apis.ARack("a", 1).WithDefaults().WithZone("some-zone")).
+				WithPod(apis.APod().
+					WithDefaults().
+					WithImageName("anImage").
+					WithResources(&v1.ResourceRequirements{
 						Requests: v1.ResourceList{
 							v1.ResourceMemory: resource.MustParse("2Gi"),
 							v1.ResourceCPU:    resource.MustParse("100m"),
@@ -62,12 +51,18 @@ var _ = Describe("cluster events", func() {
 							v1.ResourceMemory: resource.MustParse("2Gi"),
 							v1.ResourceCPU:    resource.MustParse("100m"),
 						},
-					},
-					LivenessProbe:  livenessProbe.DeepCopy(),
-					ReadinessProbe: readinessProbe.DeepCopy(),
-				},
-			},
-		}
+					}).
+					WithCassandraLivenessProbeFailureThreshold(3).
+					WithCassandraInitialDelay(30).
+					WithCassandraLivenessPeriod(30).
+					WithCassandraLivenessProbeSuccessThreshold(1).
+					WithCassandraLivenessTimeout(5).
+					WithCassandraReadinessProbeFailureThreshold(3).
+					WithCassandraReadinessPeriod(15).
+					WithCassandraReadinessProbeSuccessThreshold(1).
+					WithCassandraReadinessTimeout(5))).
+			Build()
+
 		v1alpha1helpers.SetDefaultsForCassandra(oldCluster)
 		newCluster = oldCluster.DeepCopy()
 		adjuster = New()
@@ -218,8 +213,8 @@ var _ = Describe("cluster events", func() {
 
 		Context("multiple-rack cluster", func() {
 			It("should produce an UpdateRack change for each changed rack", func() {
-				oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}, {Name: "c", Replicas: 1, Zone: "yet-another-zone"}}
-				newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}, {Name: "c", Replicas: 3, Zone: "yet-another-zone"}}
+				oldCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build(), apis.ARack("b", 1).Build(), apis.ARack("c", 1).Build()}
+				newCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 2).Build(), apis.ARack("b", 1).Build(), apis.ARack("c", 3).Build()}
 				changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
 
 				Expect(err).ToNot(HaveOccurred())
@@ -232,11 +227,37 @@ var _ = Describe("cluster events", func() {
 
 	Context("both pod resource and scale-up changes are detected", func() {
 		It("should produce an UpdateRack change for all racks", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 1, Zone: "another-zone"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "some-zone"}, {Name: "b", Replicas: 3, Zone: "another-zone"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build(), apis.ARack("b", 1).Build()}
+			newCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build(), apis.ARack("b", 3).Build()}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceCPU] = resource.MustParse("1")
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("999Mi")
 
+			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(changes).To(HaveLen(2))
+			Expect(changes).To(HaveClusterChange(newCluster.Spec.Racks[0], UpdateRack))
+			Expect(changes).To(HaveClusterChange(newCluster.Spec.Racks[1], UpdateRack))
+		})
+	})
+
+	Context("additional rack storage", func() {
+		It("should produce an UpdateRack for all racks", func() {
+			oldCluster.Spec = *apis.ACassandraSpec().WithDefaults().
+				WithRacks(
+					apis.ARack("a", 1).WithStorages(apis.APersistentVolume().WithDefaults().AtPath("path1")),
+					apis.ARack("b", 1).WithStorages(apis.APersistentVolume().WithDefaults().AtPath("path1")),
+				).
+				Build()
+			newCluster.Spec = *apis.ACassandraSpec().WithDefaults().
+				WithRacks(
+					apis.ARack("a", 1).WithStorages(
+						apis.APersistentVolume().WithDefaults().AtPath("path1"),
+						apis.AnEmptyDir().WithDefaults().AtPath("path1")),
+					apis.ARack("b", 1).WithStorages(
+						apis.APersistentVolume().WithDefaults().AtPath("path1"),
+						apis.AnEmptyDir().WithDefaults().AtPath("path2")),
+				).
+				Build()
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(changes).To(HaveLen(2))
@@ -318,11 +339,11 @@ var _ = Describe("cluster events", func() {
 
 	Context("correct ordering of changes", func() {
 		It("should perform add operations before update operations", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build(), apis.ARack("b", 1).Build()}
 			newCluster.Spec.Racks = []v1alpha1.Rack{
-				{Name: "a", Replicas: 1, Zone: "zone-a"},
-				{Name: "b", Replicas: 1, Zone: "zone-b"},
-				{Name: "c", Replicas: 1, Zone: "zone-c"},
+				apis.ARack("a", 1).Build(),
+				apis.ARack("b", 1).Build(),
+				apis.ARack("c", 1).Build(),
 			}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("3Gi")
 
@@ -341,8 +362,8 @@ var _ = Describe("cluster events", func() {
 		})
 
 		It("should treat a scale up and update as a single update operation", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 2, Zone: "zone-a"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build()}
+			newCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 2).Build()}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceMemory] = resource.MustParse("3Gi")
 
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)
@@ -354,8 +375,8 @@ var _ = Describe("cluster events", func() {
 		})
 
 		It("should order racks changes in the order in which the racks were defined in the old cluster state", func() {
-			oldCluster.Spec.Racks = []v1alpha1.Rack{{Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}, {Name: "c", Replicas: 1, Zone: "zone-c"}}
-			newCluster.Spec.Racks = []v1alpha1.Rack{{Name: "c", Replicas: 1, Zone: "zone-c"}, {Name: "a", Replicas: 1, Zone: "zone-a"}, {Name: "b", Replicas: 1, Zone: "zone-b"}}
+			oldCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("a", 1).Build(), apis.ARack("b", 1).Build(), apis.ARack("c", 1).Build()}
+			newCluster.Spec.Racks = []v1alpha1.Rack{apis.ARack("c", 1).Build(), apis.ARack("a", 1).Build(), apis.ARack("b", 1).Build()}
 			newCluster.Spec.Pod.Resources.Requests[v1.ResourceCPU] = resource.MustParse("101m")
 
 			changes, err := adjuster.ChangesForCluster(oldCluster, newCluster)

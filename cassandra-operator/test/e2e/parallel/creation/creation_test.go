@@ -42,6 +42,8 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 					OfSize("100Mi").
 					WithStorageClass("standard-zone-a").
 					AtPath("/var/lib/pv-cassandra-home")).
+				WithStorage(apis.AnEmptyDir().
+					AtPath("/var/log/my-empty-dir")).
 				Build(),
 			apis.ARack("b", 1).
 				WithZone("eu-west-1b").
@@ -49,6 +51,8 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 					OfSize("100Mi").
 					WithStorageClass("standard-zone-b").
 					AtPath("/var/lib/pv-cassandra-home")).
+				WithStorage(apis.AnEmptyDir().
+					AtPath("/var/log/my-empty-dir")).
 				Build(),
 		},
 		ExtraConfigFileName: "extraConfigFile",
@@ -59,6 +63,7 @@ func defineClusters(multipleRacksClusterName, emptyDirClusterName string) (multi
 			apis.ARack("a", 1).
 				WithZone("eu-west-1a").
 				WithStorage(apis.AnEmptyDir().AtPath("/var/lib/emptydir-cassandra-home")).
+				WithStorage(apis.AnEmptyDir().AtPath("/var/log/emptydir-logs")).
 				Build(),
 		},
 	}
@@ -197,18 +202,17 @@ var _ = Context("When a cluster with a given name doesn't already exist", func()
 
 	It("should setup the correct persistent volumes in the cassandra containers", func() {
 		By("creating persistent volume at the given path")
-		Expect(StatefulSetsForCluster(Namespace, multipleRacksCluster.Name)()).Should(
-			Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
-
-		By("not creating an emptyDir volume at the same path")
-		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(
-			Each(Not(HaveEmptyDirVolumeMountAtPath("/var/lib/pv-cassandra-home"))))
+		Expect(StatefulSetsForCluster(Namespace, multipleRacksCluster.Name)()).Should(And(
+			Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home"))))
 	})
 
 	It("should setup the correct empty dir volumes in the cassandra containers", func() {
-		By("creating an emptyDir volume at the given path")
-		Expect(PodsForCluster(Namespace, emptyDirCluster.Name)()).Should(
-			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/emptydir-cassandra-home")))
+		By("creating the emptyDir volumes at the given path")
+		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(
+			Each(HaveEmptyDirVolumeMountAtPath("/var/log/my-empty-dir")))
+		Expect(PodsForCluster(Namespace, emptyDirCluster.Name)()).Should(And(
+			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/emptydir-cassandra-home")),
+			Each(HaveEmptyDirVolumeMountAtPath("/var/log/emptydir-logs"))))
 
 		By("not creating a persistent volume claim")
 		Expect(PersistentVolumeClaimsForCluster(Namespace, emptyDirCluster.Name)()).Should(BeEmpty())

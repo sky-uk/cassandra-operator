@@ -118,7 +118,7 @@ func ACassandraSpec() *CassandraSpecBuilder {
 	return &CassandraSpecBuilder{}
 }
 
-func (cs *CassandraSpecBuilder) ForDatacenter(datacenter string) *CassandraSpecBuilder {
+func (cs *CassandraSpecBuilder) WithDatacenter(datacenter string) *CassandraSpecBuilder {
 	cs.datacenter = ptr.String(datacenter)
 	return cs
 }
@@ -149,7 +149,7 @@ func (cs *CassandraSpecBuilder) WithNoSnapshot() *CassandraSpecBuilder {
 }
 
 func (cs *CassandraSpecBuilder) WithDefaults() *CassandraSpecBuilder {
-	return cs.ForDatacenter("my-dc").
+	return cs.WithDatacenter("my-dc").
 		WithPod(APod().WithDefaults()).
 		WithRack(ARack("a", 1).WithDefaults()).
 		WithRack(ARack("b", 1).WithDefaults()).
@@ -418,6 +418,11 @@ func (pv *PersistentVolumeStorageBuilder) OfSize(storageSize string) *Persistent
 	return pv
 }
 
+func (pv *PersistentVolumeStorageBuilder) WithDefaults() *PersistentVolumeStorageBuilder {
+	return pv.AtPath("/var/lib/cassandra").
+		OfSize("1Gi")
+}
+
 func (pv *PersistentVolumeStorageBuilder) Build() v1alpha1.Storage {
 	return v1alpha1.Storage{
 		Path: pv.path,
@@ -447,6 +452,10 @@ func (e *EmptyDirStorageBuilder) AtPath(path string) *EmptyDirStorageBuilder {
 	return e
 }
 
+func (e *EmptyDirStorageBuilder) WithDefaults() *EmptyDirStorageBuilder {
+	return e
+}
+
 func (e *EmptyDirStorageBuilder) Build() v1alpha1.Storage {
 	return v1alpha1.Storage{
 		Path: e.path,
@@ -469,17 +478,16 @@ func (r *RackSpecBuilder) WithDefaults() *RackSpecBuilder {
 		WithZone(fmt.Sprintf("%s%s", "eu-west-1", r.rackName)).
 		WithStorage(
 			APersistentVolume().
-				AtPath("/var/lib/cassandra").
-				OfSize("1Gi").
+				WithDefaults().
 				WithStorageClass(fmt.Sprintf("%s%s", "standard-zone-", r.rackName)))
 }
 
 func (r *RackSpecBuilder) WithEmptyDir() *RackSpecBuilder {
-	return r.WithStorage(AnEmptyDir())
+	return r.WithStorage(AnEmptyDir().WithDefaults())
 }
 
 func (r *RackSpecBuilder) WithPersistentVolume() *RackSpecBuilder {
-	return r.WithStorage(APersistentVolume())
+	return r.WithStorage(APersistentVolume().WithDefaults())
 }
 
 func (r *RackSpecBuilder) WithZone(zone string) *RackSpecBuilder {

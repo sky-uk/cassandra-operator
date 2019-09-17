@@ -43,6 +43,12 @@ const (
 
 	// DefaultStorageVolumeMountPath is the default location for Cassandra data storage
 	DefaultStorageVolumeMountPath = "/var/lib/cassandra"
+
+	// ConfigurationVolumeMountPath is the location for Cassandra configuration
+	ConfigurationVolumeMountPath = "/etc/cassandra"
+
+	// ExtraLibVolumeMountPath is the location for extra libraries required by the operator to function
+	ExtraLibVolumeMountPath = "/extra-lib"
 )
 
 // +genclient

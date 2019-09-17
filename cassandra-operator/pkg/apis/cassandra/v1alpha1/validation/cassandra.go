@@ -57,16 +57,8 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 				),
 			)
 		}
-		if len(rack.Storage) > 1 {
-			allErrs = append(
-				allErrs,
-				field.Forbidden(
-					rackFieldPath.Child("Storage"),
-					"no more than one storage per rack is allowed",
-				),
-			)
-		}
 
+		rackStoragePaths := make(map[string]bool)
 		for i := range rack.Storage {
 			storage := rack.Storage[i]
 			storageFieldPath := rackFieldPath.Child("Storage").Index(i)
@@ -78,7 +70,29 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 						"a volume path is required",
 					),
 				)
+			} else {
+				if v1alpha1helpers.IsAReservedVolumePath(*storage.Path) {
+					allErrs = append(
+						allErrs,
+						field.Forbidden(
+							storageFieldPath,
+							fmt.Sprintf("Storage path '%s' is reserved for the operator", *storage.Path),
+						),
+					)
+				}
+				if _, ok := rackStoragePaths[*storage.Path]; ok {
+					allErrs = append(
+						allErrs,
+						field.Forbidden(
+							rackFieldPath.Child("Storage"),
+							fmt.Sprintf("multiple storages have the same path '%s'", *storage.Path),
+						),
+					)
+				} else {
+					rackStoragePaths[*storage.Path] = true
+				}
 			}
+
 			if storage.PersistentVolumeClaim != nil && storage.EmptyDir != nil {
 				allErrs = append(
 					allErrs,
@@ -363,20 +377,41 @@ func validatePodUpdate(fldPath *field.Path, old, new *v1alpha1.Pod) field.ErrorL
 
 func validateRackUpdate(fldPath *field.Path, old, new *v1alpha1.Rack) field.ErrorList {
 	var allErrs field.ErrorList
-	// reject all storage updates until we know better
-	if !reflect.DeepEqual(new.Storage, old.Storage) {
+	matchedStorages, removedStorages := matchStorages(old, new)
+	removedStoragePaths := sets.NewString()
+	for _, s := range removedStorages {
+		removedStoragePaths.Insert(*s.Path)
+	}
+	if len(removedStorages) > 0 {
 		allErrs = append(
 			allErrs,
 			field.Forbidden(
 				fldPath.Child("Storage"),
 				fmt.Sprintf(
-					"This field can not be changed: current: %v, new: %v",
-					old.Storage,
-					new.Storage,
+					"Storage deletion is not supported. Missing Storage at path(s): %s",
+					strings.Join(removedStoragePaths.List(), ", "),
 				),
 			),
 		)
 	}
+
+	for _, matchedStorage := range matchedStorages {
+		// reject all storage updates until we know better
+		if !reflect.DeepEqual(matchedStorage.Old, matchedStorage.New) {
+			allErrs = append(
+				allErrs,
+				field.Forbidden(
+					fldPath.Child("Storage"),
+					fmt.Sprintf(
+						"This field can not be changed: current: %v, new: %v",
+						matchedStorage.Old,
+						matchedStorage.New,
+					),
+				),
+			)
+		}
+	}
+
 	if new.Zone != old.Zone {
 		allErrs = append(
 			allErrs,
@@ -406,4 +441,29 @@ func validateRackUpdate(fldPath *field.Path, old, new *v1alpha1.Rack) field.Erro
 	}
 
 	return allErrs
+}
+
+type matchedStorage struct {
+	Old v1alpha1.Storage
+	New v1alpha1.Storage
+}
+
+func matchStorages(oldRack, newRack *v1alpha1.Rack) (matchedStorages []matchedStorage, removedStorages []v1alpha1.Storage) {
+	for _, oldStorage := range oldRack.Storage {
+		if foundStorage, ok := findStorage(&oldStorage, newRack.Storage); ok {
+			matchedStorages = append(matchedStorages, matchedStorage{oldStorage, *foundStorage})
+		} else {
+			removedStorages = append(removedStorages, oldStorage)
+		}
+	}
+	return matchedStorages, removedStorages
+}
+
+func findStorage(storageToFind *v1alpha1.Storage, storages []v1alpha1.Storage) (*v1alpha1.Storage, bool) {
+	for _, storage := range storages {
+		if *storage.Path == *storageToFind.Path {
+			return &storage, true
+		}
+	}
+	return nil, false
 }

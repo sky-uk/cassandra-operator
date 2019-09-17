@@ -192,21 +192,29 @@ func (cass *currentClusterStateFinder) buildCassandraStorage(statefulSet *v1beta
 		return nil, err
 	}
 
-	for _, volumeMount := range cassandraContainer.VolumeMounts {
-		if _, ok := operatorManagedVolumes[volumeMount.Name]; !ok {
-			storageSource := cass.buildStorageSource(volumeMount.Name, statefulSet)
-			if storageSource == nil {
-				return nil, fmt.Errorf("no supported volume source found for volume mount: %v", volumeMount.Name)
-			}
+	volumeMountsInSpec := filterOutOperatorManagedVolumes(cassandraContainer.VolumeMounts)
+	for _, volumeMount := range volumeMountsInSpec {
+		storageSource := cass.buildStorageSource(volumeMount.Name, statefulSet)
+		if storageSource == nil {
+			return nil, fmt.Errorf("no supported volume source found for volume mount: %v", volumeMount.Name)
+		}
 
-			cassandraStorages = append(cassandraStorages, v1alpha1.Storage{
-				Path:          ptr.String(volumeMount.MountPath),
-				StorageSource: *storageSource,
-			})
+		cassandraStorages = append(cassandraStorages, v1alpha1.Storage{
+			Path:          ptr.String(volumeMount.MountPath),
+			StorageSource: *storageSource,
+		})
+	}
+	return cassandraStorages, nil
+}
+
+func filterOutOperatorManagedVolumes(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	var volumesToKeep []corev1.VolumeMount
+	for _, volumeMount := range mounts {
+		if _, ok := operatorManagedVolumes[volumeMount.Name]; !ok {
+			volumesToKeep = append(volumesToKeep, volumeMount)
 		}
 	}
-
-	return cassandraStorages, nil
+	return volumesToKeep
 }
 
 func (cass *currentClusterStateFinder) buildStorageSource(volumeName string, statefulSet *v1beta2.StatefulSet) *v1alpha1.StorageSource {

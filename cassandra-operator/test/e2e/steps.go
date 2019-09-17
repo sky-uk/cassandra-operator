@@ -53,6 +53,17 @@ func TheRackReplicationIsChangedTo(namespace, clusterName, rackName string, repl
 	log.Infof("Updated rack replication for cluster %s", clusterName)
 }
 
+func TheRackStorageIsChangedTo(namespace, clusterName, rackName string, storages []v1alpha1.Storage) {
+	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
+		for i := range spec.Racks {
+			if spec.Racks[i].Name == rackName {
+				spec.Racks[i].Storage = storages
+			}
+		}
+	})
+	log.Infof("Updated rack storage for cluster %s", clusterName)
+}
+
 func TheCustomConfigIsAddedForCluster(namespace, clusterName string, extraConfigFile *ExtraConfigFile) {
 	_, err := customCassandraConfigMap(namespace, clusterName, extraConfigFile)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())

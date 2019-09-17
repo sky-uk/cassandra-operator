@@ -20,6 +20,10 @@ func NewControllerRef(c *v1alpha1.Cassandra) metav1.OwnerReference {
 	})
 }
 
+func IsAReservedVolumePath(path string) bool {
+	return path == v1alpha1.ConfigurationVolumeMountPath || path == v1alpha1.ExtraLibVolumeMountPath
+}
+
 // SnapshotPropertiesUpdated returns false when snapshot1 and snapshot2 have the same properties disregarding retention policy
 func SnapshotPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v1alpha1.Snapshot) bool {
 	return snapshot1.Schedule != snapshot2.Schedule ||

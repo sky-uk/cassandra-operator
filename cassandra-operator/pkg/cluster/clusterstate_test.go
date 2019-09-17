@@ -6,6 +6,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"k8s.io/api/apps/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -124,7 +125,7 @@ var _ = Describe("the cluster state reconstruction", func() {
 			fakes.statefulsetsAreFoundIn(clusterNamespaceName, createStatefulSetsFor(expectedCassandra))
 		})
 
-		It("should find a persistent volume at the given path", func() {
+		It("should have a persistent volume at the given path", func() {
 			currentCassandra, err := stateFinder.findClusterStateFor(desiredCassandra)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(currentCassandra).To(Equal(expectedCassandra))
@@ -141,13 +142,53 @@ var _ = Describe("the cluster state reconstruction", func() {
 			fakes.statefulsetsAreFoundIn(clusterNamespaceName, createStatefulSetsFor(expectedCassandra))
 		})
 
-		It("should find an emptyDir at the given volume path", func() {
+		It("should have an emptyDir at the given volume path", func() {
 			currentCassandra, err := stateFinder.findClusterStateFor(desiredCassandra)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(currentCassandra).To(Equal(expectedCassandra))
 			Expect(currentCassandra.Spec.Racks[0].Storage[0].PersistentVolumeClaim).To(BeNil())
 			Expect(currentCassandra.Spec.Racks[0].Storage[0].EmptyDir).NotTo(BeNil())
 			Expect(*currentCassandra.Spec.Racks[0].Storage[0].Path).To(Equal("/cassandra-storage-path"))
+		})
+	})
+
+	Context("when multiple storages are defined", func() {
+		BeforeEach(func() {
+			expectedCassandra = apis.ACassandra().WithDefaults().WithNamespace(clusterNamespaceName.Namespace).WithName(clusterNamespaceName.Name).WithSpec(
+				apis.ACassandraSpec().WithDefaults().WithNoSnapshot().WithRacks(
+					apis.ARack("a", 1).WithDefaults().WithStorages(
+						apis.AnEmptyDir().AtPath("/emptydir-path-1"),
+						apis.APersistentVolume().AtPath("/pv-cassandra").OfSize("100Gi").WithStorageClass("fast"),
+						apis.APersistentVolume().AtPath("/pv-logs").OfSize("1Gi").WithStorageClass("standard"),
+						apis.AnEmptyDir().AtPath("/emptydir-path-2"),
+					),
+				)).Build()
+			statefulsSets := createStatefulSetsFor(expectedCassandra)
+			fakes.statefulsetsAreFoundIn(clusterNamespaceName, statefulsSets)
+		})
+
+		It("should have a persistent volume storage defined for each persistent volume claim", func() {
+			currentCassandra, err := stateFinder.findClusterStateFor(desiredCassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(currentCassandra).To(Equal(expectedCassandra))
+			Expect(currentCassandra.Spec.Racks[0].Storage[1].PersistentVolumeClaim).NotTo(BeNil())
+			Expect(currentCassandra.Spec.Racks[0].Storage[1].EmptyDir).To(BeNil())
+			Expect(*currentCassandra.Spec.Racks[0].Storage[1].Path).To(Equal("/pv-cassandra"))
+			Expect(currentCassandra.Spec.Racks[0].Storage[2].PersistentVolumeClaim).NotTo(BeNil())
+			Expect(currentCassandra.Spec.Racks[0].Storage[2].EmptyDir).To(BeNil())
+			Expect(*currentCassandra.Spec.Racks[0].Storage[2].Path).To(Equal("/pv-logs"))
+		})
+
+		It("should have emptyDir storage defined for each emptyDir volume in the same order", func() {
+			currentCassandra, err := stateFinder.findClusterStateFor(desiredCassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(currentCassandra).To(Equal(expectedCassandra))
+			Expect(currentCassandra.Spec.Racks[0].Storage[0].EmptyDir).NotTo(BeNil())
+			Expect(currentCassandra.Spec.Racks[0].Storage[0].PersistentVolumeClaim).To(BeNil())
+			Expect(*currentCassandra.Spec.Racks[0].Storage[0].Path).To(Equal("/emptydir-path-1"))
+			Expect(currentCassandra.Spec.Racks[0].Storage[3].EmptyDir).NotTo(BeNil())
+			Expect(currentCassandra.Spec.Racks[0].Storage[3].PersistentVolumeClaim).To(BeNil())
+			Expect(*currentCassandra.Spec.Racks[0].Storage[3].Path).To(Equal("/emptydir-path-2"))
 		})
 	})
 })

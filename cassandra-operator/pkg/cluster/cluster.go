@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -34,8 +35,6 @@ const (
 	cassandraBootstrapperContainerName = "cassandra-bootstrapper"
 	cassandraSidecarContainerName      = "cassandra-sidecar"
 
-	configurationVolumeMountPath = "/etc/cassandra"
-	extraLibVolumeMountPath      = "/extra-lib"
 	configurationVolumeName      = "configuration"
 	extraLibVolumeName           = "extra-lib"
 
@@ -48,6 +47,7 @@ var (
 	maxSidecarCPURequest    resource.Quantity
 	sidecarCPULimit         resource.Quantity
 	operatorManagedVolumes  map[string]bool
+	alphanumericChars       *regexp.Regexp
 )
 
 func init() {
@@ -58,6 +58,7 @@ func init() {
 	operatorManagedVolumes = make(map[string]bool)
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
+	alphanumericChars = regexp.MustCompile("[^a-zA-Z0-9]+")
 }
 
 // Cluster defines the properties of a Cassandra cluster which the operator should manage.
@@ -465,7 +466,7 @@ func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1
 		cassandraStorage := rack.Storage[i]
 		if cassandraStorage.PersistentVolumeClaim != nil {
 			persistentVolumeClaim = append(persistentVolumeClaim, v1.PersistentVolumeClaim{
-				ObjectMeta: c.objectMetadata(fmt.Sprintf("cassandra-storage-%d", i), RackLabel, rack.Name, "app", c.definition.Name),
+				ObjectMeta: c.objectMetadata(resourceNameFromPath(*cassandraStorage.Path), RackLabel, rack.Name, "app", c.definition.Name),
 				Spec:       *cassandraStorage.StorageSource.PersistentVolumeClaim,
 			})
 		}
@@ -475,13 +476,13 @@ func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1
 
 func (c *Cluster) createVolumeMounts(rack *v1alpha1.Rack) []v1.VolumeMount {
 	mounts := []v1.VolumeMount{
-		{Name: configurationVolumeName, MountPath: configurationVolumeMountPath},
-		{Name: extraLibVolumeName, MountPath: extraLibVolumeMountPath},
+		{Name: configurationVolumeName, MountPath: v1alpha1.ConfigurationVolumeMountPath},
+		{Name: extraLibVolumeName, MountPath: v1alpha1.ExtraLibVolumeMountPath},
 	}
 
 	for i := range rack.Storage {
 		mounts = append(mounts, v1.VolumeMount{
-			Name:      fmt.Sprintf("cassandra-storage-%d", i),
+			Name:      resourceNameFromPath(*rack.Storage[i].Path),
 			MountPath: *rack.Storage[i].Path,
 		})
 	}
@@ -504,7 +505,7 @@ func (c *Cluster) createPodVolumes(rack *v1alpha1.Rack) []v1.Volume {
 
 	for i := range rack.Storage {
 		if rack.Storage[i].EmptyDir != nil {
-			volumes = append(volumes, emptyDir(fmt.Sprintf("cassandra-storage-%d", i)))
+			volumes = append(volumes, emptyDir(resourceNameFromPath(*rack.Storage[i].Path)))
 		}
 	}
 	return volumes
@@ -666,4 +667,8 @@ func minQuantity(r1, r2 resource.Quantity) resource.Quantity {
 		return r2
 	}
 	return r1
+}
+
+func resourceNameFromPath(path string) string {
+	return alphanumericChars.ReplaceAllString(strings.TrimPrefix(path, "/"), "-")
 }

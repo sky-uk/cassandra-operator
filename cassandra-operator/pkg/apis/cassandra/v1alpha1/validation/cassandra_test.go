@@ -156,18 +156,28 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Racks[0].Storage[0].Path = nil
 			},
 		),
-		// TODO support for multiple volumes would be allowed soon
 		Entry(
-			"Rack storage may not contain more than one storage (for now)",
-			"spec.Racks.a.Storage: Forbidden: no more than one storage per rack is allowed",
+			"Rack storage may not contain multiple storage for the same path",
+			"spec.Racks.a.Storage: Forbidden: multiple storages have the same path '/some-path'",
 			func(c *v1alpha1.Cassandra) {
-				otherStorage := v1alpha1.Storage{
-					Path: ptr.String("some path"),
-					StorageSource: v1alpha1.StorageSource{
-						EmptyDir: &coreV1.EmptyDirVolumeSource{},
-					},
-				}
-				c.Spec.Racks[0].Storage = append(c.Spec.Racks[0].Storage, otherStorage)
+				aStorage := apis.APersistentVolume().OfSize("1Mi").AtPath("/some-path").Build()
+				otherStorage := apis.AnEmptyDir().AtPath("/some-path").Build()
+				rackStorage := []v1alpha1.Storage{aStorage, otherStorage}
+				c.Spec.Racks[0].Storage = rackStorage
+			},
+		),
+		Entry(
+			"Rack storage /etc/cassandra is a reserved path",
+			"spec.Racks.a.Storage[0]: Forbidden: Storage path '/etc/cassandra' is reserved for the operator",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage[0].Path = ptr.String("/etc/cassandra")
+			},
+		),
+		Entry(
+			"Rack storage /extra-lib is a reserved path",
+			"spec.Racks.a.Storage[0]: Forbidden: Storage path '/extra-lib' is reserved for the operator",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage[0].Path = ptr.String("/extra-lib")
 			},
 		),
 		Entry(
@@ -263,7 +273,6 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Pod.LivenessProbe.TimeoutSeconds = ptr.Int32(0)
 			},
 		),
-
 		Entry(
 			"ReadinessProbe.FailureThreshold must be positive",
 			"spec.Pod.ReadinessProbe.FailureThreshold: Invalid value: -1: must be >= 1",
@@ -327,7 +336,6 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Pod.ReadinessProbe.TimeoutSeconds = ptr.Int32(0)
 			},
 		),
-
 		Entry(
 			"Snapshot.Schedule must not be empty",
 			"spec.Snapshot.Schedule: Invalid value: \"\": is not a valid cron expression (Empty spec string)",
@@ -528,6 +536,13 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 				*c.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds += 1
 			},
 		),
+		Entry(
+			"Additional rack Storage may be added",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage = append(c.Spec.Racks[0].Storage, apis.AnEmptyDir().AtPath("another path").Build())
+				c.Spec.Racks[0].Storage = append(c.Spec.Racks[0].Storage, apis.APersistentVolume().OfSize("1Gi").AtPath("yes another path").Build())
+			},
+		),
 	)
 	DescribeTable(
 		"forbidden changes",
@@ -565,7 +580,14 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			"Rack Storage",
 			"spec.Racks.a.Storage: Forbidden: This field can not be changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Racks[0].Storage[0].Path = ptr.String("some other path")
+				c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.StorageClassName = ptr.String("some other class")
+			},
+		),
+		Entry(
+			"Rack Storage deletion",
+			"spec.Racks.a.Storage: Forbidden: Storage deletion is not supported. Missing Storage at path(s): pv-path1",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage = c.Spec.Racks[0].Storage[1:]
 			},
 		),
 		Entry(
@@ -599,8 +621,14 @@ func aValidCassandra() *v1alpha1.Cassandra {
 			WithDefaults().
 			WithSnapshot(apis.ASnapshot().WithDefaults().WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults())).
 			WithRacks(
-				apis.ARack("a", 2).WithDefaults(),
-				apis.ARack("b", 2).WithDefaults(),
+				apis.ARack("a", 2).WithDefaults().WithStorages(
+					apis.APersistentVolume().AtPath("pv-path1").OfSize("1Gi").WithStorageClass("storage-a"),
+					apis.AnEmptyDir().AtPath("path1"),
+				),
+				apis.ARack("b", 2).WithDefaults().WithStorages(
+					apis.APersistentVolume().AtPath("pv-path1").OfSize("1Gi").WithStorageClass("storage-b"),
+					apis.AnEmptyDir().AtPath("path1"),
+				),
 			)).
 		Build()
 }

@@ -2,6 +2,7 @@ package modification
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"testing"
 	"time"
 
@@ -229,6 +230,40 @@ var _ = Context("Allowable cluster modifications", func() {
 		)))
 	})
 
+	It("should add the new rack storage", func() {
+		// given
+		registerResourcesUsed(1)
+		var rackStorage []apis.StorageBuilder
+		rackStorage = append(rackStorage, apis.APersistentVolume().
+			OfSize("100Mi").
+			WithStorageClass("standard-zone-a").
+			AtPath("/var/lib/pv-cassandra-home"))
+		rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-empty-dir"))
+
+		AClusterWithName(clusterName).
+			AndRacks([]v1alpha1.Rack{apis.ARack("a", 1).
+				WithZone("eu-west-1a").
+				WithStorages(rackStorage...).
+				Build(),
+			}).
+			Exists()
+
+		// when
+		rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-other-empty-dir"))
+		TheRackStorageIsChangedTo(Namespace, clusterName, "a", buildStorage(rackStorage))
+
+		// then
+		By("creating the additional emptyDir volume at the given path")
+		Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(And(
+			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-empty-dir")),
+			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-other-empty-dir"))))
+
+		By("preserving the persistent volume at the given path")
+		Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
+			Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+		Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
+	})
+
 	Context("cluster config file changes", func() {
 		It("should trigger a rolling restart of the cluster stateful set when a custom config file is changed", func() {
 			// given
@@ -352,6 +387,14 @@ var _ = Context("Allowable cluster modifications", func() {
 		})
 	})
 })
+
+func buildStorage(builders []apis.StorageBuilder) []v1alpha1.Storage {
+	var rackStorage []v1alpha1.Storage
+	for _, builder := range builders {
+		rackStorage = append(rackStorage, builder.Build())
+	}
+	return rackStorage
+}
 
 func statefulSetRevisions(clusterName string, racks []v1alpha1.Rack) map[string]string {
 	m := map[string]string{}

@@ -8,6 +8,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
 	v1 "k8s.io/api/core/v1"
+	"reflect"
 )
 
 const updateAnnotationPatchFormat = `{
@@ -61,7 +62,7 @@ func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster 
 		clusterChanges = append(clusterChanges, ClusterChange{Rack: addedRack, ChangeType: AddRack})
 	}
 
-	if r.podSpecHasChanged(oldCluster, newCluster) {
+	if r.podSpecHasChanged(oldCluster, newCluster) || r.rackStorageHasChanged(matchedRacks) {
 		for _, matchedRack := range matchedRacks {
 			clusterChanges = append(clusterChanges, ClusterChange{Rack: matchedRack.New, ChangeType: UpdateRack})
 		}
@@ -82,6 +83,15 @@ func (r *Adjuster) CreateConfigMapHashPatchForRack(rack *v1alpha1.Rack, configMa
 
 func (r *Adjuster) podSpecHasChanged(oldCluster, newCluster *v1alpha1.Cassandra) bool {
 	return !cmp.Equal(oldCluster.Spec.Pod, newCluster.Spec.Pod)
+}
+
+func (r *Adjuster) rackStorageHasChanged(matchedRacks []v1alpha1helpers.MatchedRack) bool {
+	for _, matchedRack := range matchedRacks {
+		if !reflect.DeepEqual(matchedRack.New.Storage, matchedRack.Old.Storage) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Adjuster) scaledUpRacks(matchedRacks []v1alpha1helpers.MatchedRack) []v1alpha1.Rack {

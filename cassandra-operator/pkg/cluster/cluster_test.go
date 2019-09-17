@@ -158,13 +158,12 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				volumeClaims := statefulSet.Spec.VolumeClaimTemplates
 				Expect(volumeClaims).To(HaveLen(1))
-				Expect(volumeClaims[0].Name).To(Equal(fmt.Sprintf("cassandra-storage-%d", storageIndex)))
+				Expect(volumeClaims[0].Name).To(Equal("var-lib-cassandra"))
 				Expect(&volumeClaims[0].Spec).To(Equal(clusterDef.Spec.Racks[0].Storage[storageIndex].PersistentVolumeClaim))
 			})
 
 			It("should mount a persistent volume claim at the default path", func() {
 				// given
-				storageIndex := 0
 				cluster := ACluster(clusterDef)
 
 				// when
@@ -173,7 +172,7 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
 				Expect(mainContainerVolumeMounts).To(HaveLen(3))
-				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%d", storageIndex), "/var/lib/cassandra")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("var-lib-cassandra", "/var/lib/cassandra")))
 			})
 
 			It("should mount a persistent volume claim at the given path", func() {
@@ -188,7 +187,7 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
 				Expect(mainContainerVolumeMounts).To(HaveLen(3))
-				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%d", storageIndex), "/my-cassandra-home")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("my-cassandra-home", "/my-cassandra-home")))
 			})
 		})
 
@@ -208,7 +207,6 @@ var _ = Describe("creation of stateful sets", func() {
 
 			It("should create an emptyDir volume", func() {
 				// given
-				storageIndex := 0
 				cluster := ACluster(clusterDef)
 
 				// when
@@ -217,12 +215,11 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				volumes := statefulSet.Spec.Template.Spec.Volumes
 				Expect(volumes).To(HaveLen(3))
-				Expect(volumes).To(haveExactly(1, matchingEmptyDir(fmt.Sprintf("cassandra-storage-%d", storageIndex))))
+				Expect(volumes).To(haveExactly(1, matchingEmptyDir("var-lib-cassandra")))
 			})
 
 			It("should mount an emptyDir at the default path", func() {
 				// given
-				storageIndex := 0
 				cluster := ACluster(clusterDef)
 
 				// when
@@ -231,7 +228,7 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
 				Expect(mainContainerVolumeMounts).To(HaveLen(3))
-				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%d", storageIndex), "/var/lib/cassandra")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("var-lib-cassandra", "/var/lib/cassandra")))
 			})
 
 			It("should mount an emptyDir at the given path", func() {
@@ -246,7 +243,67 @@ var _ = Describe("creation of stateful sets", func() {
 				// then
 				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
 				Expect(mainContainerVolumeMounts).To(HaveLen(3))
-				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount(fmt.Sprintf("cassandra-storage-%d", storageIndex), "/my-other-cassandra-home")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("my-other-cassandra-home", "/my-other-cassandra-home")))
+			})
+		})
+
+		Context("when multiple storages are defined", func() {
+			BeforeEach(func() {
+				clusterDef = apis.ACassandra().WithDefaults().WithSpec(
+					apis.ACassandraSpec().WithDefaults().WithRacks(
+						apis.ARack("a", 1).WithDefaults().WithStorages(
+							apis.AnEmptyDir().AtPath("/emptydir-path-1"),
+							apis.APersistentVolume().AtPath("/pv-cassandra").OfSize("100Gi").WithStorageClass("fast"),
+							apis.APersistentVolume().AtPath("/pv-logs").OfSize("1Gi").WithStorageClass("standard"),
+							apis.AnEmptyDir().AtPath("/emptydir-path-2"),
+						),
+					)).Build()
+			})
+
+			It("should create 1 volume for each emptyDir", func() {
+				// given
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				volumes := statefulSet.Spec.Template.Spec.Volumes
+				Expect(volumes).To(HaveLen(4))
+				Expect(volumes).To(haveExactly(1, matchingEmptyDir("emptydir-path-1")))
+				Expect(volumes).To(haveExactly(1, matchingEmptyDir("emptydir-path-2")))
+			})
+
+			It("should create 1 volume claim for each persistent volume", func() {
+				// given
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				volumeClaims := statefulSet.Spec.VolumeClaimTemplates
+				Expect(volumeClaims).To(HaveLen(2))
+				Expect(volumeClaims[0].Name).To(Equal("pv-cassandra"))
+				Expect(volumeClaims[1].Name).To(Equal("pv-logs"))
+				Expect(&volumeClaims[0].Spec).To(Equal(clusterDef.Spec.Racks[0].Storage[1].PersistentVolumeClaim))
+				Expect(&volumeClaims[1].Spec).To(Equal(clusterDef.Spec.Racks[0].Storage[2].PersistentVolumeClaim))
+			})
+
+			It("should mount all volumes at their given path", func() {
+				// given
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
+				Expect(mainContainerVolumeMounts).To(HaveLen(6))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("emptydir-path-1", "/emptydir-path-1")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("pv-cassandra", "/pv-cassandra")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("pv-logs", "/pv-logs")))
+				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("emptydir-path-2", "/emptydir-path-2")))
 			})
 		})
 	})
