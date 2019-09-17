@@ -20,13 +20,6 @@ func NewControllerRef(c *v1alpha1.Cassandra) metav1.OwnerReference {
 	})
 }
 
-// HasRetentionPolicyEnabled returns true when a retention policy exists and is enabled
-func HasRetentionPolicyEnabled(snapshot *v1alpha1.Snapshot) bool {
-	return snapshot.RetentionPolicy != nil &&
-		snapshot.RetentionPolicy.Enabled != nil &&
-		*snapshot.RetentionPolicy.Enabled
-}
-
 // SnapshotPropertiesUpdated returns false when snapshot1 and snapshot2 have the same properties disregarding retention policy
 func SnapshotPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v1alpha1.Snapshot) bool {
 	return snapshot1.Schedule != snapshot2.Schedule ||
@@ -34,7 +27,7 @@ func SnapshotPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v1alpha1
 		!reflect.DeepEqual(snapshot1.Keyspaces, snapshot2.Keyspaces)
 }
 
-// SnapshotCleanupPropertiesUpdated returns false snapshot1 and snapshot2 have the same retention policy regardless of whether it is enabled or not
+// SnapshotCleanupPropertiesUpdated returns false snapshot1 and snapshot2 have the same retention policy
 func SnapshotCleanupPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v1alpha1.Snapshot) bool {
 	return snapshot1.RetentionPolicy != nil && snapshot2.RetentionPolicy != nil &&
 		(snapshot1.RetentionPolicy.CleanupSchedule != snapshot2.RetentionPolicy.CleanupSchedule ||
@@ -83,9 +76,6 @@ func setDefaultsForSnapshot(snapshot *v1alpha1.Snapshot) {
 }
 
 func setDefaultsForRetentionPolicy(rp *v1alpha1.RetentionPolicy) {
-	if rp.Enabled == nil {
-		rp.Enabled = ptr.Bool(true)
-	}
 	if rp.RetentionPeriodDays == nil {
 		rp.RetentionPeriodDays = ptr.Int32(v1alpha1.DefaultRetentionPolicyRetentionPeriodDays)
 	}

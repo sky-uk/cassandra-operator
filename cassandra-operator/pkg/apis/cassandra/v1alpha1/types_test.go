@@ -133,7 +133,7 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one snapshot has a different timeout", func(snapshot *Snapshot) { snapshot.TimeoutSeconds = ptr.Int32(1) }),
 			Entry("when one snapshot has no timeout", func(snapshot *Snapshot) { snapshot.TimeoutSeconds = nil }),
 			Entry("when one snapshot has retention policy", func(snapshot *Snapshot) { snapshot.RetentionPolicy = nil }),
-			Entry("when one snapshot has retention policy disabled", func(snapshot *Snapshot) { snapshot.RetentionPolicy.Enabled = ptr.Bool(false) }),
+			Entry("when one snapshot has retention policy disabled", func(snapshot *Snapshot) { snapshot.RetentionPolicy = nil }),
 			Entry("when one snapshot has a different cleanup schedule", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupSchedule = "other schedule" }),
 			Entry("when one snapshot has no cleanup timeout", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(1) }),
 			Entry("when one snapshot has a different cleanup timeout", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupTimeoutSeconds = nil }),
@@ -415,7 +415,6 @@ func snapshotSpec() *Snapshot {
 		Keyspaces:      []string{"k1", "k2"},
 		TimeoutSeconds: ptr.Int32(62),
 		RetentionPolicy: &RetentionPolicy{
-			Enabled:               ptr.Bool(true),
 			RetentionPeriodDays:   ptr.Int32(30),
 			CleanupTimeoutSeconds: ptr.Int32(30),
 			CleanupSchedule:       "* * * * *",

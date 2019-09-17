@@ -511,12 +511,6 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			},
 		),
 		Entry(
-			"RetentionPolicy Enabled changed",
-			func(c *v1alpha1.Cassandra) {
-				*c.Spec.Snapshot.RetentionPolicy.Enabled = !*c.Spec.Snapshot.RetentionPolicy.Enabled
-			},
-		),
-		Entry(
 			"RetentionPolicy PeriodDays changed",
 			func(c *v1alpha1.Cassandra) {
 				*c.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays += 1

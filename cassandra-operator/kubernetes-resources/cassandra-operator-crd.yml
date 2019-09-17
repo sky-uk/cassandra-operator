@@ -647,8 +647,6 @@ spec:
                     cleanupTimeoutSeconds:
                       format: int32
                       type: integer
-                    enabled:
-                      type: boolean
                     retentionPeriodDays:
                       format: int32
                       type: integer

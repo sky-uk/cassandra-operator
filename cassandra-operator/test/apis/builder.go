@@ -51,7 +51,6 @@ type RetentionPolicySpecBuilder struct {
 	timeoutSeconds      *int32
 	cleanupSchedule     string
 	retentionPeriodDays *int32
-	enabled             bool
 }
 
 type RackSpecBuilder struct {
@@ -184,20 +183,9 @@ func ARetentionPolicy() *RetentionPolicySpecBuilder {
 
 func (rp *RetentionPolicySpecBuilder) WithDefaults() *RetentionPolicySpecBuilder {
 	return rp.
-		thatIsEnabled().
 		WithRetentionPeriodDays(1).
 		WithTimeoutSeconds(0).
 		WithCleanupScheduled("1 23 * * *")
-}
-
-func (rp *RetentionPolicySpecBuilder) thatIsDisabled() *RetentionPolicySpecBuilder {
-	rp.enabled = false
-	return rp
-}
-
-func (rp *RetentionPolicySpecBuilder) thatIsEnabled() *RetentionPolicySpecBuilder {
-	rp.enabled = true
-	return rp
 }
 
 func (rp *RetentionPolicySpecBuilder) WithRetentionPeriodDays(days int32) *RetentionPolicySpecBuilder {
@@ -217,7 +205,6 @@ func (rp *RetentionPolicySpecBuilder) WithTimeoutSeconds(seconds int32) *Retenti
 
 func (rp *RetentionPolicySpecBuilder) Build() *v1alpha1.RetentionPolicy {
 	return &v1alpha1.RetentionPolicy{
-		Enabled:               ptr.Bool(rp.enabled),
 		RetentionPeriodDays:   rp.retentionPeriodDays,
 		CleanupTimeoutSeconds: rp.timeoutSeconds,
 		CleanupSchedule:       rp.cleanupSchedule,

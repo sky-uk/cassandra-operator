@@ -137,7 +137,7 @@ func (r *Receiver) operationsForAddCluster(cassandra *v1alpha1.Cassandra) []Oper
 	operations := []Operation{r.newAddCluster(cassandra)}
 	if cassandra.Spec.Snapshot != nil {
 		operations = append(operations, r.newAddSnapshot(cassandra))
-		if v1alpha1helpers.HasRetentionPolicyEnabled(cassandra.Spec.Snapshot) {
+		if cassandra.Spec.Snapshot.RetentionPolicy != nil {
 			operations = append(operations, r.newAddSnapshotCleanup(cassandra))
 		}
 	}
@@ -148,7 +148,7 @@ func (r *Receiver) operationsForDeleteCluster(cassandra *v1alpha1.Cassandra) []O
 	operations := []Operation{r.newDeleteCluster(cassandra)}
 	if cassandra.Spec.Snapshot != nil {
 		operations = append(operations, r.newDeleteSnapshot(cassandra))
-		if v1alpha1helpers.HasRetentionPolicyEnabled(cassandra.Spec.Snapshot) {
+		if cassandra.Spec.Snapshot.RetentionPolicy != nil {
 			operations = append(operations, r.newDeleteSnapshotCleanup(cassandra))
 		}
 	}
@@ -163,11 +163,11 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 	operations = append(operations, r.newUpdateCluster(clusterUpdate))
 	if newCluster.Spec.Snapshot == nil && oldCluster.Spec.Snapshot != nil {
 		operations = append(operations, r.newDeleteSnapshot(clusterUpdate.NewCluster))
-		if v1alpha1helpers.HasRetentionPolicyEnabled(oldCluster.Spec.Snapshot) {
+		if oldCluster.Spec.Snapshot.RetentionPolicy != nil {
 			operations = append(operations, r.newDeleteSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 	} else if newCluster.Spec.Snapshot != nil && oldCluster.Spec.Snapshot != nil {
-		if !v1alpha1helpers.HasRetentionPolicyEnabled(newCluster.Spec.Snapshot) && v1alpha1helpers.HasRetentionPolicyEnabled(oldCluster.Spec.Snapshot) {
+		if newCluster.Spec.Snapshot.RetentionPolicy == nil && oldCluster.Spec.Snapshot.RetentionPolicy != nil {
 			operations = append(operations, r.newDeleteSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 		if v1alpha1helpers.SnapshotPropertiesUpdated(oldCluster.Spec.Snapshot, newCluster.Spec.Snapshot) {
@@ -178,7 +178,7 @@ func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Ope
 		}
 	} else if newCluster.Spec.Snapshot != nil && oldCluster.Spec.Snapshot == nil {
 		operations = append(operations, r.newAddSnapshot(clusterUpdate.NewCluster))
-		if v1alpha1helpers.HasRetentionPolicyEnabled(newCluster.Spec.Snapshot) {
+		if newCluster.Spec.Snapshot.RetentionPolicy != nil {
 			operations = append(operations, r.newAddSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 	}

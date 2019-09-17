@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := travis
 .PHONY: travis clean install build fmt vet lint validate-licences setup go-build go-install docker-image push-image release check-style
 
+GOOS ?= linux
+GOARCH ?= amd64
+
 projectDir := $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
 buildDir := $(projectDir)/build
 image := cassandra-sidecar
@@ -36,7 +39,7 @@ setup:
 
 go-build: ensure-build-dir-exists ensure-go-modules
 	@echo "== build"
-	go build -o $(buildDir)/bin/cassandra-sidecar -v github.com/sky-uk/cassandra-operator/cassandra-sidecar/cmd
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(buildDir)/bin/cassandra-sidecar -v github.com/sky-uk/cassandra-operator/cassandra-sidecar/cmd
 
 go-install:
 	@echo "== go-install"

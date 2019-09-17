@@ -71,7 +71,10 @@ func handleArgs(_ *cobra.Command, _ []string) error {
 func startOperator(_ *cobra.Command, _ []string) error {
 	entryLog := logr.WithField("logger", "main.go")
 
-	kubeConfig := config.GetConfigOrDie()
+	kubeConfig, err := config.GetConfig()
+	if err != nil {
+		entryLog.Fatalf("Unable to get config: %v", err)
+	}
 
 	kubeClientset, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {

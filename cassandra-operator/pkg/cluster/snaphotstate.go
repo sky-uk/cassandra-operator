@@ -84,7 +84,6 @@ func (cleanup *currentSnapshotCleanupStateFinder) buildSnapshotCleanupFrom(job *
 	if reflect.DeepEqual(expectedCommand, jobContainer.Command) {
 		return &v1alpha1.RetentionPolicy{
 			CleanupSchedule:       job.Spec.Schedule,
-			Enabled:               ptr.Bool(true),
 			CleanupTimeoutSeconds: desiredCassandra.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds,
 			RetentionPeriodDays:   desiredCassandra.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays,
 		}
@@ -92,7 +91,6 @@ func (cleanup *currentSnapshotCleanupStateFinder) buildSnapshotCleanupFrom(job *
 
 	// not attempting to guess other properties from the job command line
 	return &v1alpha1.RetentionPolicy{
-		Enabled:         ptr.Bool(true),
 		CleanupSchedule: job.Spec.Schedule,
 	}
 }

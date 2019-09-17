@@ -50,6 +50,12 @@ To run unit tests for the cassandra-operator sub-project:
 make -C cassandra-operator test
 ```
 
+### Cross Compiling
+
+By default, the operator's Go binaries will be built for the Linux operating system and AMD64 architecture. If you need
+to build for any other operating system or architecture, set the `GOOS` and `GOARCH` environment variables as required
+before invoking `make`.
+
 ### End-to-End Testing
 
 An end-to-end testing approach is used wherever possible.

@@ -258,7 +258,7 @@ func (c *Cluster) snapshotCommand() []string {
 // CreateSnapshotCleanupJob creates a cronjob to trigger the snapshot cleanup
 func (c *Cluster) CreateSnapshotCleanupJob() *v1beta1.CronJob {
 	if c.definition.Spec.Snapshot == nil ||
-		!v1alpha1helpers.HasRetentionPolicyEnabled(c.definition.Spec.Snapshot) {
+		c.definition.Spec.Snapshot.RetentionPolicy == nil {
 		return nil
 	}
 
@@ -280,7 +280,7 @@ func (c *Cluster) CreateSnapshotCleanupContainer(snapshot *v1alpha1.Snapshot) *v
 }
 
 func (c *Cluster) snapshotCleanupCommand() []string {
-	if c.definition.Spec.Snapshot == nil || !v1alpha1helpers.HasRetentionPolicyEnabled(c.definition.Spec.Snapshot) {
+	if c.definition.Spec.Snapshot == nil || c.definition.Spec.Snapshot.RetentionPolicy == nil {
 		return []string{}
 	}
 	cleanupCommand := []string{"/cassandra-snapshot", "cleanup",

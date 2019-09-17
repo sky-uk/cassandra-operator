@@ -721,15 +721,6 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(cronJob).To(BeNil())
 	})
 
-	It("should not create a cleanup job if the retention policy is disabled in the cluster spec", func() {
-		clusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
-		cluster := ACluster(clusterDef)
-
-		cronJob := cluster.CreateSnapshotCleanupJob()
-
-		Expect(cronJob).To(BeNil())
-	})
-
 	It("should create a cronjob named after the cluster that will trigger at the specified schedule", func() {
 		cluster := ACluster(clusterDef)
 

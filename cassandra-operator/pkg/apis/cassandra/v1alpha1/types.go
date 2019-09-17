@@ -154,8 +154,6 @@ type Snapshot struct {
 // RetentionPolicy defines how long the snapshots should be kept for and how often the cleanup task should run
 type RetentionPolicy struct {
 	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-	// +optional
 	RetentionPeriodDays *int32 `json:"retentionPeriodDays,omitempty"`
 	// CleanupSchedule follows the cron format, see https://en.wikipedia.org/wiki/Cron
 	CleanupSchedule string `json:"cleanupSchedule"`
@@ -217,8 +215,7 @@ func (s Snapshot) Equal(other Snapshot) bool {
 
 // Equal checks equality of two RetentionPolicy. This is useful for checking equality with cmp.Equal
 func (rp RetentionPolicy) Equal(other RetentionPolicy) bool {
-	return reflect.DeepEqual(rp.Enabled, other.Enabled) &&
-		reflect.DeepEqual(rp.CleanupTimeoutSeconds, other.CleanupTimeoutSeconds) &&
+	return reflect.DeepEqual(rp.CleanupTimeoutSeconds, other.CleanupTimeoutSeconds) &&
 		reflect.DeepEqual(rp.CleanupSchedule, other.CleanupSchedule) &&
 		reflect.DeepEqual(rp.RetentionPeriodDays, other.RetentionPeriodDays)
 }

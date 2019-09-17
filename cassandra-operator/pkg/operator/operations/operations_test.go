@@ -19,7 +19,6 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,20 +72,6 @@ var _ = Describe("operations to execute based on event", func() {
 			It("should return add cluster and add snapshot operations", func() {
 				// given
 				newClusterDef.Spec.Snapshot.RetentionPolicy = nil
-
-				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCluster, Data: newClusterDef})
-
-				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&AddClusterOperation{},
-					&AddSnapshotOperation{},
-				}))
-			})
-
-			It("should return add cluster and add snapshot operations when the retention policy is disabled", func() {
-				// given
-				newClusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
 
 				// when
 				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCluster, Data: newClusterDef})
@@ -152,20 +137,6 @@ var _ = Describe("operations to execute based on event", func() {
 					&DeleteSnapshotCleanupOperation{},
 				}))
 			})
-			It("should return a delete cluster and delete snapshot operations when a retention policy is disabled", func() {
-				// given
-				newClusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
-
-				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCluster, Data: newClusterDef})
-
-				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&DeleteClusterOperation{},
-					&DeleteSnapshotOperation{},
-				}))
-			})
-
 		})
 	})
 
@@ -235,19 +206,6 @@ var _ = Describe("operations to execute based on event", func() {
 						&DeleteSnapshotCleanupOperation{},
 					}))
 				})
-				It("should return update cluster and delete snapshot cleanup when snapshot retention policy is disabled", func() {
-					// given
-					newClusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
-
-					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
-
-					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&DeleteSnapshotCleanupOperation{},
-					}))
-				})
 			})
 
 			Context("a snapshot or snapshot cleanup is added", func() {
@@ -269,20 +227,6 @@ var _ = Describe("operations to execute based on event", func() {
 					// given
 					oldClusterDef.Spec.Snapshot = nil
 					newClusterDef.Spec.Snapshot.RetentionPolicy = nil
-
-					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
-
-					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&AddSnapshotOperation{},
-					}))
-				})
-				It("should return update cluster and add snapshot when snapshot with retention policy disabled", func() {
-					// given
-					oldClusterDef.Spec.Snapshot = nil
-					newClusterDef.Spec.Snapshot.RetentionPolicy.Enabled = ptr.Bool(false)
 
 					// when
 					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})

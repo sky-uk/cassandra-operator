@@ -48,26 +48,6 @@ var _ = Describe("Cassandra Helpers", func() {
 			})
 
 			Context("RetentionPolicy", func() {
-				Context("Enabled", func() {
-					It("should default to true", func() {
-						clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
-							RetentionPolicy: &v1alpha1.RetentionPolicy{
-								Enabled: nil,
-							},
-						}
-						SetDefaultsForCassandra(clusterDef)
-						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.Enabled).To(BeTrue())
-					})
-					It("should not overwrite existing value", func() {
-						clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
-							RetentionPolicy: &v1alpha1.RetentionPolicy{
-								Enabled: ptr.Bool(false),
-							},
-						}
-						SetDefaultsForCassandra(clusterDef)
-						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.Enabled).To(BeFalse())
-					})
-				})
 				Context("RetentionPeriodDays", func() {
 					It("should default to 7", func() {
 						clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
@@ -295,42 +275,6 @@ var _ = Describe("Cassandra Helpers", func() {
 
 	})
 
-	Describe("Snapshot Retention", func() {
-		var snapshot *v1alpha1.Snapshot
-		BeforeEach(func() {
-			snapshot = &v1alpha1.Snapshot{
-				Schedule: "01 23 * * *",
-			}
-		})
-
-		It("should be found disabled when no retention policy is defined", func() {
-			Expect(HasRetentionPolicyEnabled(snapshot)).To(BeFalse())
-		})
-
-		It("should be found disabled when RetentionPolicy.Enabled is nil", func() {
-			snapshot.RetentionPolicy = &v1alpha1.RetentionPolicy{
-				Enabled: nil,
-			}
-			Expect(HasRetentionPolicyEnabled(snapshot)).To(BeFalse())
-		})
-
-		It("should be found disabled when retention policy is not enabled", func() {
-			snapshot.RetentionPolicy = &v1alpha1.RetentionPolicy{
-				Enabled:         ptr.Bool(false),
-				CleanupSchedule: "11 11 * * *",
-			}
-			Expect(HasRetentionPolicyEnabled(snapshot)).To(BeFalse())
-		})
-
-		It("should be found enabled when retention policy is enabled", func() {
-			snapshot.RetentionPolicy = &v1alpha1.RetentionPolicy{
-				Enabled:         ptr.Bool(true),
-				CleanupSchedule: "11 11 * * *",
-			}
-			Expect(HasRetentionPolicyEnabled(snapshot)).To(BeTrue())
-		})
-	})
-
 	Describe("Snapshot Properties", func() {
 		var (
 			snapshotTimeout = int32(10)
@@ -429,13 +373,6 @@ var _ = Describe("Cassandra Helpers", func() {
 			snapshot1.Schedule = "01 10 * * *"
 			snapshot1.TimeoutSeconds = nil
 			snapshot1.Keyspaces = nil
-			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeFalse())
-			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeFalse())
-		})
-
-		It("should be found equal even when one is not enabled", func() {
-			snapshot1.RetentionPolicy.Enabled = ptr.Bool(false)
-			snapshot2.RetentionPolicy.Enabled = ptr.Bool(true)
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeFalse())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeFalse())
 		})

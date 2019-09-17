@@ -169,7 +169,6 @@ var _ = Describe("current snapshot state", func() {
 
 			It("should contain the only properties that can be safely extracted from the cronjob", func() {
 				expectedSnapshotCleanup = &v1alpha1.RetentionPolicy{
-					Enabled:         ptr.Bool(true),
 					CleanupSchedule: "* * * * 1",
 				}
 			})
