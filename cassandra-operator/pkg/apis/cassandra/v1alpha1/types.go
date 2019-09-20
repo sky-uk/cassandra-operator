@@ -65,6 +65,7 @@ type Cassandra struct {
 
 // CassandraSpec is the specification for the Cassandra resource
 type CassandraSpec struct {
+	// The assigned datacenter name for the Cassandra cluster.
 	// +optional
 	Datacenter *string `json:"datacenter,omitempty"`
 	Racks      []Rack  `json:"racks"`
@@ -74,30 +75,39 @@ type CassandraSpec struct {
 }
 
 type Probe struct {
+	// Minimum consecutive failures for the probe to be considered failed after having succeeded. Minimum value is 1.
 	// +optional
 	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
+    // Number of seconds after the container has started before probes are initiated.
 	// +optional
 	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+	// How often (in seconds) to perform the probe. Minimum value is 1.
 	// +optional
 	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
+	// Minimum consecutive successes for the probe to be considered successful after having failed.
 	// +optional
 	SuccessThreshold *int32 `json:"successThreshold,omitempty"`
+	// Timeout for the probe.
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
+// Pod corresponds to a Cassandra node.
 type Pod struct {
+	// The name of the Docker image used to prepare the configuration for the Cassandra node before it can be started.
 	// +optional
 	BootstrapperImage *string `json:"bootstrapperImage,omitempty"`
-
+	// The Docker image for the sidecar container running on each Cassandra node to expose node status.
 	// +optional
 	SidecarImage *string `json:"sidecarImage,omitempty"`
-
+	// The Docker image to run on each Cassandra node in the cluster. It is recommended to use one of the official Cassandra images, version 3
 	// +optional
 	Image     *string                     `json:"image,omitempty"`
 	Resources coreV1.ResourceRequirements `json:"resources"`
+	// Liveness probe for the cassandra container
 	// +optional
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
+	// Readiness probe for the cassandra container
 	// +optional
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 }
@@ -115,15 +125,23 @@ type CassandraList struct {
 	Items           []Cassandra `json:"items"`
 }
 
-// Rack defines the properties of a rack in the cluster
+// Rack defines the rack topology in the cluster, where a rack has a number of replicas located in the same physical grouping (e.g. zone).
+// At least one rack must be supplied.
 type Rack struct {
+	// Name of the rack.
 	Name     string    `json:"name"`
+	// Zone in which the rack resides.
+	// This is set against the `failure-domain.beta.kubernetes.io/zone` value in the node affinity rule of the corresponding `StatefulSet`.
 	Zone     string    `json:"zone"`
+	// The desired number of replicas in the rack.
 	Replicas int32     `json:"replicas"`
+	// The rack storage options.
 	Storage  []Storage `json:"storage"`
 }
 
 // Storage defines the storage properties shared by pods in the same rack.
+// Multiple volume types are available such as `emptyDir` and `persistentVolumeClaim`.
+// The volume types available are expected to be a subset of the volume types defined in `k8s.io/api/core/v1/VolumeSource`.
 // Only one type of volume may be specified.
 type Storage struct {
 	// The full path to the volume in the pod
@@ -131,26 +149,30 @@ type Storage struct {
 	StorageSource `json:",inline"`
 }
 
-// StorageSource represents the volume source to use as storage
+// StorageSource represents the volume type to use as storage
+// The volume types available are expected to be a subset of the volume types defined in 1k8s.io/api/core/v1/VolumeSource1.
 // Only one of its members may be specified.
-// Supported volume sources are expected to be a subset of the volume types defined in `coreV1.VolumeSource`
 type StorageSource struct {
-	// The volume as persistent volume
+	// The volume as a persistent volume of type `k8s.io/api/core/v1/PersistentVolumeClaimSpec`
 	// +optional
 	PersistentVolumeClaim *coreV1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
-	// The volume as an empty directory
+	// The volume as an empty directory of type `k8s.io/api/core/v1/EmptyDirVolumeSource`
 	// +optional
 	EmptyDir *coreV1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
 // Snapshot defines the snapshot creation and deletion configuration
 type Snapshot struct {
+	// The name of the Docker image used to create and cleanup snapshots.
 	// +optional
 	Image *string `json:"image,omitempty"`
-	// Schedule follows the cron format, see https://en.wikipedia.org/wiki/Cron
+	// Crontab expression specifying when snapshots will be taken.
+	// It follows the cron format, see https://en.wikipedia.org/wiki/Cron
 	Schedule string `json:"schedule"`
+	// List of keyspaces to snapshot. Leave empty to snapshot all keyspaces.
 	// +optional
 	Keyspaces []string `json:"keyspaces,omitempty"`
+	// Time limit for the snapshot command to run.
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 	// +optional
@@ -159,10 +181,13 @@ type Snapshot struct {
 
 // RetentionPolicy defines how long the snapshots should be kept for and how often the cleanup task should run
 type RetentionPolicy struct {
+	// The period of time for which snapshots will be retained. Snapshots older than this period will be deleted.
 	// +optional
 	RetentionPeriodDays *int32 `json:"retentionPeriodDays,omitempty"`
-	// CleanupSchedule follows the cron format, see https://en.wikipedia.org/wiki/Cron
+	// Crontab expression specifying when snapshot cleanup will run.
+	// It follows the cron format, see https://en.wikipedia.org/wiki/Cron
 	CleanupSchedule string `json:"cleanupSchedule"`
+	// Time limit for the cleanup command to run.
 	// +optional
 	CleanupTimeoutSeconds *int32 `json:"cleanupTimeoutSeconds,omitempty"`
 }

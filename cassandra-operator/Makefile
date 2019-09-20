@@ -1,7 +1,6 @@
 .DEFAULT_GOAL := all
 .PHONY: all clean install check build fmt vet lint validate-licences test e2e-te setup go-build go-install docker-image push-image release check-style \
-	validate-crds generate-crds \
-	validate-codegen generate-codegen
+	validate-crds generate-crds validate-codegen generate-codegen generate-all
 
 # Default context is running locally against a kind cluster
 KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
@@ -149,6 +148,8 @@ clean: common-docker-clean
 	@echo "== clean"
 	rm $(shell go env GOPATH)/bin/cassandra-operator || true
 	rm -rfv $(buildDir)
+
+generate-all: generate-codegen generate-crds
 
 generate-codegen: setup
 	@echo "== generate-codegen"

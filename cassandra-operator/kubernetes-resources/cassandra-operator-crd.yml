@@ -394,46 +394,75 @@ spec:
           description: CassandraSpec is the specification for the Cassandra resource
           properties:
             datacenter:
+              description: The assigned datacenter name for the Cassandra cluster.
               type: string
             pod:
+              description: Pod corresponds to a Cassandra node.
               properties:
                 bootstrapperImage:
+                  description: The name of the Docker image used to prepare the configuration
+                    for the Cassandra node before it can be started.
                   type: string
                 image:
+                  description: The Docker image to run on each Cassandra node in the
+                    cluster. It is recommended to use one of the official Cassandra
+                    images, version 3
                   type: string
                 livenessProbe:
+                  description: Liveness probe for the cassandra container
                   properties:
                     failureThreshold:
+                      description: Minimum consecutive failures for the probe to be
+                        considered failed after having succeeded. Minimum value is
+                        1.
                       format: int32
                       type: integer
                     initialDelaySeconds:
+                      description: Number of seconds after the container has started
+                        before probes are initiated.
                       format: int32
                       type: integer
                     periodSeconds:
+                      description: How often (in seconds) to perform the probe. Minimum
+                        value is 1.
                       format: int32
                       type: integer
                     successThreshold:
+                      description: Minimum consecutive successes for the probe to
+                        be considered successful after having failed.
                       format: int32
                       type: integer
                     timeoutSeconds:
+                      description: Timeout for the probe.
                       format: int32
                       type: integer
                   type: object
                 readinessProbe:
+                  description: Readiness probe for the cassandra container
                   properties:
                     failureThreshold:
+                      description: Minimum consecutive failures for the probe to be
+                        considered failed after having succeeded. Minimum value is
+                        1.
                       format: int32
                       type: integer
                     initialDelaySeconds:
+                      description: Number of seconds after the container has started
+                        before probes are initiated.
                       format: int32
                       type: integer
                     periodSeconds:
+                      description: How often (in seconds) to perform the probe. Minimum
+                        value is 1.
                       format: int32
                       type: integer
                     successThreshold:
+                      description: Minimum consecutive successes for the probe to
+                        be considered successful after having failed.
                       format: int32
                       type: integer
                     timeoutSeconds:
+                      description: Timeout for the probe.
                       format: int32
                       type: integer
                   type: object
@@ -457,26 +486,37 @@ spec:
                       type: object
                   type: object
                 sidecarImage:
+                  description: The Docker image for the sidecar container running
+                    on each Cassandra node to expose node status.
                   type: string
               required:
               - resources
               type: object
             racks:
               items:
-                description: Rack defines the properties of a rack in the cluster
+                description: Rack defines the rack topology in the cluster, where
+                  a rack has a number of replicas located in the same physical grouping
+                  (e.g. zone). At least one rack must be supplied.
                 properties:
                   name:
+                    description: Name of the rack.
                     type: string
                   replicas:
+                    description: The desired number of replicas in the rack.
                     format: int32
                     type: integer
                   storage:
+                    description: The rack storage options.
                     items:
                       description: Storage defines the storage properties shared by
-                        pods in the same rack. Only one type of volume may be specified.
+                        pods in the same rack. Multiple volume types are available
+                        such as `emptyDir` and `persistentVolumeClaim`. The volume
+                        types available are expected to be a subset of the volume
+                        types defined in `k8s.io/api/core/v1/VolumeSource`. Only one
+                        type of volume may be specified.
                       properties:
                         emptyDir:
-                          description: The volume as an empty directory
+                          description: The volume as an empty directory of type `k8s.io/api/core/v1/EmptyDirVolumeSource`
                           properties:
                             medium:
                               description: 'What type of storage medium should back
@@ -498,7 +538,7 @@ spec:
                           description: The full path to the volume in the pod
                           type: string
                         persistentVolumeClaim:
-                          description: The volume as persistent volume
+                          description: The volume as a persistent volume of type `k8s.io/api/core/v1/PersistentVolumeClaimSpec`
                           properties:
                             accessModes:
                               description: 'AccessModes contains the desired access
@@ -620,6 +660,9 @@ spec:
                       type: object
                     type: array
                   zone:
+                    description: Zone in which the rack resides. This is set against
+                      the `failure-domain.beta.kubernetes.io/zone` value in the node
+                      affinity rule of the corresponding `StatefulSet`.
                     type: string
                 required:
                 - name
@@ -632,8 +675,12 @@ spec:
               description: Snapshot defines the snapshot creation and deletion configuration
               properties:
                 image:
+                  description: The name of the Docker image used to create and cleanup
+                    snapshots.
                   type: string
                 keyspaces:
+                  description: List of keyspaces to snapshot. Leave empty to snapshot
+                    all keyspaces.
                   items:
                     type: string
                   type: array
@@ -642,21 +689,27 @@ spec:
                     be kept for and how often the cleanup task should run
                   properties:
                     cleanupSchedule:
-                      description: CleanupSchedule follows the cron format, see https://en.wikipedia.org/wiki/Cron
+                      description: Crontab expression specifying when snapshot cleanup
+                        will run. It follows the cron format, see https://en.wikipedia.org/wiki/Cron
                       type: string
                     cleanupTimeoutSeconds:
+                      description: Time limit for the cleanup command to run.
                       format: int32
                       type: integer
                     retentionPeriodDays:
+                      description: The period of time for which snapshots will be
+                        retained. Snapshots older than this period will be deleted.
                       format: int32
                       type: integer
                   required:
                   - cleanupSchedule
                   type: object
                 schedule:
-                  description: Schedule follows the cron format, see https://en.wikipedia.org/wiki/Cron
+                  description: Crontab expression specifying when snapshots will be
+                    taken. It follows the cron format, see https://en.wikipedia.org/wiki/Cron
                   type: string
                 timeoutSeconds:
+                  description: Time limit for the snapshot command to run.
                   format: int32
                   type: integer
               required:
