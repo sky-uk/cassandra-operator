@@ -35,8 +35,8 @@ const (
 	cassandraBootstrapperContainerName = "cassandra-bootstrapper"
 	cassandraSidecarContainerName      = "cassandra-sidecar"
 
-	configurationVolumeName      = "configuration"
-	extraLibVolumeName           = "extra-lib"
+	configurationVolumeName = "configuration"
+	extraLibVolumeName      = "extra-lib"
 
 	healthServerPort = 8080
 )

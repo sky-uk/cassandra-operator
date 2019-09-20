@@ -20,6 +20,10 @@ func NewControllerRef(c *v1alpha1.Cassandra) metav1.OwnerReference {
 	})
 }
 
+func IsAPersistentVolumeClaim(storage v1alpha1.Storage) bool {
+	return storage.PersistentVolumeClaim != nil
+}
+
 func IsAReservedVolumePath(path string) bool {
 	return path == v1alpha1.ConfigurationVolumeMountPath || path == v1alpha1.ExtraLibVolumeMountPath
 }

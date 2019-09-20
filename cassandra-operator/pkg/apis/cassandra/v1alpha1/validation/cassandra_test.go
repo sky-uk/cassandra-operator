@@ -543,6 +543,18 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 				c.Spec.Racks[0].Storage = append(c.Spec.Racks[0].Storage, apis.APersistentVolume().OfSize("1Gi").AtPath("yes another path").Build())
 			},
 		),
+		Entry(
+			"EmptyDir rack Storage may be removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage = c.Spec.Racks[0].Storage[:1]
+			},
+		),
+		Entry(
+			"Storage path may be changed for an EmptyDir rack Storage",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage[1].Path = ptr.String("/var/another-emptydir")
+			},
+		),
 	)
 	DescribeTable(
 		"forbidden changes",
@@ -578,14 +590,14 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 		),
 		Entry(
 			"Rack Storage",
-			"spec.Racks.a.Storage: Forbidden: This field can not be changed",
+			"spec.Racks.a.Storage: Forbidden: Persistent volume claims can not be changed",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.StorageClassName = ptr.String("some other class")
 			},
 		),
 		Entry(
-			"Rack Storage deletion",
-			"spec.Racks.a.Storage: Forbidden: Storage deletion is not supported. Missing Storage at path(s): pv-path1",
+			"Rack Storage pvc deletion",
+			"spec.Racks.a.Storage: Forbidden: Persistent volume claims cannot be deleted. Missing Storage at path(s): pv-path1",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage = c.Spec.Racks[0].Storage[1:]
 			},

@@ -378,32 +378,30 @@ func validatePodUpdate(fldPath *field.Path, old, new *v1alpha1.Pod) field.ErrorL
 func validateRackUpdate(fldPath *field.Path, old, new *v1alpha1.Rack) field.ErrorList {
 	var allErrs field.ErrorList
 	matchedStorages, removedStorages := matchStorages(old, new)
-	removedStoragePaths := sets.NewString()
-	for _, s := range removedStorages {
-		removedStoragePaths.Insert(*s.Path)
-	}
-	if len(removedStorages) > 0 {
-		allErrs = append(
-			allErrs,
-			field.Forbidden(
-				fldPath.Child("Storage"),
-				fmt.Sprintf(
-					"Storage deletion is not supported. Missing Storage at path(s): %s",
-					strings.Join(removedStoragePaths.List(), ", "),
-				),
-			),
-		)
-	}
-
-	for _, matchedStorage := range matchedStorages {
-		// reject all storage updates until we know better
-		if !reflect.DeepEqual(matchedStorage.Old, matchedStorage.New) {
+	for _, removedStorage := range removedStorages {
+		if v1alpha1helpers.IsAPersistentVolumeClaim(removedStorage) {
 			allErrs = append(
 				allErrs,
 				field.Forbidden(
 					fldPath.Child("Storage"),
 					fmt.Sprintf(
-						"This field can not be changed: current: %v, new: %v",
+						"Persistent volume claims cannot be deleted. Missing Storage at path(s): %s",
+						*removedStorage.Path,
+					),
+				),
+			)
+		}
+	}
+
+	for _, matchedStorage := range matchedStorages {
+		// reject all volume claim updates as Kubernetes rejects updates to volumeClaimTemplates in a StatefulSet
+		if v1alpha1helpers.IsAPersistentVolumeClaim(matchedStorage.Old) && !reflect.DeepEqual(matchedStorage.Old, matchedStorage.New) {
+			allErrs = append(
+				allErrs,
+				field.Forbidden(
+					fldPath.Child("Storage"),
+					fmt.Sprintf(
+						"Persistent volume claims can not be changed: current: %v, new: %v",
 						matchedStorage.Old,
 						matchedStorage.New,
 					),

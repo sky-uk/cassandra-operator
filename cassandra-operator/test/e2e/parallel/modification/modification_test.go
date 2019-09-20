@@ -230,38 +230,61 @@ var _ = Context("Allowable cluster modifications", func() {
 		)))
 	})
 
-	It("should add the new rack storage", func() {
-		// given
-		registerResourcesUsed(1)
+	Context("rack storage", func() {
+
 		var rackStorage []apis.StorageBuilder
-		rackStorage = append(rackStorage, apis.APersistentVolume().
-			OfSize("100Mi").
-			WithStorageClass("standard-zone-a").
-			AtPath("/var/lib/pv-cassandra-home"))
-		rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-empty-dir"))
 
-		AClusterWithName(clusterName).
-			AndRacks([]v1alpha1.Rack{apis.ARack("a", 1).
-				WithZone("eu-west-1a").
-				WithStorages(rackStorage...).
-				Build(),
-			}).
-			Exists()
+		BeforeEach(func() {
+			// given
+			registerResourcesUsed(1)
+			rackStorage = []apis.StorageBuilder{}
+			rackStorage = append(rackStorage, apis.APersistentVolume().
+				OfSize("100Mi").
+				WithStorageClass("standard-zone-a").
+				AtPath("/var/lib/pv-cassandra-home"))
+			rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-empty-dir"))
 
-		// when
-		rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-other-empty-dir"))
-		TheRackStorageIsChangedTo(Namespace, clusterName, "a", buildStorage(rackStorage))
+			AClusterWithName(clusterName).
+				AndRacks([]v1alpha1.Rack{apis.ARack("a", 1).
+					WithZone("eu-west-1a").
+					WithStorages(rackStorage...).
+					Build(),
+				}).
+				Exists()
+		})
 
-		// then
-		By("creating the additional emptyDir volume at the given path")
-		Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(And(
-			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-empty-dir")),
-			Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-other-empty-dir"))))
+		It("should allow the addition of a rack storage", func() {
+			// when
+			rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-other-empty-dir"))
+			TheRackStorageIsChangedTo(Namespace, clusterName, "a", buildStorage(rackStorage))
 
-		By("preserving the persistent volume at the given path")
-		Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
-			Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
-		Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
+			// then
+			By("creating the additional emptyDir volume at the given path")
+			Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(And(
+				Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-empty-dir")),
+				Each(HaveEmptyDirVolumeMountAtPath("/var/lib/my-other-empty-dir"))))
+
+			By("preserving the persistent volume at the given path")
+			Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
+				Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+			Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
+		})
+
+		It("should allow the removal of an emptyDir", func() {
+			// when
+			rackStorage = rackStorage[:1]
+			TheRackStorageIsChangedTo(Namespace, clusterName, "a", buildStorage(rackStorage))
+
+			// then
+			By("removing the emptyDir")
+			Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(And(
+				Each(Not(HaveEmptyDirVolumeMountAtPath("/var/lib/my-empty-dir")))))
+
+			By("preserving the persistent volume at the given path")
+			Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
+				Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+			Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
+		})
 	})
 
 	Context("cluster config file changes", func() {
