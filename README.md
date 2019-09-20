@@ -28,8 +28,9 @@ Instructions on how to deploy the Cassandra Operator and provision Cassandra clu
 ## Project structure
 
 This project is composed of several sub-modules that are either part of the Cassandra Operator or used by it:
-- [cassandra-bootstrapper](cassandra-bootstrapper/README.md): a component responsible for configuring the Cassandra node before it can be started
 - [cassandra-operator](cassandra-operator/README.md): the Kubernetes operator that manages the Cassandra clusters lifecycle inside Kubernetes
+- [cassandra-bootstrapper](cassandra-bootstrapper/README.md): a component responsible for configuring the Cassandra node before it can be started
+- [cassandra-sidecar](cassandra-sidecar/README.md): a sidecar container running on each Cassandra node exposing node status 
 - [cassandra-snapshot](cassandra-snapshot/README.md): a component responsible for taking and deleting snapshots given a schedule and retention policy
 - [fake-cassandra-docker](fake-cassandra-docker/README.md): a fake Cassandra image used by the cassandra-operator and cassandra-snapshot to speed it up end-to-end testing
 - [test-kubernetes-cluster](test-kubernetes-cluster/README.md): a [Kind](https://kind.sigs.k8s.io/) cluster used by the cassandra-operator and cassandra-snapshot to facilitate end-to-end testing
@@ -46,7 +47,7 @@ Other Kubernetes versions are likely to work, but we do not actively test agains
 
 Cassandra Operator | Kubernetes | Cassandra
 --- | --- | ---
-0.72.0-alpha | 1.10 | 3.11
+0.73.0-alpha | 1.10 | 3.11
 
 ## Questions or Problems?
 

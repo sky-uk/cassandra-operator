@@ -1,5 +1,18 @@
 # Changes
 
+## 0.73.0-alpha
+
+**Note: This version is not backwards-compatible with previous Cassandra clusters deployed by the operator.**
+
+- [FEATURE] [Allow updates and removal of emptyDir storage](#192) (@sebbonnet) 
+- [FEATURE] [Allow multiple rack storages](#190) (@sebbonnet)
+- [FEATURE] [Remove `RetentionPolicy.Enabled` field](#189) (@alangibson01)
+- [ENHANCEMENT] [Api builders](#188) (@sebbonnet)
+- [FEATURE] [Removing UseEmptyDir from Cassandra spec](#185) (@sebbonnet)
+- [FEATURE] [Flexible storage type per rack](#184) (@sebbonnet)
+- [BUGFIX] [Fix pod cpu resources removal by updating rather than patching StatefulSet](#182) (@sebbonnet)
+- [FEATURE] [Change CassandraPod spec to use ResourceRequirements](#178) (@sebbonnet)
+
 ## 0.72.0-alpha
 
 This release brings 2 main features, bug fixes and several enhancements.
