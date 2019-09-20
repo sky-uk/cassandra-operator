@@ -1,5 +1,10 @@
 # Changes
 
+## 0.74.0-alpha
+
+- [FEATURE] [Document CRD fields #194](#194) (@sebbonnet)
+- [FEATURE] [Default component image version to the operator version](#193) (@sebbonnet)
+
 ## 0.73.0-alpha
 
 **Note: This version is not backwards-compatible with previous Cassandra clusters deployed by the operator.**
