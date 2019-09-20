@@ -56,3 +56,14 @@ var _ = Describe("operator command line", func() {
 		})
 	})
 })
+
+var _ = Describe("extract image details", func() {
+
+	It("should return the image version", func() {
+		Expect(extractImageVersion("localhost:5000/cassandra-operator:v0a53169")).To(Equal("v0a53169"))
+	})
+
+	It("should return the docker registry", func() {
+		Expect(extractRegistryPath("localhost:5000/something/cassandra-operator:v0a53169")).To(Equal("localhost:5000/something"))
+	})
+})

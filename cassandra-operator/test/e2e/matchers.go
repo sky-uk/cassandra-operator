@@ -161,19 +161,40 @@ func (matcher *haveEvent) NegatedFailureMessage(actual interface{}) (message str
 }
 
 //
+// HaveInitContainer matcher
+//
+func HaveInitContainer(initContainerName string, expectation ContainerSpecExpectation) types.GomegaMatcher {
+	return &haveContainer{
+		containerName: initContainerName,
+		expectation:   expectation,
+		containers: func(p coreV1.Pod) []coreV1.Container {
+			return p.Spec.InitContainers
+		},
+	}
+}
+
+//
 // HaveContainer matcher
 //
-func HaveContainer(expected ContainerExpectation) types.GomegaMatcher {
+func HaveContainer(containerName string, expectation ContainerSpecExpectation) types.GomegaMatcher {
 	return &haveContainer{
-		expected: expected,
+		containerName: containerName,
+		expectation:   expectation,
 		containers: func(p coreV1.Pod) []coreV1.Container {
 			return p.Spec.Containers
 		},
 	}
 }
 
+type ContainerSpecExpectation interface {
+	matchContainerSpec(container coreV1.Container) (bool, error)
+}
+
+type ContainerImageExpectation struct {
+	ImageName string
+}
+
 type ContainerExpectation struct {
-	ContainerName                  string
 	ImageName                      string
 	ContainerPorts                 map[string]int
 	MemoryRequest                  string
@@ -191,102 +212,35 @@ type ContainerExpectation struct {
 }
 
 type haveContainer struct {
-	expected   ContainerExpectation
-	containers func(coreV1.Pod) []coreV1.Container
+	containerName string
+	expectation   ContainerSpecExpectation
+	containers    func(coreV1.Pod) []coreV1.Container
 }
 
 func (matcher *haveContainer) Match(actual interface{}) (success bool, err error) {
 	lr := actual.(*kubernetesResource)
 	pod := lr.Resource.(coreV1.Pod)
 	containers := matcher.containers(pod)
-	expectedName := matcher.expected.ContainerName
 	var container coreV1.Container
 	containerNames := sets.NewString()
 	for _, c := range containers {
 		containerName := c.Name
 		containerNames.Insert(containerName)
-		if containerName == expectedName {
+		if containerName == matcher.containerName {
 			container = c
 			break
 		}
 	}
 
-	if !containerNames.Has(expectedName) {
-		return false, fmt.Errorf("expected a container with name %s, found %v", expectedName, containerNames)
+	if !containerNames.Has(matcher.containerName) {
+		return false, fmt.Errorf("expected a container with name %s, found %v", matcher.containerName, containerNames)
 	}
 
-	if !strings.Contains(container.Image, matcher.expected.ImageName) {
-		return false, fmt.Errorf("expected container to use image %s, actual %s", matcher.expected.ImageName, container.Image)
+	result, err := matcher.expectation.matchContainerSpec(container)
+	if err != nil {
+		return result, fmt.Errorf("expectation error for container %s: %v", matcher.containerName, err)
 	}
-
-	if len(container.Ports) != len(matcher.expected.ContainerPorts) {
-		return false, fmt.Errorf("expected number of container ports to be %d, actual %d", len(matcher.expected.ContainerPorts), len(container.Ports))
-	}
-
-	if container.Resources.Requests.Memory().String() != matcher.expected.MemoryRequest {
-		return false, fmt.Errorf("expected container memory request to be %s, actual %s", matcher.expected.MemoryRequest, container.Resources.Requests.Memory().String())
-	}
-
-	if container.Resources.Limits.Memory().String() != matcher.expected.MemoryLimit {
-		return false, fmt.Errorf("expected container memory limit to be %s, actual %s", matcher.expected.MemoryLimit, container.Resources.Limits.Memory().String())
-	}
-
-	if container.Resources.Requests.Cpu().String() != matcher.expected.CPURequest {
-		return false, fmt.Errorf("expected container cpu request to be %s, actual %s", matcher.expected.CPURequest, container.Resources.Requests.Cpu().String())
-	}
-
-	if container.LivenessProbe.TimeoutSeconds != int32(matcher.expected.LivenessProbeTimeout.Seconds()) {
-		return false, fmt.Errorf("expected container liveness timeout to be %d, actual %d", int32(matcher.expected.LivenessProbeTimeout.Seconds()), container.LivenessProbe.TimeoutSeconds)
-	}
-
-	if container.LivenessProbe.FailureThreshold != matcher.expected.LivenessProbeFailureThreshold {
-		return false, fmt.Errorf("expected container liveness failure threshold to be %d, actual %d", matcher.expected.LivenessProbeFailureThreshold, container.LivenessProbe.FailureThreshold)
-	}
-
-	if container.LivenessProbe.SuccessThreshold != 1 {
-		return false, fmt.Errorf("expected container liveness success threshold to be 1, actual %d", container.LivenessProbe.SuccessThreshold)
-	}
-
-	if container.LivenessProbe.PeriodSeconds != int32(matcher.expected.LivenessProbePeriod.Seconds()) {
-		return false, fmt.Errorf("expected container liveness period to be %d, actual %d", int32(matcher.expected.LivenessProbePeriod.Seconds()), container.LivenessProbe.PeriodSeconds)
-	}
-
-	if container.LivenessProbe.InitialDelaySeconds != int32(matcher.expected.LivenessProbeInitialDelay.Seconds()) {
-		return false, fmt.Errorf("expected container liveness initial delay to be %d, actual %d", int32(matcher.expected.LivenessProbeInitialDelay.Seconds()), container.LivenessProbe.InitialDelaySeconds)
-	}
-
-	if container.ReadinessProbe.TimeoutSeconds != int32(matcher.expected.ReadinessProbeTimeout.Seconds()) {
-		return false, fmt.Errorf("expected container readiness timeout to be %d, actual %d", int32(matcher.expected.ReadinessProbeTimeout.Seconds()), container.ReadinessProbe.TimeoutSeconds)
-	}
-
-	if container.ReadinessProbe.FailureThreshold != matcher.expected.ReadinessProbeFailureThreshold {
-		return false, fmt.Errorf("expected container readiness failure threshold to be %d, actual %d", matcher.expected.ReadinessProbeFailureThreshold, container.ReadinessProbe.FailureThreshold)
-	}
-
-	if container.ReadinessProbe.SuccessThreshold != matcher.expected.ReadinessProbeSuccessThreshold {
-		return false, fmt.Errorf("expected container readiness success threshold to be %d, actual %d", matcher.expected.ReadinessProbeSuccessThreshold, container.ReadinessProbe.SuccessThreshold)
-	}
-
-	if container.ReadinessProbe.PeriodSeconds != int32(matcher.expected.ReadinessProbePeriod.Seconds()) {
-		return false, fmt.Errorf("expected container readiness period to be %d, actual %d", int32(matcher.expected.ReadinessProbePeriod.Seconds()), container.ReadinessProbe.PeriodSeconds)
-	}
-
-	if container.ReadinessProbe.InitialDelaySeconds != int32(matcher.expected.ReadinessProbeInitialDelay.Seconds()) {
-		return false, fmt.Errorf("expected container readiness initial delay to be %d, actual %d", int32(matcher.expected.ReadinessProbeInitialDelay.Seconds()), container.ReadinessProbe.InitialDelaySeconds)
-	}
-
-	for _, port := range container.Ports {
-		expectedPort, ok := matcher.expected.ContainerPorts[port.Name]
-		if !ok {
-			return false, fmt.Errorf("unexpected container ports %s found", port.Name)
-		}
-
-		if port.ContainerPort != int32(expectedPort) {
-			return false, fmt.Errorf("expected container port %s to be %d, actual %d", port.Name, expectedPort, port.ContainerPort)
-		}
-	}
-
-	return true, nil
+	return result, err
 }
 
 func (matcher *haveContainer) FailureMessage(actual interface{}) (message string) {
@@ -295,6 +249,88 @@ func (matcher *haveContainer) FailureMessage(actual interface{}) (message string
 
 func (matcher *haveContainer) NegatedFailureMessage(actual interface{}) (message string) {
 	return fmt.Sprintf("Actual pod: %s", actual.(*kubernetesResource).Resource)
+}
+
+func (expectation *ContainerExpectation) matchContainerSpec(container coreV1.Container) (bool, error) {
+	if !strings.Contains(container.Image, expectation.ImageName) {
+		return false, fmt.Errorf("expected to use image %s, actual %s", expectation.ImageName, container.Image)
+	}
+
+	if len(container.Ports) != len(expectation.ContainerPorts) {
+		return false, fmt.Errorf("expected number of container ports to be %d, actual %d", len(expectation.ContainerPorts), len(container.Ports))
+	}
+
+	if container.Resources.Requests.Memory().String() != expectation.MemoryRequest {
+		return false, fmt.Errorf("expected memory request to be %s, actual %s", expectation.MemoryRequest, container.Resources.Requests.Memory().String())
+	}
+
+	if container.Resources.Limits.Memory().String() != expectation.MemoryLimit {
+		return false, fmt.Errorf("expected memory limit to be %s, actual %s", expectation.MemoryLimit, container.Resources.Limits.Memory().String())
+	}
+
+	if container.Resources.Requests.Cpu().String() != expectation.CPURequest {
+		return false, fmt.Errorf("expected cpu request to be %s, actual %s", expectation.CPURequest, container.Resources.Requests.Cpu().String())
+	}
+
+	if container.LivenessProbe.TimeoutSeconds != int32(expectation.LivenessProbeTimeout.Seconds()) {
+		return false, fmt.Errorf("expected liveness timeout to be %d, actual %d", int32(expectation.LivenessProbeTimeout.Seconds()), container.LivenessProbe.TimeoutSeconds)
+	}
+
+	if container.LivenessProbe.FailureThreshold != expectation.LivenessProbeFailureThreshold {
+		return false, fmt.Errorf("expected liveness failure threshold to be %d, actual %d", expectation.LivenessProbeFailureThreshold, container.LivenessProbe.FailureThreshold)
+	}
+
+	if container.LivenessProbe.SuccessThreshold != 1 {
+		return false, fmt.Errorf("expected liveness success threshold to be 1, actual %d", container.LivenessProbe.SuccessThreshold)
+	}
+
+	if container.LivenessProbe.PeriodSeconds != int32(expectation.LivenessProbePeriod.Seconds()) {
+		return false, fmt.Errorf("expected liveness period to be %d, actual %d", int32(expectation.LivenessProbePeriod.Seconds()), container.LivenessProbe.PeriodSeconds)
+	}
+
+	if container.LivenessProbe.InitialDelaySeconds != int32(expectation.LivenessProbeInitialDelay.Seconds()) {
+		return false, fmt.Errorf("expected liveness initial delay to be %d, actual %d", int32(expectation.LivenessProbeInitialDelay.Seconds()), container.LivenessProbe.InitialDelaySeconds)
+	}
+
+	if container.ReadinessProbe.TimeoutSeconds != int32(expectation.ReadinessProbeTimeout.Seconds()) {
+		return false, fmt.Errorf("expected readiness timeout to be %d, actual %d", int32(expectation.ReadinessProbeTimeout.Seconds()), container.ReadinessProbe.TimeoutSeconds)
+	}
+
+	if container.ReadinessProbe.FailureThreshold != expectation.ReadinessProbeFailureThreshold {
+		return false, fmt.Errorf("expected readiness failure threshold to be %d, actual %d", expectation.ReadinessProbeFailureThreshold, container.ReadinessProbe.FailureThreshold)
+	}
+
+	if container.ReadinessProbe.SuccessThreshold != expectation.ReadinessProbeSuccessThreshold {
+		return false, fmt.Errorf("expected readiness success threshold to be %d, actual %d", expectation.ReadinessProbeSuccessThreshold, container.ReadinessProbe.SuccessThreshold)
+	}
+
+	if container.ReadinessProbe.PeriodSeconds != int32(expectation.ReadinessProbePeriod.Seconds()) {
+		return false, fmt.Errorf("expected readiness period to be %d, actual %d", int32(expectation.ReadinessProbePeriod.Seconds()), container.ReadinessProbe.PeriodSeconds)
+	}
+
+	if container.ReadinessProbe.InitialDelaySeconds != int32(expectation.ReadinessProbeInitialDelay.Seconds()) {
+		return false, fmt.Errorf("expected readiness initial delay to be %d, actual %d", int32(expectation.ReadinessProbeInitialDelay.Seconds()), container.ReadinessProbe.InitialDelaySeconds)
+	}
+
+	for _, port := range container.Ports {
+		expectedPort, ok := expectation.ContainerPorts[port.Name]
+		if !ok {
+			return false, fmt.Errorf("unexpected ports %s found", port.Name)
+		}
+
+		if port.ContainerPort != int32(expectedPort) {
+			return false, fmt.Errorf("expected port %s to be %d, actual %d", port.Name, expectedPort, port.ContainerPort)
+		}
+	}
+
+	return true, nil
+}
+
+func (expectation *ContainerImageExpectation) matchContainerSpec(container coreV1.Container) (bool, error) {
+	if !strings.Contains(container.Image, expectation.ImageName) {
+		return false, fmt.Errorf("expected to use image %s, actual %s", expectation.ImageName, container.Image)
+	}
+	return true, nil
 }
 
 //

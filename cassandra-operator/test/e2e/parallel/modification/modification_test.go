@@ -74,6 +74,8 @@ var _ = Context("Allowable cluster modifications", func() {
 	It("should allow modification of pod spec", func() {
 		// given
 		registerResourcesUsed(2)
+		livenessProbeTimeoutSeconds := CassandraLivenessTimeout + 1
+		readinessProbeTimeoutSeconds := CassandraReadinessTimeout + 1
 		racks := []v1alpha1.Rack{Rack("a", 1), Rack("b", 1)}
 		AClusterWithName(clusterName).
 			AndRacks(racks).Exists()
@@ -81,9 +83,9 @@ var _ = Context("Allowable cluster modifications", func() {
 		// when
 		revisionsBeforeUpdate := statefulSetRevisions(clusterName, racks)
 		TheClusterPodSpecAreChangedTo(Namespace, clusterName, v1alpha1.Pod{
-			BootstrapperImage: &CassandraBootstrapperImageName,
-			SidecarImage:      &CassandraSidecarImageName,
-			Image:             &CassandraImageName,
+			BootstrapperImage: CassandraBootstrapperImageName,
+			SidecarImage:      CassandraSidecarImageName,
+			Image:             CassandraImageName,
 			Resources: coreV1.ResourceRequirements{
 				Requests: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("999Mi"),
@@ -97,13 +99,13 @@ var _ = Context("Allowable cluster modifications", func() {
 				FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold + 1),
 				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
 				PeriodSeconds:       ptr.Int32(CassandraLivenessPeriod),
-				TimeoutSeconds:      ptr.Int32(6),
+				TimeoutSeconds:      ptr.Int32(livenessProbeTimeoutSeconds),
 			},
 			ReadinessProbe: &v1alpha1.Probe{
 				FailureThreshold:    ptr.Int32(CassandraReadinessProbeFailureThreshold + 1),
-				TimeoutSeconds:      ptr.Int32(4),
 				InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
 				PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
+				TimeoutSeconds:      ptr.Int32(readinessProbeTimeoutSeconds),
 			},
 		})
 
@@ -112,20 +114,19 @@ var _ = Context("Allowable cluster modifications", func() {
 		By("updating only the CPU and memory for each pod within the cluster")
 		Eventually(PodsForCluster(Namespace, clusterName), 2*NodeRestartDuration, CheckInterval).Should(Each(And(
 			HaveDifferentRevisionTo(revisionsBeforeUpdate),
-			HaveContainer(ContainerExpectation{
-				ImageName:                      CassandraImageName,
-				ContainerName:                  "cassandra",
+			HaveContainer("cassandra", &ContainerExpectation{
+				ImageName:                      *CassandraImageName,
 				MemoryRequest:                  "999Mi",
 				MemoryLimit:                    "999Mi",
 				CPURequest:                     "1m",
 				LivenessProbeFailureThreshold:  CassandraLivenessProbeFailureThreshold + 1,
 				LivenessProbeInitialDelay:      DurationSeconds(CassandraInitialDelay),
 				LivenessProbePeriod:            DurationSeconds(CassandraLivenessPeriod),
-				LivenessProbeTimeout:           6 * time.Second,
+				LivenessProbeTimeout:           DurationSeconds(livenessProbeTimeoutSeconds),
 				ReadinessProbeFailureThreshold: CassandraReadinessProbeFailureThreshold + 1,
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
 				ReadinessProbePeriod:           DurationSeconds(CassandraReadinessPeriod),
-				ReadinessProbeTimeout:          4 * time.Second,
+				ReadinessProbeTimeout:          DurationSeconds(readinessProbeTimeoutSeconds),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
 			}),
@@ -194,7 +195,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		registerResourcesUsed(1)
 		AClusterWithName(clusterName).
 			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
-			AndPodSpec(DefaultPodSpec().
+			AndPodSpec(PodSpec().
 				WithResources(&coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
 						coreV1.ResourceMemory: resource.MustParse("999Mi"),

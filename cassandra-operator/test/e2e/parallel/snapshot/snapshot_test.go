@@ -72,7 +72,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
-					Image:     &CassandraSnapshotImageName,
+					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
@@ -147,7 +147,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			clusterModifiedTime := asEventTime(time.Now())
 			snapshotTimeout := int32(5)
 			AScheduledSnapshotIsAddedToCluster(Namespace, clusterName, &v1alpha1.Snapshot{
-				Image:          &CassandraSnapshotImageName,
+				Image:          CassandraSnapshotImageName,
 				Schedule:       "1 23 * * *",
 				TimeoutSeconds: &snapshotTimeout,
 				Keyspaces:      []string{"k1", "k2"},
@@ -191,7 +191,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
-					Image:     &CassandraSnapshotImageName,
+					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
@@ -243,7 +243,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
-					Image:     &CassandraSnapshotImageName,
+					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
@@ -262,7 +262,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			time.Sleep(time.Second)
 			snapshotModificationTime := asEventTime(time.Now())
 			AScheduledSnapshotIsChangedForCluster(Namespace, clusterName, &v1alpha1.Snapshot{
-				Image:     &CassandraSnapshotImageName,
+				Image:     CassandraSnapshotImageName,
 				Schedule:  "15 9 * * *",
 				Keyspaces: []string{"k2"},
 				RetentionPolicy: &v1alpha1.RetentionPolicy{

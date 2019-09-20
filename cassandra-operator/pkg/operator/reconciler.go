@@ -47,13 +47,14 @@ type CassandraReconciler struct {
 	eventDispatcher dispatcher.Dispatcher
 	objectFactory   objectReferenceFactory
 	stateFinder     cluster.StateFinder
+	operatorConfig  *Config
 }
 
 // Implement reconcile.Reconciler so the controller can reconcile objects
 var _ reconcile.Reconciler = &CassandraReconciler{}
 
 // NewReconciler creates a CassandraReconciler
-func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventDispatcher dispatcher.Dispatcher) *CassandraReconciler {
+func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventDispatcher dispatcher.Dispatcher, operatorConfig *Config) *CassandraReconciler {
 	return &CassandraReconciler{
 		clusters:        clusters,
 		client:          client,
@@ -61,6 +62,7 @@ func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client
 		eventDispatcher: eventDispatcher,
 		objectFactory:   &defaultReferenceFactory{},
 		stateFinder:     cluster.NewStateFinder(client),
+		operatorConfig:  operatorConfig,
 	}
 }
 
@@ -111,7 +113,7 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra")
 
-	v1alpha1helpers.SetDefaultsForCassandra(desiredCassandra)
+	v1alpha1helpers.SetDefaultsForCassandra(desiredCassandra, &v1alpha1helpers.TemplatedImageScheme{RepositoryPath: r.operatorConfig.RepositoryPath, ImageVersion: r.operatorConfig.Version})
 	validationError := validation.ValidateCassandra(desiredCassandra).ToAggregate()
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)
@@ -128,7 +130,7 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 		return completeReconciliation()
 	}
 
-	v1alpha1helpers.SetDefaultsForCassandra(currentCassandra)
+	v1alpha1helpers.SetDefaultsForCassandra(currentCassandra, &v1alpha1helpers.TemplatedImageScheme{RepositoryPath: r.operatorConfig.RepositoryPath, ImageVersion: r.operatorConfig.Version})
 	validationError = validation.ValidateCassandraUpdate(currentCassandra, desiredCassandra).ToAggregate()
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)

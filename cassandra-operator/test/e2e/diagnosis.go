@@ -54,8 +54,10 @@ func clusterDiagnosis(namespace, clusterName string) string {
 	for _, pod := range pods.Items {
 		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Describing pod %s =====", pod.Name))
 		diagnosis = append(diagnosis, fmt.Sprintf("%v", podDescription(namespace, &pod)))
-		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s ====", pod.Name))
+		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s, container cassandra ====", pod.Name))
 		diagnosis = append(diagnosis, fmt.Sprintf("%v", podLogs(namespace, &pod, "cassandra")))
+		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s, container cassandra-sidecar ====", pod.Name))
+		diagnosis = append(diagnosis, fmt.Sprintf("%v", podLogs(namespace, &pod, "cassandra-sidecar")))
 		diagnosis = append(diagnosis, "\n\n")
 	}
 	return strings.Join(diagnosis, "\n")

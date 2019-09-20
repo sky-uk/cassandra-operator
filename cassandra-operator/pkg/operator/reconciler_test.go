@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
@@ -63,6 +62,7 @@ var _ = Describe("reconciliation", func() {
 			eventRecorder:   fakes.eventRecorder,
 			objectFactory:   fakes.objectFactory,
 			stateFinder:     fakes.stateFinder,
+			operatorConfig:  &Config{Version: "latest", RepositoryPath: "skyuk"},
 		}
 	})
 
@@ -472,14 +472,12 @@ var _ = Describe("reconciliation", func() {
 })
 
 func aClusterDefinition() *v1alpha1.Cassandra {
-	cassandra := apis.ACassandra().
+	return apis.ACassandra().
 		WithDefaults().
 		WithSpec(apis.ACassandraSpec().
 			WithDefaults().
 			WithRacks(apis.ARack("a", 1).WithDefaults())).
 		Build()
-	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
-	return cassandra
 }
 
 func rackSpec(name string) v1alpha1.Rack {

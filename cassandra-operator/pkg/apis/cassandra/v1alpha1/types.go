@@ -23,14 +23,14 @@ const (
 	// DefaultCassandraImage is the name of the default Docker image used on Cassandra pods
 	DefaultCassandraImage = "cassandra:3.11"
 
-	// DefaultCassandraBootstrapperImage is the name of the Docker image used to prepare the configuration for the Cassandra node before it can be started
-	DefaultCassandraBootstrapperImage = "skyuk/cassandra-bootstrapper:latest"
+	// DefaultCassandraBootstrapperImageName is the name of the Docker image used to prepare the configuration for the Cassandra node before it can be started
+	DefaultCassandraBootstrapperImageName = "cassandra-bootstrapper"
 
-	// DefaultCassandraSnapshotImage is the name of the Docker image used to make and cleanup snapshots
-	DefaultCassandraSnapshotImage = "skyuk/cassandra-snapshot:latest"
+	// DefaultCassandraSnapshotImageName is the name of the Docker image used to make and cleanup snapshots
+	DefaultCassandraSnapshotImageName = "cassandra-snapshot"
 
-	// DefaultCassandraSidecarImage is the name of the Docker image used to inform liveness/readiness probes
-	DefaultCassandraSidecarImage = "skyuk/cassandra-sidecar:latest"
+	// DefaultCassandraSidecarImageName is the name of the Docker image used to inform liveness/readiness probes
+	DefaultCassandraSidecarImageName = "cassandra-sidecar"
 
 	// DefaultSnapshotTimeoutSeconds is the default for Cassandra.Spec.Snapshot.TimeoutSeconds
 	DefaultSnapshotTimeoutSeconds = 10

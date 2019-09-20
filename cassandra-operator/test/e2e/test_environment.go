@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"os"
 	"os/exec"
 	"strings"
@@ -28,15 +29,17 @@ var (
 	CassandraClientset                      *versioned.Clientset
 	kubeContext                             string
 	UseMockedImage                          bool
-	CassandraImageName                      string
-	CassandraBootstrapperImageName          string
-	CassandraSidecarImageName               string
-	CassandraSnapshotImageName              string
+	CassandraImageName                      *string
+	CassandraBootstrapperImageName          *string
+	CassandraSidecarImageName               *string
+	CassandraSnapshotImageName              *string
 	CassandraInitialDelay                   int32
 	CassandraLivenessPeriod                 int32
 	CassandraLivenessProbeFailureThreshold  int32
+	CassandraLivenessTimeout                int32
 	CassandraReadinessPeriod                int32
 	CassandraReadinessProbeFailureThreshold int32
+	CassandraReadinessTimeout               int32
 	NodeStartDuration                       time.Duration
 	NodeRestartDuration                     time.Duration
 	NodeTerminationDuration                 time.Duration
@@ -80,20 +83,24 @@ func init() {
 	}
 
 	if UseMockedImage {
-		CassandraImageName = os.Getenv("FAKE_CASSANDRA_IMAGE")
-		if CassandraImageName == "" {
+		CassandraImageName = getEnvOrNil("FAKE_CASSANDRA_IMAGE")
+		if CassandraImageName == nil {
 			panic("FAKE_CASSANDRA_IMAGE must be supplied")
 		}
-		CassandraInitialDelay = 1
+		CassandraInitialDelay = 3
 		CassandraLivenessPeriod = 1
 		CassandraReadinessPeriod = 1
-		CassandraLivenessProbeFailureThreshold = 3
-		CassandraReadinessProbeFailureThreshold = 3
+		CassandraLivenessTimeout = 1
+		CassandraReadinessTimeout = 1
+		CassandraLivenessProbeFailureThreshold = 5
+		CassandraReadinessProbeFailureThreshold = 5
 	} else {
-		CassandraImageName = v1alpha1.DefaultCassandraImage
+		CassandraImageName = ptr.String(v1alpha1.DefaultCassandraImage)
 		CassandraInitialDelay = 30
 		CassandraLivenessPeriod = 30
 		CassandraReadinessPeriod = 15
+		CassandraLivenessTimeout = 5
+		CassandraReadinessTimeout = 5
 		CassandraLivenessProbeFailureThreshold = 4  // allow 2mins
 		CassandraReadinessProbeFailureThreshold = 8 // allow 2mins
 	}
@@ -105,9 +112,9 @@ func init() {
 
 	NodeTerminationDuration = NodeStartDuration
 	NodeRestartDuration = NodeStartDuration * 2
-	CassandraBootstrapperImageName = getEnvOrDefault("CASSANDRA_BOOTSTRAPPER_IMAGE", v1alpha1.DefaultCassandraBootstrapperImage)
-	CassandraSidecarImageName = getEnvOrDefault("CASSANDRA_SIDECAR_IMAGE", v1alpha1.DefaultCassandraSidecarImage)
-	CassandraSnapshotImageName = getEnvOrDefault("CASSANDRA_SNAPSHOT_IMAGE", v1alpha1.DefaultCassandraSnapshotImage)
+	CassandraBootstrapperImageName = getEnvOrNil("CASSANDRA_BOOTSTRAPPER_IMAGE")
+	CassandraSidecarImageName = getEnvOrNil("CASSANDRA_SIDECAR_IMAGE")
+	CassandraSnapshotImageName = getEnvOrNil("CASSANDRA_SNAPSHOT_IMAGE")
 
 	Namespace = os.Getenv("NAMESPACE")
 	if Namespace == "" {
@@ -118,10 +125,10 @@ func init() {
 		"Running tests with Kubernetes context: %s, namespace: %s, Cassandra image: %s, bootstrapper image: %s, snapshot image: %s, sidecar image: %s, node start duration: %s",
 		kubeContext,
 		Namespace,
-		CassandraImageName,
-		CassandraBootstrapperImageName,
-		CassandraSnapshotImageName,
-		CassandraSidecarImageName,
+		ptr.StringValueOrNil(CassandraImageName),
+		ptr.StringValueOrNil(CassandraBootstrapperImageName),
+		ptr.StringValueOrNil(CassandraSnapshotImageName),
+		ptr.StringValueOrNil(CassandraSidecarImageName),
 		NodeStartDuration,
 	)
 }
@@ -150,10 +157,10 @@ func Kubectl(namespace string, args ...string) (*exec.Cmd, []byte, error) {
 	return cmd, output, err
 }
 
-func getEnvOrDefault(envKey, defaultValue string) string {
+func getEnvOrNil(envKey string) *string {
 	envValue := os.Getenv(envKey)
 	if envValue != "" {
-		return envValue
+		return ptr.String(envValue)
 	}
-	return defaultValue
+	return nil
 }

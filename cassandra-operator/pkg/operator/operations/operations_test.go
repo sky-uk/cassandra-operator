@@ -15,7 +15,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
@@ -46,7 +45,6 @@ var _ = Describe("operations to execute based on event", func() {
 						WithDefaults().
 						WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults()))).
 			Build()
-		v1alpha1helpers.SetDefaultsForCassandra(oldClusterDef)
 		newClusterDef = oldClusterDef.DeepCopy()
 
 		fakes = &mockAccessor{}

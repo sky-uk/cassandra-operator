@@ -15,7 +15,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	corev1 "k8s.io/api/core/v1"
@@ -246,7 +245,7 @@ func aClusterDefinitionWithPersistenceVolumes() *v1alpha1.Cassandra {
 }
 
 func aClusterDefinition() *v1alpha1.Cassandra {
-	cassandra := apis.ACassandra().
+	return apis.ACassandra().
 		WithDefaults().
 		WithName("mycluster").
 		WithNamespace("mynamespace").
@@ -255,12 +254,10 @@ func aClusterDefinition() *v1alpha1.Cassandra {
 			WithNoSnapshot().
 			WithRacks(apis.ARack("a", 1).WithDefaults())).
 		Build()
-	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
-	return cassandra
 }
 
 func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
-	cassandra := apis.ACassandra().
+	return apis.ACassandra().
 		WithDefaults().
 		WithName("mycluster").
 		WithNamespace("mynamespace").
@@ -271,8 +268,6 @@ func aClusterDefinitionWithEmptyDir() *v1alpha1.Cassandra {
 				WithDefaults().
 				WithStorages(apis.AnEmptyDir()))).
 		Build()
-	v1alpha1helpers.SetDefaultsForCassandra(cassandra)
-	return cassandra
 }
 
 func rackSpec(name string) v1alpha1.Rack {

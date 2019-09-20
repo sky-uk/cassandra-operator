@@ -39,7 +39,7 @@ var _ = Context("External cluster modifications", func() {
 			AClusterWithName(clusterName).
 				AndRacks(racks).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
-					Image:    &CassandraSnapshotImageName,
+					Image:    CassandraSnapshotImageName,
 					Schedule: "59 23 * * *",
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
 						CleanupSchedule: "11 22 1 * *",

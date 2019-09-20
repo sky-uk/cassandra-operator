@@ -202,7 +202,6 @@ var _ = Describe("creation of stateful sets", func() {
 							apis.ARack("b", 1).WithDefaults().WithStorages(apis.AnEmptyDir()),
 						)).
 					Build()
-				v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
 			})
 
 			It("should create an emptyDir volume", func() {
@@ -844,7 +843,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 })
 
 func ACluster(clusterDef *v1alpha1.Cassandra) *Cluster {
-	v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
+	v1alpha1helpers.SetDefaultsForCassandra(clusterDef, nil)
 	return New(clusterDef)
 }
 

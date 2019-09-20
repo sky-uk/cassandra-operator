@@ -10,7 +10,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	metricstesting "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics/testing"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/stub"
@@ -391,6 +390,5 @@ func (jh *jolokiaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func aCluster(clusterName, namespace string) *cluster.Cluster {
 	clusterDef := apis.ACassandra().WithDefaults().WithName(clusterName).WithNamespace(namespace).Build()
-	v1alpha1helpers.SetDefaultsForCassandra(clusterDef)
 	return cluster.New(clusterDef)
 }

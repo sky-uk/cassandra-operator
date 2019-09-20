@@ -44,6 +44,8 @@ spec:
               fieldPath: metadata.name
         - name: APP_NAME
           value: cassandra-operator
+        - name: OPERATOR_IMAGE
+          value: $OPERATOR_IMAGE
         args: $OPERATOR_ARGS
         image: $OPERATOR_IMAGE
         imagePullPolicy: IfNotPresent

@@ -98,7 +98,7 @@ func (c *ClusterBuilder) AndScheduledSnapshot(snapshot *v1alpha1.Snapshot) *Clus
 func (c *ClusterBuilder) IsDefined() {
 	if c.clusterSpec == nil {
 		if c.podSpec == nil {
-			c.podSpec = DefaultPodSpec().Build()
+			c.podSpec = PodSpec().Build()
 		}
 
 		c.clusterSpec = &v1alpha1.CassandraSpec{}
@@ -149,7 +149,7 @@ func RackWithEmptyDir(rackName string, replicas int32) v1alpha1.Rack {
 		Build()
 }
 
-func DefaultPodSpec() *apis.PodSpecBuilder {
+func PodSpec() *apis.PodSpecBuilder {
 	return apis.APod().
 		WithImageName(CassandraImageName).
 		WithBootstrapperImageName(CassandraBootstrapperImageName).
@@ -166,13 +166,15 @@ func DefaultPodSpec() *apis.PodSpecBuilder {
 		WithCassandraInitialDelay(CassandraInitialDelay).
 		WithCassandraLivenessPeriod(CassandraLivenessPeriod).
 		WithCassandraLivenessProbeFailureThreshold(CassandraLivenessProbeFailureThreshold).
+		WithCassandraLivenessTimeout(CassandraLivenessTimeout).
 		WithCassandraReadinessPeriod(CassandraReadinessPeriod).
-		WithCassandraReadinessProbeFailureThreshold(CassandraReadinessProbeFailureThreshold)
+		WithCassandraReadinessProbeFailureThreshold(CassandraReadinessProbeFailureThreshold).
+		WithCassandraReadinessTimeout(CassandraReadinessTimeout)
 }
 
 func SnapshotSchedule(cron string) *v1alpha1.Snapshot {
 	return &v1alpha1.Snapshot{
-		Image:    &CassandraSnapshotImageName,
+		Image:    CassandraSnapshotImageName,
 		Schedule: cron,
 	}
 }

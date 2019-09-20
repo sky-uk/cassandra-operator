@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator"
 	"os"
+	"strings"
 	"time"
 
 	logr "github.com/sirupsen/logrus"
@@ -88,6 +89,8 @@ func startOperator(_ *cobra.Command, _ []string) error {
 		MetricPollInterval:    metricPollInterval,
 		ControllerSyncPeriod:  controllerSyncPeriod,
 		Namespace:             os.Getenv("OPERATOR_NAMESPACE"),
+		Version:               extractImageVersion(os.Getenv("OPERATOR_IMAGE")),
+		RepositoryPath:        extractRegistryPath(os.Getenv("OPERATOR_IMAGE")),
 	}
 
 	entryLog.Infof("Starting Cassandra operator with config: %+v", operatorConfig)
@@ -99,4 +102,14 @@ func startOperator(_ *cobra.Command, _ []string) error {
 	op.Run()
 
 	return nil
+}
+
+func extractImageVersion(imageAndVersion string) string {
+	versionStartIndex := strings.LastIndex(imageAndVersion, ":")
+	return imageAndVersion[versionStartIndex+1:]
+}
+
+func extractRegistryPath(imageAndVersion string) string {
+	registryEndIndex := strings.LastIndex(imageAndVersion, "/")
+	return imageAndVersion[:registryEndIndex]
 }

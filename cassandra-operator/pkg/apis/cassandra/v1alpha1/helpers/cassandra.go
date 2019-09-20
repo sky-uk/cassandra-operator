@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"fmt"
 	"reflect"
 
 	coreV1 "k8s.io/api/core/v1"
@@ -11,6 +12,29 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 )
+
+// ImageScheme is used to determine default names for operator components docker images
+type ImageScheme interface {
+	defaultName(imageName string) *string
+}
+
+// TemplatedImageScheme constructs an image name based on a version and repository path
+type TemplatedImageScheme struct {
+	ImageVersion   string
+	RepositoryPath string
+}
+
+func (i *TemplatedImageScheme) defaultName(imageName string) *string {
+	return ptr.String(fmt.Sprintf("%s/%s:%s", i.RepositoryPath, imageName, i.ImageVersion))
+}
+
+// skyUkLatestImageScheme constructs an image name using skyuk repository latest image
+type skyUkLatestImageScheme struct {
+}
+
+func (sky *skyUkLatestImageScheme) defaultName(imageName string) *string {
+	return ptr.String(fmt.Sprintf("skyuk/%s:latest", imageName))
+}
 
 func NewControllerRef(c *v1alpha1.Cassandra) metav1.OwnerReference {
 	return *metav1.NewControllerRef(c, schema.GroupVersionKind{
@@ -43,10 +67,10 @@ func SnapshotCleanupPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v
 			!reflect.DeepEqual(snapshot1.RetentionPolicy.RetentionPeriodDays, snapshot2.RetentionPolicy.RetentionPeriodDays))
 }
 
-func SetDefaultsForCassandra(clusterDefinition *v1alpha1.Cassandra) {
+func SetDefaultsForCassandra(clusterDefinition *v1alpha1.Cassandra, imageDefaultScheme ImageScheme) {
 	setDefaultsForDatacenter(clusterDefinition)
 	setDefaultsForSnapshot(clusterDefinition.Spec.Snapshot)
-	setDefaultsForImages(clusterDefinition)
+	setDefaultsForImages(clusterDefinition, imageDefaultScheme)
 	setDefaultsForProbes(clusterDefinition)
 	setDefaultsForStorage(clusterDefinition)
 }
@@ -92,19 +116,24 @@ func setDefaultsForRetentionPolicy(rp *v1alpha1.RetentionPolicy) {
 	}
 }
 
-func setDefaultsForImages(clusterDefinition *v1alpha1.Cassandra) {
-	if clusterDefinition.Spec.Pod.BootstrapperImage == nil {
-		clusterDefinition.Spec.Pod.BootstrapperImage = ptr.String(v1alpha1.DefaultCassandraBootstrapperImage)
+func setDefaultsForImages(clusterDefinition *v1alpha1.Cassandra, imageScheme ImageScheme) {
+	if imageScheme == nil {
+		imageScheme = &skyUkLatestImageScheme{}
 	}
+
 	if clusterDefinition.Spec.Pod.Image == nil {
 		clusterDefinition.Spec.Pod.Image = ptr.String(v1alpha1.DefaultCassandraImage)
 	}
+	if clusterDefinition.Spec.Pod.BootstrapperImage == nil {
+		clusterDefinition.Spec.Pod.BootstrapperImage = imageScheme.defaultName(v1alpha1.DefaultCassandraBootstrapperImageName)
+	}
 	if clusterDefinition.Spec.Pod.SidecarImage == nil {
-		clusterDefinition.Spec.Pod.SidecarImage = ptr.String(v1alpha1.DefaultCassandraSidecarImage)
+		clusterDefinition.Spec.Pod.SidecarImage = imageScheme.defaultName(v1alpha1.DefaultCassandraSidecarImageName)
 	}
 	if clusterDefinition.Spec.Snapshot != nil && clusterDefinition.Spec.Snapshot.Image == nil {
-		clusterDefinition.Spec.Snapshot.Image = ptr.String(v1alpha1.DefaultCassandraSnapshotImage)
+		clusterDefinition.Spec.Snapshot.Image = imageScheme.defaultName(v1alpha1.DefaultCassandraSnapshotImageName)
 	}
+
 }
 
 func setDefaultsForProbes(clusterDefinition *v1alpha1.Cassandra) {

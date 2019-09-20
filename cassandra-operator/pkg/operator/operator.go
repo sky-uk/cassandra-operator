@@ -46,6 +46,8 @@ type Config struct {
 	MetricRequestDuration time.Duration
 	ControllerSyncPeriod  time.Duration
 	Namespace             string
+	Version               string
+	RepositoryPath        string
 }
 
 // New creates a new Operator.
@@ -70,7 +72,7 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	}
 
 	ctrl, err := controller.New("cassandra", mgr, controller.Options{
-		Reconciler: NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventDispatcher),
+		Reconciler: NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventDispatcher, operatorConfig),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to set up Cassandra reconciler controller: %v", err)

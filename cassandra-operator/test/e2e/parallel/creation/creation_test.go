@@ -5,6 +5,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
 
 	coreV1 "k8s.io/api/core/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -79,9 +81,9 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 			Datacenter: ptr.String("custom-dc"),
 			Racks:      multipleRacksCluster.Racks,
 			Pod: v1alpha1.Pod{
-				BootstrapperImage: &CassandraBootstrapperImageName,
-				SidecarImage:      &CassandraSidecarImageName,
-				Image:             &CassandraImageName,
+				BootstrapperImage: CassandraBootstrapperImageName,
+				SidecarImage:      CassandraSidecarImageName,
+				Image:             CassandraImageName,
 				Resources: coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
 						coreV1.ResourceMemory: resource.MustParse("987Mi"),
@@ -93,13 +95,13 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 				},
 				LivenessProbe: &v1alpha1.Probe{
 					FailureThreshold:    ptr.Int32(CassandraLivenessProbeFailureThreshold),
-					TimeoutSeconds:      ptr.Int32(7),
+					TimeoutSeconds:      ptr.Int32(CassandraLivenessTimeout + 2),
 					InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
 					PeriodSeconds:       ptr.Int32(CassandraLivenessPeriod),
 				},
 				ReadinessProbe: &v1alpha1.Probe{
 					FailureThreshold:    ptr.Int32(CassandraReadinessProbeFailureThreshold),
-					TimeoutSeconds:      ptr.Int32(6),
+					TimeoutSeconds:      ptr.Int32(CassandraReadinessTimeout + 1),
 					InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
 					PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
 				},
@@ -117,7 +119,7 @@ var _ = ParallelTestBeforeSuite(func() []TestCluster {
 	multipleRacksCluster, emptyDirCluster = defineClusters(clusterNames[0], clusterNames[1])
 })
 
-var _ = Context("When a cluster with a given name doesn't already exist", func() {
+var _ = Context("When a cluster doesn't already exist", func() {
 
 	BeforeEach(func() {
 		testStartTime = time.Now()
@@ -141,17 +143,16 @@ var _ = Context("When a cluster with a given name doesn't already exist", func()
 
 		By("creating pods with the specified resources")
 		Expect(PodsForCluster(Namespace, multipleRacksCluster.Name)()).Should(Each(And(
-			HaveContainer(ContainerExpectation{
-				ImageName:                      CassandraImageName,
-				ContainerName:                  "cassandra",
+			HaveContainer("cassandra", &ContainerExpectation{
+				ImageName:                      *CassandraImageName,
 				MemoryRequest:                  "987Mi",
 				MemoryLimit:                    "987Mi",
 				CPURequest:                     "1m",
 				LivenessProbePeriod:            DurationSeconds(CassandraLivenessPeriod),
 				LivenessProbeFailureThreshold:  CassandraLivenessProbeFailureThreshold,
 				LivenessProbeInitialDelay:      DurationSeconds(CassandraInitialDelay),
-				LivenessProbeTimeout:           7 * time.Second,
-				ReadinessProbeTimeout:          6 * time.Second,
+				LivenessProbeTimeout:           DurationSeconds(CassandraLivenessTimeout + 2),
+				ReadinessProbeTimeout:          DurationSeconds(CassandraReadinessTimeout + 1),
 				ReadinessProbePeriod:           DurationSeconds(CassandraReadinessPeriod),
 				ReadinessProbeFailureThreshold: CassandraReadinessProbeFailureThreshold,
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
@@ -273,4 +274,58 @@ var _ = Context("When a cluster with a given name doesn't already exist", func()
 			LastTimestampCloseTo: &multipleRacksClusterReadyTime, // cluster's ready when its last stateful set is
 		}))
 	})
+
 })
+
+var _ = Context("When a cluster definition does not specify custom images", func() {
+
+	JustAfterEach(func() {
+		if CurrentGinkgoTestDescription().Failed {
+			PrintDiagnosis(Namespace, testStartTime, multipleRacksCluster.Name, emptyDirCluster.Name)
+		}
+	})
+
+	It("should set custom images version to the operator version", func() {
+		// given
+		clusterName := AClusterName()
+		AClusterWithName(clusterName).
+			AndPodSpec(PodSpec().WithoutBootstrapperImageName().WithoutSidecarImageName().Build()).
+			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
+			WithoutCustomConfig().
+			IsDefined()
+
+		// then
+		operatorRegistry, operatorVersion := operatorImageRegistryAndVersion(Namespace)
+		Eventually(PodsForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Each(And(
+			HaveContainer("cassandra", &ContainerImageExpectation{
+				ImageName: *CassandraImageName,
+			}),
+			HaveContainer("cassandra-sidecar", &ContainerImageExpectation{
+				ImageName: fmt.Sprintf("%s/cassandra-sidecar:%s", operatorRegistry, operatorVersion),
+			}),
+			HaveInitContainer("cassandra-bootstrapper", &ContainerImageExpectation{
+				ImageName: fmt.Sprintf("%s/cassandra-bootstrapper:%s", operatorRegistry, operatorVersion),
+			}),
+		)))
+	})
+})
+
+func operatorImageRegistryAndVersion(namespace string) (operatorRegistry, operatorVersion string) {
+	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: "app=cassandra-operator"})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pods.Items).To(HaveLen(1))
+	operatorImage := pods.Items[0].Spec.Containers[0].Image
+	operatorRegistry = extractRegistry(operatorImage)
+	operatorVersion = extractImageVersion(operatorImage)
+	return
+}
+
+func extractImageVersion(imageAndVersion string) string {
+	versionIndex := strings.LastIndex(imageAndVersion, ":")
+	return imageAndVersion[versionIndex+1:]
+}
+
+func extractRegistry(imageAndVersion string) string {
+	registryEndIndex := strings.LastIndex(imageAndVersion, "/")
+	return imageAndVersion[:registryEndIndex]
+}

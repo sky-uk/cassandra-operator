@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 )
@@ -41,7 +40,7 @@ var _ = Describe("cluster events", func() {
 				WithRacks(apis.ARack("a", 1).WithDefaults().WithZone("some-zone")).
 				WithPod(apis.APod().
 					WithDefaults().
-					WithImageName("anImage").
+					WithImageName(ptr.String("anImage")).
 					WithResources(&v1.ResourceRequirements{
 						Requests: v1.ResourceList{
 							v1.ResourceMemory: resource.MustParse("2Gi"),
@@ -63,7 +62,6 @@ var _ = Describe("cluster events", func() {
 					WithCassandraReadinessTimeout(5))).
 			Build()
 
-		v1alpha1helpers.SetDefaultsForCassandra(oldCluster)
 		newCluster = oldCluster.DeepCopy()
 		adjuster = New()
 	})

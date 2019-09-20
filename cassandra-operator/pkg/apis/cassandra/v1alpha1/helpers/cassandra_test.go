@@ -29,21 +29,21 @@ var _ = Describe("Cassandra Helpers", func() {
 			Context("TimeoutSeconds", func() {
 				It("should default to 10", func() {
 					clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{}
-					SetDefaultsForCassandra(clusterDef)
+					SetDefaultsForCassandra(clusterDef, nil)
 					Expect(*clusterDef.Spec.Snapshot.TimeoutSeconds).To(Equal(int32(v1alpha1.DefaultSnapshotTimeoutSeconds)))
 				})
 				It("should not overwrite existing value", func() {
 					clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
 						TimeoutSeconds: ptr.Int32(456),
 					}
-					SetDefaultsForCassandra(clusterDef)
+					SetDefaultsForCassandra(clusterDef, nil)
 					Expect(*clusterDef.Spec.Snapshot.TimeoutSeconds).To(Equal(int32(456)))
 				})
 			})
 
 			It("should not change an undefined Snapshot", func() {
 				clusterDef.Spec.Snapshot = nil
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Snapshot).To(BeNil())
 			})
 
@@ -55,7 +55,7 @@ var _ = Describe("Cassandra Helpers", func() {
 								RetentionPeriodDays: nil,
 							},
 						}
-						SetDefaultsForCassandra(clusterDef)
+						SetDefaultsForCassandra(clusterDef, nil)
 						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays).To(Equal(int32(v1alpha1.DefaultRetentionPolicyRetentionPeriodDays)))
 					})
 					It("should not overwrite existing value", func() {
@@ -64,7 +64,7 @@ var _ = Describe("Cassandra Helpers", func() {
 								RetentionPeriodDays: ptr.Int32(543),
 							},
 						}
-						SetDefaultsForCassandra(clusterDef)
+						SetDefaultsForCassandra(clusterDef, nil)
 						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays).To(Equal(int32(543)))
 					})
 				})
@@ -75,7 +75,7 @@ var _ = Describe("Cassandra Helpers", func() {
 								CleanupTimeoutSeconds: nil,
 							},
 						}
-						SetDefaultsForCassandra(clusterDef)
+						SetDefaultsForCassandra(clusterDef, nil)
 						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds).To(Equal(int32(v1alpha1.DefaultRetentionPolicyCleanupTimeoutSeconds)))
 					})
 					It("should not overwrite existing value", func() {
@@ -84,14 +84,14 @@ var _ = Describe("Cassandra Helpers", func() {
 								CleanupTimeoutSeconds: ptr.Int32(321),
 							},
 						}
-						SetDefaultsForCassandra(clusterDef)
+						SetDefaultsForCassandra(clusterDef, nil)
 						Expect(*clusterDef.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds).To(Equal(int32(321)))
 					})
 				})
 				It("should not change an undefined Snapshot.RetentionPolicy", func() {
 					clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{}
 					clusterDef.Spec.Snapshot.RetentionPolicy = nil
-					SetDefaultsForCassandra(clusterDef)
+					SetDefaultsForCassandra(clusterDef, nil)
 					Expect(clusterDef.Spec.Snapshot.RetentionPolicy).To(BeNil())
 				})
 			})
@@ -100,76 +100,127 @@ var _ = Describe("Cassandra Helpers", func() {
 		Describe("Defaulting datacenter", func() {
 			It("should default Datacenter to dc1", func() {
 				clusterDef.Spec.Datacenter = nil
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(*clusterDef.Spec.Datacenter).To(Equal("dc1"))
 			})
 			It("should not overwrite Datacenter ", func() {
 				clusterDef.Spec.Datacenter = ptr.String("carefully-chosen-datacenter-name")
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(*clusterDef.Spec.Datacenter).To(Equal("carefully-chosen-datacenter-name"))
 			})
 		})
 
 		Describe("Defaulting images", func() {
-			It("should use the 3.11 version of the apache cassandra image if one is not supplied for the cluster", func() {
-				clusterDef.Spec.Pod.Image = nil
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.Image).To(Equal("cassandra:3.11"))
+			Context("when image names are specified", func() {
+
+				It("should use the specified version of the cassandra image if one is given", func() {
+					clusterDef.Spec.Pod.Image = ptr.String("somerepo/someimage:v1.0")
+					SetDefaultsForCassandra(clusterDef, nil)
+					Expect(*clusterDef.Spec.Pod.Image).To(Equal("somerepo/someimage:v1.0"))
+				})
+
+				It("should use the specified version of the cassandra bootstrapper image if one is given", func() {
+					clusterDef.Spec.Pod.BootstrapperImage = ptr.String("somerepo/some-bootstrapper-image:v1.0")
+					SetDefaultsForCassandra(clusterDef, nil)
+					Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("somerepo/some-bootstrapper-image:v1.0"))
+				})
+
+				It("should use the specified version of the cassandra snapshot image if one is given", func() {
+					clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
+						Schedule: "1 23 * * *",
+					}
+					clusterDef.Spec.Snapshot.Image = ptr.String("somerepo/some-snapshot-image:v1.0")
+					SetDefaultsForCassandra(clusterDef, nil)
+					Expect(*clusterDef.Spec.Snapshot.Image).To(Equal("somerepo/some-snapshot-image:v1.0"))
+				})
+
+				It("should use the specified version of the cassandra snapshot image if one is given", func() {
+					clusterDef.Spec.Pod.SidecarImage = ptr.String("somerepo/some-sidecar-image:v1.0")
+					SetDefaultsForCassandra(clusterDef, nil)
+					Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("somerepo/some-sidecar-image:v1.0"))
+				})
+
 			})
 
-			It("should use the specified version of the cassandra image if one is given", func() {
-				clusterDef.Spec.Pod.Image = ptr.String("somerepo/someimage:v1.0")
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.Image).To(Equal("somerepo/someimage:v1.0"))
+			Context("when no image names are specified", func() {
+
+				Context("and no image default scheme is provided", func() {
+
+					It("should use the 3.11 version of the apache cassandra image", func() {
+						clusterDef.Spec.Pod.Image = nil
+						SetDefaultsForCassandra(clusterDef, nil)
+						Expect(*clusterDef.Spec.Pod.Image).To(Equal("cassandra:3.11"))
+					})
+
+					It("should default the cassandra bootstrapper image to the latest skyuk image", func() {
+						clusterDef.Spec.Pod.BootstrapperImage = nil
+						SetDefaultsForCassandra(clusterDef, nil)
+						Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("skyuk/cassandra-bootstrapper:latest"))
+					})
+
+					It("should default the cassandra snapshot image to the latest skyuk image", func() {
+						clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
+							Schedule: "1 23 * * *",
+						}
+						clusterDef.Spec.Snapshot.Image = nil
+						SetDefaultsForCassandra(clusterDef, nil)
+						Expect(*clusterDef.Spec.Snapshot.Image).To(Equal("skyuk/cassandra-snapshot:latest"))
+					})
+
+					It("should default the cassandra sidecar image to the latest skyuk image", func() {
+						clusterDef.Spec.Pod.SidecarImage = nil
+						SetDefaultsForCassandra(clusterDef, nil)
+						Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("skyuk/cassandra-sidecar:latest"))
+					})
+				})
+
+				Context("and an image default scheme is provided", func() {
+
+					var imageDefaultsScheme *TemplatedImageScheme
+
+					BeforeEach(func() {
+						imageDefaultsScheme = &TemplatedImageScheme{
+							ImageVersion:   "v123",
+							RepositoryPath: "dockerRegistry/somepath",
+						}
+					})
+
+					It("should ignore the image schema and use the 3.11 version of the apache cassandra image", func() {
+						clusterDef.Spec.Pod.Image = nil
+						SetDefaultsForCassandra(clusterDef, imageDefaultsScheme)
+						Expect(*clusterDef.Spec.Pod.Image).To(Equal("cassandra:3.11"))
+					})
+
+					It("should default the cassandra bootstrapper image based on the scheme", func() {
+						clusterDef.Spec.Pod.BootstrapperImage = nil
+						SetDefaultsForCassandra(clusterDef, imageDefaultsScheme)
+						Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("dockerRegistry/somepath/cassandra-bootstrapper:v123"))
+					})
+
+					It("should default the cassandra snapshot image based on the scheme", func() {
+						clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
+							Schedule: "1 23 * * *",
+						}
+						clusterDef.Spec.Snapshot.Image = nil
+						SetDefaultsForCassandra(clusterDef, imageDefaultsScheme)
+						Expect(*clusterDef.Spec.Snapshot.Image).To(Equal("dockerRegistry/somepath/cassandra-snapshot:v123"))
+					})
+
+					It("should default the cassandra sidecar image based on the scheme", func() {
+						clusterDef.Spec.Pod.SidecarImage = nil
+						SetDefaultsForCassandra(clusterDef, imageDefaultsScheme)
+						Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("dockerRegistry/somepath/cassandra-sidecar:v123"))
+					})
+
+				})
 			})
 
-			It("should use the latest version of the cassandra bootstrapper image if one is not supplied for the cluster", func() {
-				clusterDef.Spec.Pod.BootstrapperImage = nil
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("skyuk/cassandra-bootstrapper:latest"))
-			})
-
-			It("should use the specified version of the cassandra bootstrapper image if one is given", func() {
-				clusterDef.Spec.Pod.BootstrapperImage = ptr.String("somerepo/some-bootstrapper-image:v1.0")
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.BootstrapperImage).To(Equal("somerepo/some-bootstrapper-image:v1.0"))
-			})
-
-			It("should use the latest version of the cassandra snapshot image if one is not supplied for the cluster", func() {
-				clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
-					Schedule: "1 23 * * *",
-				}
-				clusterDef.Spec.Snapshot.Image = nil
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Snapshot.Image).To(Equal("skyuk/cassandra-snapshot:latest"))
-			})
-
-			It("should use the specified version of the cassandra snapshot image if one is given", func() {
-				clusterDef.Spec.Snapshot = &v1alpha1.Snapshot{
-					Schedule: "1 23 * * *",
-				}
-				clusterDef.Spec.Snapshot.Image = ptr.String("somerepo/some-snapshot-image:v1.0")
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Snapshot.Image).To(Equal("somerepo/some-snapshot-image:v1.0"))
-			})
-
-			It("should use the latest version of the cassandra sidecar image if one is not supplied for the cluster", func() {
-				clusterDef.Spec.Pod.SidecarImage = nil
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("skyuk/cassandra-sidecar:latest"))
-			})
-
-			It("should use the specified version of the cassandra snapshot image if one is given", func() {
-				clusterDef.Spec.Pod.SidecarImage = ptr.String("somerepo/some-sidecar-image:v1.0")
-				SetDefaultsForCassandra(clusterDef)
-				Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("somerepo/some-sidecar-image:v1.0"))
-			})
 		})
 
 		Describe("Defaulting liveness probe", func() {
 			It("should set the default liveness probe values if it is not configured for the cluster", func() {
 				clusterDef.Spec.Pod.LivenessProbe = nil
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.LivenessProbe.FailureThreshold).To(Equal(ptr.Int32(3)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(30)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.PeriodSeconds).To(Equal(ptr.Int32(30)))
@@ -179,7 +230,7 @@ var _ = Describe("Cassandra Helpers", func() {
 
 			It("should set the default liveness probe values if the liveness probe is present but has unspecified values", func() {
 				clusterDef.Spec.Pod.LivenessProbe = &v1alpha1.Probe{}
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.LivenessProbe.FailureThreshold).To(Equal(ptr.Int32(3)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(30)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.PeriodSeconds).To(Equal(ptr.Int32(30)))
@@ -195,7 +246,7 @@ var _ = Describe("Cassandra Helpers", func() {
 					FailureThreshold:    ptr.Int32(4),
 					TimeoutSeconds:      ptr.Int32(5),
 				}
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.LivenessProbe.SuccessThreshold).To(Equal(ptr.Int32(1)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.PeriodSeconds).To(Equal(ptr.Int32(2)))
 				Expect(clusterDef.Spec.Pod.LivenessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(3)))
@@ -208,7 +259,7 @@ var _ = Describe("Cassandra Helpers", func() {
 
 			It("should set the default readiness probe values if it is not configured for the cluster", func() {
 				clusterDef.Spec.Pod.ReadinessProbe = nil
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.FailureThreshold).To(Equal(ptr.Int32(3)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(30)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.PeriodSeconds).To(Equal(ptr.Int32(15)))
@@ -218,7 +269,7 @@ var _ = Describe("Cassandra Helpers", func() {
 
 			It("should set the default readiness probe values if the readiness probe is present but has unspecified values", func() {
 				clusterDef.Spec.Pod.ReadinessProbe = &v1alpha1.Probe{}
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.FailureThreshold).To(Equal(ptr.Int32(3)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(30)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.PeriodSeconds).To(Equal(ptr.Int32(15)))
@@ -234,7 +285,7 @@ var _ = Describe("Cassandra Helpers", func() {
 					FailureThreshold:    ptr.Int32(4),
 					TimeoutSeconds:      ptr.Int32(5),
 				}
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.SuccessThreshold).To(Equal(ptr.Int32(1)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.PeriodSeconds).To(Equal(ptr.Int32(2)))
 				Expect(clusterDef.Spec.Pod.ReadinessProbe.InitialDelaySeconds).To(Equal(ptr.Int32(3)))
@@ -247,28 +298,28 @@ var _ = Describe("Cassandra Helpers", func() {
 			It("should set access mode to read/write once when not set", func() {
 				clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes = nil
 
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes).To(ConsistOf(coreV1.ReadWriteOnce))
 			})
 
 			It("should preserve access mode when already set", func() {
 				clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes = []coreV1.PersistentVolumeAccessMode{coreV1.ReadWriteMany}
 
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(clusterDef.Spec.Racks[0].Storage[0].PersistentVolumeClaim.AccessModes).To(ConsistOf(coreV1.ReadWriteMany))
 			})
 
 			It("should preserve path when set", func() {
 				clusterDef.Spec.Racks[0].Storage[0].Path = ptr.String("/custom-cassandra-home")
 
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(*clusterDef.Spec.Racks[0].Storage[0].Path).To(Equal("/custom-cassandra-home"))
 			})
 
 			It("should set path to default cassandra installation when not set", func() {
 				clusterDef.Spec.Racks[0].Storage[0].Path = nil
 
-				SetDefaultsForCassandra(clusterDef)
+				SetDefaultsForCassandra(clusterDef, nil)
 				Expect(*clusterDef.Spec.Racks[0].Storage[0].Path).To(Equal("/var/lib/cassandra"))
 			})
 		})

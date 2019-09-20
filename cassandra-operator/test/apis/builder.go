@@ -276,9 +276,9 @@ func APod() *PodSpecBuilder {
 
 func (p *PodSpecBuilder) WithDefaults() *PodSpecBuilder {
 	return p.
-		WithImageName("cassandra:3.11").
-		WithBootstrapperImageName("BootstrapperImage").
-		WithSidecarImageName("SidecarImage").
+		WithImageName(ptr.String("cassandra:3.11")).
+		WithBootstrapperImageName(ptr.String("BootstrapperImage")).
+		WithSidecarImageName(ptr.String("SidecarImage")).
 		WithResources(&coreV1.ResourceRequirements{
 			Limits: coreV1.ResourceList{
 				coreV1.ResourceMemory: resource.MustParse("1Gi"),
@@ -304,19 +304,27 @@ func (p *PodSpecBuilder) WithResources(podResources *coreV1.ResourceRequirements
 	return p
 }
 
-func (p *PodSpecBuilder) WithImageName(image string) *PodSpecBuilder {
-	p.image = ptr.String(image)
+func (p *PodSpecBuilder) WithImageName(image *string) *PodSpecBuilder {
+	p.image = image
 	return p
 }
 
-func (p *PodSpecBuilder) WithBootstrapperImageName(image string) *PodSpecBuilder {
-	p.bootstrapperImage = ptr.String(image)
+func (p *PodSpecBuilder) WithBootstrapperImageName(image *string) *PodSpecBuilder {
+	p.bootstrapperImage = image
 	return p
 }
 
-func (p *PodSpecBuilder) WithSidecarImageName(image string) *PodSpecBuilder {
-	p.sidecarImage = ptr.String(image)
+func (p *PodSpecBuilder) WithoutBootstrapperImageName() *PodSpecBuilder {
+	return p.WithBootstrapperImageName(nil)
+}
+
+func (p *PodSpecBuilder) WithSidecarImageName(image *string) *PodSpecBuilder {
+	p.sidecarImage = image
 	return p
+}
+
+func (p *PodSpecBuilder) WithoutSidecarImageName() *PodSpecBuilder {
+	return p.WithSidecarImageName(nil)
 }
 
 func (p *PodSpecBuilder) WithCassandraInitialDelay(delay int32) *PodSpecBuilder {
