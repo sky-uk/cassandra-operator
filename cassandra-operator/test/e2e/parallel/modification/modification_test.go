@@ -305,7 +305,7 @@ var _ = Context("Allowable cluster modifications", func() {
 
 			// then
 			By("registering an event for the custom config modification")
-			Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+			Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 				Type:                 coreV1.EventTypeNormal,
 				Reason:               cluster.ClusterUpdateEvent,
 				Message:              fmt.Sprintf("Custom config updated for cluster %s.%s", Namespace, clusterName),
@@ -342,7 +342,7 @@ var _ = Context("Allowable cluster modifications", func() {
 
 			// then
 			By("registering an event for the custom config addition")
-			Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+			Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 				Type:                 coreV1.EventTypeNormal,
 				Reason:               cluster.ClusterUpdateEvent,
 				Message:              fmt.Sprintf("Custom config created for cluster %s.%s", Namespace, clusterName),
@@ -378,7 +378,7 @@ var _ = Context("Allowable cluster modifications", func() {
 
 			// then
 			By("registering an event for the custom config deletion")
-			Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+			Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 				Type:                 coreV1.EventTypeNormal,
 				Reason:               cluster.ClusterUpdateEvent,
 				Message:              fmt.Sprintf("Custom config deleted for cluster %s.%s", Namespace, clusterName),

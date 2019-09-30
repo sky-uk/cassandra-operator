@@ -267,7 +267,7 @@ var _ = Context("When a cluster doesn't already exist", func() {
 			Message: fmt.Sprintf("Stateful set %s.%s-%s is ready", Namespace, multipleRacksCluster.Name, multipleRacksCluster.Racks[0].Name),
 		}))
 		// give long enough to ensure event is propagated
-		Eventually(CassandraEventsFor(Namespace, multipleRacksCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+		Eventually(CassandraEventsFor(Namespace, multipleRacksCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeNormal,
 			Reason:               cluster.StatefulSetChangeComplete,
 			Message:              fmt.Sprintf("Stateful set %s.%s-%s is ready", Namespace, multipleRacksCluster.Name, multipleRacksCluster.Racks[1].Name),

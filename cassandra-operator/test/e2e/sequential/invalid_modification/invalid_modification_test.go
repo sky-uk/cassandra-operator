@@ -68,7 +68,7 @@ var _ = Context("forbidden cluster modifications", func() {
 
 		// then
 		By("recording a warning that scale-down operations are not supported")
-		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
 			Message:              "spec.Racks.a.Replicas: Forbidden: This field can not be decremented",
@@ -90,7 +90,7 @@ var _ = Context("forbidden cluster modifications", func() {
 
 		// then
 		By("recording a warning event about the forbidden change")
-		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
 			Message:              "spec.Pod.Image: Forbidden: This field can not be changed",
@@ -106,7 +106,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		ARackIsRemovedFromCluster(Namespace, multipleNodeCluster.Name, "b")
 
 		// then
-		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
 			Message:              "spec.Racks: Forbidden: Rack deletion is not supported",

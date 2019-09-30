@@ -114,14 +114,14 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 			))
 
 			By("registering an event for the snapshot job creation")
-			Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+			Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 				Type:                 coreV1.EventTypeNormal,
 				Reason:               cluster.ClusterSnapshotCreationScheduleEvent,
 				Message:              fmt.Sprintf("Snapshot creation scheduled for cluster %s.%s", Namespace, clusterName),
 				LastTimestampCloseTo: &clusterCreatedTime,
 			}))
 			By("registering an event for the snapshot cleanup job creation")
-			Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+			Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 				Type:                 coreV1.EventTypeNormal,
 				Reason:               cluster.ClusterSnapshotCleanupScheduleEvent,
 				Message:              fmt.Sprintf("Snapshot cleanup scheduled for cluster %s.%s", Namespace, clusterName),
@@ -330,7 +330,7 @@ func asEventTime(theTime time.Time) time.Time {
 }
 
 func waitForClusterCreationCompleteEvent(clusterName string) {
-	Eventually(CassandraEventsFor(Namespace, clusterName), 30*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
+	Eventually(CassandraEventsFor(Namespace, clusterName), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 		Type:   coreV1.EventTypeNormal,
 		Reason: cluster.StatefulSetChangeComplete,
 	}))

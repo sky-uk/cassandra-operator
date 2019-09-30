@@ -19,6 +19,7 @@ import (
 
 const (
 	CheckInterval = 5 * time.Second
+	EventPublicationTimeout = time.Minute
 	// max number of 1Gi mem nodes that can fit within the namespace resource quota
 	MaxCassandraNodesPerNamespace = 6
 )
