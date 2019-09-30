@@ -56,6 +56,8 @@ func clusterDiagnosis(namespace, clusterName string) string {
 		diagnosis = append(diagnosis, fmt.Sprintf("%v", podDescription(namespace, &pod)))
 		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s, container cassandra ====", pod.Name))
 		diagnosis = append(diagnosis, fmt.Sprintf("%v", podLogs(namespace, &pod, "cassandra")))
+		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s, previous container cassandra ====", pod.Name))
+		diagnosis = append(diagnosis, fmt.Sprintf("%v", podPreviousLogs(namespace, &pod, "cassandra")))
 		diagnosis = append(diagnosis, fmt.Sprintf("\n==== Logs for pod %s, container cassandra-sidecar ====", pod.Name))
 		diagnosis = append(diagnosis, fmt.Sprintf("%v", podLogs(namespace, &pod, "cassandra-sidecar")))
 		diagnosis = append(diagnosis, "\n\n")
@@ -81,4 +83,8 @@ func podLogsSince(namespace string, pod *coreV1.Pod, containerName string, logSi
 
 func podLogs(namespace string, pod *coreV1.Pod, containerName string) string {
 	return KubectlOutputAsString(namespace, "logs", "--container", containerName, pod.Name)
+}
+
+func podPreviousLogs(namespace string, pod *coreV1.Pod, containerName string) string {
+	return KubectlOutputAsString(namespace, "logs", "-p", "--container", containerName, pod.Name)
 }

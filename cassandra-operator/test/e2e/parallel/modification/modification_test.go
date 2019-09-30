@@ -242,7 +242,7 @@ var _ = Context("Allowable cluster modifications", func() {
 			rackStorage = append(rackStorage, apis.APersistentVolume().
 				OfSize("100Mi").
 				WithStorageClass("standard-zone-a").
-				AtPath("/var/lib/pv-cassandra-home"))
+				AtPath("/var/lib/cassandra"))
 			rackStorage = append(rackStorage, apis.AnEmptyDir().AtPath("/var/lib/my-empty-dir"))
 
 			AClusterWithName(clusterName).
@@ -267,7 +267,7 @@ var _ = Context("Allowable cluster modifications", func() {
 
 			By("preserving the persistent volume at the given path")
 			Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
-				Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+				Each(HavePersistentVolumeMountAtPath("/var/lib/cassandra")))
 			Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
 		})
 
@@ -283,7 +283,7 @@ var _ = Context("Allowable cluster modifications", func() {
 
 			By("preserving the persistent volume at the given path")
 			Eventually(StatefulSetsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(
-				Each(HavePersistentVolumeMountAtPath("/var/lib/pv-cassandra-home")))
+				Each(HavePersistentVolumeMountAtPath("/var/lib/cassandra")))
 			Eventually(PodReadyForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Equal(1))
 		})
 	})
