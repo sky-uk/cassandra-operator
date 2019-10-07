@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -112,6 +113,8 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 }
 
 var _ = ParallelTestBeforeSuite(func() []TestCluster {
+	os.Exit(10)
+
 	multipleRacksCluster, emptyDirCluster = defineClusters(AClusterName(), AClusterName())
 	createClustersInParallel(multipleRacksCluster, emptyDirCluster)
 	return []TestCluster{*multipleRacksCluster, *emptyDirCluster}

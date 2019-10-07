@@ -89,7 +89,7 @@ integration-test: ensure-test-report-dir-exists
 	@echo "== integration-test"
 ifeq ($(strip $(USE_MOCK)),true)
 	@echo "== e2e-test integration test against real cassandra"
-	KUBE_CONTEXT=$(KUBE_CONTEXT) \
+	-KUBE_CONTEXT=$(KUBE_CONTEXT) \
 		KUBECONFIG=$(KUBECONFIG) \
 		NAMESPACE=$(NAMESPACE) \
 		POD_START_TIMEOUT=5m \
@@ -98,6 +98,10 @@ ifeq ($(strip $(USE_MOCK)),true)
 		CASSANDRA_BOOTSTRAPPER_IMAGE=$(CASSANDRA_BOOTSTRAPPER_IMAGE) \
 		CASSANDRA_SIDECAR_IMAGE=$(CASSANDRA_SIDECAR_IMAGE) \
 		ginkgo $(GINKGO_PARALLEL_OPTIONS) -r -compilers=$(GINKGO_COMPILERS) --v --progress -stream -timeout=30m test/e2e/parallel/creation -- -junit-report-dir $(junitReportDir)
+	@echo "== Diagnosis"
+	$(projectDir)/hack/diagnosis.sh
+	@echo "== Forced exit"
+	exit 1
 endif
 
 e2e-test: e2e-test-parallel e2e-test-sequential
