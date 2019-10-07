@@ -12,7 +12,8 @@ import (
 
 var _ = Context("External cluster modifications", func() {
 	var (
-		clusterName string
+		clusterName   string
+		testStartTime time.Time
 	)
 
 	BeforeEach(func() {

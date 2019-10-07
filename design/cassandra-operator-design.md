@@ -184,5 +184,5 @@ At a high level, the sequence of events is as follows:
 - on change, a reconcile request is sent to the `reconciler` that process them one at a time
 - the `reconciler` reconstructs the current state by interrogating the api server
 - current and desired states are compared to determine the type of changes to apply
-- for each change a corresponding event is `dispatched` asynchronously
-- the event is then processed by the `receiver` which calculates the delta and applies the changes
+- for each change a corresponding event is triggered synchronously
+- the event is then processed by the `receiver` which applies the changes 

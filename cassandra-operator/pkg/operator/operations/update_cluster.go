@@ -3,6 +3,7 @@ package operations
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
 	v1 "k8s.io/api/core/v1"
@@ -15,55 +16,46 @@ type UpdateClusterOperation struct {
 	eventRecorder       record.EventRecorder
 	statefulSetAccessor *statefulSetAccessor
 	clusterAccessor     cluster.Accessor
-	update              ClusterUpdate
+	oldCassandra        *v1alpha1.Cassandra
+	newCassandra        *v1alpha1.Cassandra
 }
 
 // Execute performs the operation
-func (o *UpdateClusterOperation) Execute() {
-	oldCluster := o.update.OldCluster
-	newCluster := o.update.NewCluster
+func (o *UpdateClusterOperation) Execute() error {
+	log.Infof("Cluster definition has been updated for cluster %s.%s", o.oldCassandra.Namespace, o.oldCassandra.Name)
+	c := cluster.New(o.newCassandra)
 
-	log.Infof("Cluster definition has been updated for cluster %s.%s", oldCluster.Namespace, oldCluster.Name)
-	c := cluster.New(newCluster)
-
-	clusterChanges, err := o.adjuster.ChangesForCluster(oldCluster, newCluster)
-	if err != nil {
-		log.Warnf("unable to generate patch for cluster %s.%s: %v", newCluster.Namespace, newCluster.Name, err)
-		o.eventRecorder.Eventf(oldCluster, v1.EventTypeWarning, cluster.InvalidChangeEvent, "unable to generate patch for cluster %s.%s: %v", newCluster.Namespace, newCluster.Name, err)
-		return
-	}
-
+	clusterChanges := o.adjuster.ChangesForCluster(o.oldCassandra, o.newCassandra)
 	if len(clusterChanges) == 0 {
-		log.Infof("No changes are required to be applied for cluster %s", oldCluster.QualifiedName())
-		return
+		log.Infof("No changes are required to be applied for cluster %s", o.oldCassandra.QualifiedName())
+		return nil
 	}
 
 	log.Debugf("%d cluster changes will be applied: \n%v", len(clusterChanges), clusterChanges)
 	for _, clusterChange := range clusterChanges {
 		switch clusterChange.ChangeType {
 		case adjuster.UpdateRack:
-			customConfigMap := o.clusterAccessor.FindCustomConfigMap(newCluster.Namespace, newCluster.Name)
-			err = o.statefulSetAccessor.updateStatefulSet(c, customConfigMap, &clusterChange.Rack, c.UpdateStatefulSetToDesiredState)
+			customConfigMap := o.clusterAccessor.FindCustomConfigMap(o.newCassandra.Namespace, o.newCassandra.Name)
+			err := o.statefulSetAccessor.updateStatefulSet(c, customConfigMap, &clusterChange.Rack, c.UpdateStatefulSetToDesiredState)
 			if err != nil {
-				log.Errorf("Error while updating rack %s in cluster %s: %v", clusterChange.Rack.Name, newCluster.QualifiedName(), err)
-				return
+				return fmt.Errorf("error while updating rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
 			}
 		case adjuster.AddRack:
-			log.Infof("Adding new rack %s to cluster %s", clusterChange.Rack.Name, newCluster.QualifiedName())
+			log.Infof("Adding new rack %s to cluster %s", clusterChange.Rack.Name, o.newCassandra.QualifiedName())
 
-			customConfigMap := o.clusterAccessor.FindCustomConfigMap(newCluster.Namespace, newCluster.Name)
+			customConfigMap := o.clusterAccessor.FindCustomConfigMap(o.newCassandra.Namespace, o.newCassandra.Name)
 			if err := o.statefulSetAccessor.registerStatefulSet(c, &clusterChange.Rack, customConfigMap); err != nil {
-				log.Errorf("Error while creating stateful sets for added rack %s in cluster %s: %v", clusterChange.Rack.Name, newCluster.QualifiedName(), err)
-				return
+				return fmt.Errorf("error while creating stateful sets for added rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
 			}
 		default:
-			message := fmt.Sprintf("Change type '%s' isn't supported for cluster %s", clusterChange.ChangeType, newCluster.QualifiedName())
-			log.Error(message)
-			o.eventRecorder.Event(oldCluster, v1.EventTypeWarning, cluster.InvalidChangeEvent, message)
+			message := fmt.Sprintf("Change type '%s' isn't supported for cluster %s", clusterChange.ChangeType, o.newCassandra.QualifiedName())
+			o.eventRecorder.Event(o.oldCassandra, v1.EventTypeWarning, cluster.InvalidChangeEvent, message)
+			return fmt.Errorf(message)
 		}
 	}
+	return nil
 }
 
 func (o *UpdateClusterOperation) String() string {
-	return fmt.Sprintf("update cluster %s", o.update.NewCluster.QualifiedName())
+	return fmt.Sprintf("update cluster %s", o.newCassandra.QualifiedName())
 }

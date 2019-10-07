@@ -14,8 +14,9 @@ type GatherMetricsOperation struct {
 }
 
 // Execute performs the operation
-func (o *GatherMetricsOperation) Execute() {
+func (o *GatherMetricsOperation) Execute() error {
 	o.metricsPoller.UpdateMetrics(cluster.New(o.cassandra))
+	return nil
 }
 
 func (o *GatherMetricsOperation) String() string {

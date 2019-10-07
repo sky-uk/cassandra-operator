@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
@@ -20,16 +19,16 @@ type UpdateCustomConfigOperation struct {
 }
 
 // Execute performs the operation
-func (o *UpdateCustomConfigOperation) Execute() {
+func (o *UpdateCustomConfigOperation) Execute() error {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config updated for cluster %s", o.cassandra.QualifiedName())
 	for _, rack := range o.cassandra.Spec.Racks {
 		patchChange := o.adjuster.CreateConfigMapHashPatchForRack(&rack, o.configMap)
 		if err := o.statefulSetAccessor.patchStatefulSet(c, patchChange); err != nil {
-			log.Errorf("Error while attempting to update rack %s in cluster %s as a result of a custom config change. No further updates will be applied: %v", rack.Name, o.cassandra.QualifiedName(), err)
-			return
+			return fmt.Errorf("error while attempting to update rack %s in cluster %s as a result of a custom config change. No further updates will be applied: %v", rack.Name, o.cassandra.QualifiedName(), err)
 		}
 	}
+	return nil
 }
 
 func (o *UpdateCustomConfigOperation) String() string {

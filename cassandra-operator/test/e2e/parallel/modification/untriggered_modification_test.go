@@ -13,7 +13,8 @@ import (
 
 var _ = Context("Cluster untriggered modifications", func() {
 	var (
-		clusterName string
+		clusterName   string
+		testStartTime time.Time
 	)
 
 	BeforeEach(func() {

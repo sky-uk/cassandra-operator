@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"k8s.io/api/core/v1"
@@ -17,17 +16,14 @@ type AddSnapshotCleanupOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddSnapshotCleanupOperation) Execute() {
-	o.addSnapshotCleanupJob(cluster.New(o.cassandra))
-}
-
-func (o *AddSnapshotCleanupOperation) addSnapshotCleanupJob(c *cluster.Cluster) {
+func (o *AddSnapshotCleanupOperation) Execute() error {
+	c := cluster.New(o.cassandra)
 	_, err := o.clusterAccessor.CreateCronJobForCluster(c, c.CreateSnapshotCleanupJob())
 	if err != nil {
-		log.Errorf("Error while creating snapshot cleanup job for cluster %s: %v", c.QualifiedName(), err)
-		return
+		return fmt.Errorf("error while creating snapshot cleanup job for cluster %s: %v", c.QualifiedName(), err)
 	}
 	o.eventRecorder.Eventf(c.Definition(), v1.EventTypeNormal, cluster.ClusterSnapshotCleanupScheduleEvent, "Snapshot cleanup scheduled for cluster %s", c.QualifiedName())
+	return nil
 }
 
 func (o *AddSnapshotCleanupOperation) String() string {

@@ -7,9 +7,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"github.com/stretchr/testify/mock"
@@ -20,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"testing"
@@ -44,11 +44,11 @@ var _ = Describe("reconciliation", func() {
 	BeforeEach(func() {
 		fakes = &mocks{
 			client:           &mockClient{},
-			dispatcher:       &mockDispatcher{},
+			receiver:         &mockReceiver{},
 			eventRecorder:    &mockEventRecorder{},
 			stateFinder:      &mockStateFinder{},
 			objectFactory:    &mockObjectFactory{},
-			dispatchedEvents: &[]dispatcher.Event{},
+			dispatchedEvents: &[]event.Event{},
 		}
 		desiredCassandra = aClusterDefinition()
 		desiredCassandra.Namespace = clusterNamespaceName.Namespace
@@ -56,13 +56,13 @@ var _ = Describe("reconciliation", func() {
 		clusters = make(map[types.NamespacedName]*v1alpha1.Cassandra)
 
 		reconciler = CassandraReconciler{
-			clusters:        clusters,
-			client:          fakes.client,
-			eventDispatcher: fakes.dispatcher,
-			eventRecorder:   fakes.eventRecorder,
-			objectFactory:   fakes.objectFactory,
-			stateFinder:     fakes.stateFinder,
-			operatorConfig:  &Config{Version: "latest", RepositoryPath: "skyuk"},
+			clusters:       clusters,
+			client:         fakes.client,
+			eventReceiver:  fakes.receiver,
+			eventRecorder:  fakes.eventRecorder,
+			objectFactory:  fakes.objectFactory,
+			stateFinder:    fakes.stateFinder,
+			operatorConfig: &Config{Version: "latest", RepositoryPath: "skyuk"},
 		}
 	})
 
@@ -75,8 +75,8 @@ var _ = Describe("reconciliation", func() {
 		Context("cluster deleted", func() {
 			It("should dispatch a DeleteCluster event when no Cassandra definition found", func() {
 				fakes.cassandraIsNotFoundIn(clusterNamespaceName)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.DeleteCluster,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.DeleteCluster,
 					Key:  fmt.Sprintf("%s.%s", clusterNamespaceName.Namespace, clusterNamespaceName.Name),
 					Data: &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: clusterNamespaceName.Name, Namespace: clusterNamespaceName.Namespace}}})
 
@@ -87,8 +87,8 @@ var _ = Describe("reconciliation", func() {
 
 			It("should dispatch a DeleteCluster event when the Cassandra definition is marked as being deleted", func() {
 				fakes.cassandraIsBeingDeletedIn(clusterNamespaceName)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.DeleteCluster,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.DeleteCluster,
 					Key:  fmt.Sprintf("%s.%s", clusterNamespaceName.Namespace, clusterNamespaceName.Name),
 					Data: &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: clusterNamespaceName.Name, Namespace: clusterNamespaceName.Namespace}}})
 
@@ -96,6 +96,19 @@ var _ = Describe("reconciliation", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
 			})
+
+			It("should re-enqueue the request when the event processing fails", func() {
+				fakes.cassandraIsBeingDeletedIn(clusterNamespaceName)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.DeleteCluster,
+					Key:  fmt.Sprintf("%s.%s", clusterNamespaceName.Namespace, clusterNamespaceName.Name),
+					Data: &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: clusterNamespaceName.Name, Namespace: clusterNamespaceName.Namespace}}})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal(fmt.Sprintf("failed to process event %s. Will retry. Error: %s", event.DeleteCluster, eventProcessingError)))
+			})
+
 		})
 
 		Context("cluster changes only", func() {
@@ -108,11 +121,21 @@ var _ = Describe("reconciliation", func() {
 			It("should dispatch an AddCluster event when no corresponding cluster found", func() {
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.noCurrentCassandraStateIsFoundFor(desiredCassandra)
-				fakes.eventIsDispatched(&dispatcher.Event{Kind: operations.AddCluster, Key: desiredCassandra.QualifiedName(), Data: desiredCassandra})
+				fakes.eventIsProcessedSuccessfully(&event.Event{Kind: event.AddCluster, Key: desiredCassandra.QualifiedName(), Data: desiredCassandra})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
+			})
+
+			It("should re-enqueue the request when the add cluster event processing failed", func() {
+				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
+				fakes.noCurrentCassandraStateIsFoundFor(desiredCassandra)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{Kind: event.AddCluster, Key: desiredCassandra.QualifiedName(), Data: desiredCassandra})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.AddCluster, eventProcessingError)))
 			})
 
 			It("should dispatch an UpdateCluster event when the current cluster definition is different", func() {
@@ -121,14 +144,30 @@ var _ = Describe("reconciliation", func() {
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
 
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.UpdateCluster, Key: desiredCassandra.QualifiedName(),
-					Data: operations.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.UpdateCluster, Key: desiredCassandra.QualifiedName(),
+					Data: event.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
+			})
+
+			It("should re-enqueue the request when the update cluster event processing failed", func() {
+				currentCassandra := desiredCassandra.DeepCopy()
+				currentCassandra.Spec.Pod.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("101m")
+				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
+				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
+
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.UpdateCluster, Key: desiredCassandra.QualifiedName(),
+					Data: event.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
+				})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.UpdateCluster, eventProcessingError)))
 			})
 
 			It("should not dispatch an UpdateCluster event when current and desired Cassandra are the same", func() {
@@ -160,10 +199,10 @@ var _ = Describe("reconciliation", func() {
 			It("should dispatch an AddCustomConfig when a configMap exists, but no custom config was actually associated with the Cassandra cluster", func() {
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
 				fakes.noCustomConfigIsAssociatedTo(desiredCassandra)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.AddCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.AddCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
@@ -193,10 +232,10 @@ var _ = Describe("reconciliation", func() {
 				configHashes := map[string]string{"rack": "some hash"}
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
 				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.UpdateCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.UpdateCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
@@ -208,10 +247,10 @@ var _ = Describe("reconciliation", func() {
 				configHashes := map[string]string{"rack": "some hash"}
 				fakes.configMapIsNotFoundIn(configMapNamespaceName)
 				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.DeleteCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.DeleteCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
@@ -219,7 +258,55 @@ var _ = Describe("reconciliation", func() {
 				Expect(result).To(Equal(reconcile.Result{}))
 			})
 
+			It("should re-enqueue the request when a DeleteCustomConfig event processing failed", func() {
+				configHashes := map[string]string{"rack": "some hash"}
+				fakes.configMapIsNotFoundIn(configMapNamespaceName)
+				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.DeleteCustomConfig,
+					Key:  desiredCassandra.QualifiedName(),
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra},
+				})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.DeleteCustomConfig, eventProcessingError)))
+			})
+
+			It("should re-enqueue the request when the UpdateCustomConfig event processing failed", func() {
+				configHashes := map[string]string{"rack": "some hash"}
+				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
+				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.UpdateCustomConfig,
+					Key:  desiredCassandra.QualifiedName(),
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+				})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.UpdateCustomConfig, eventProcessingError)))
+			})
+
+			It("should re-enqueue the request when the AddCustomConfig event processing failed", func() {
+				configHashes := make(map[string]string)
+
+				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
+				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.AddCustomConfig,
+					Key:  desiredCassandra.QualifiedName(),
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+				})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.AddCustomConfig, eventProcessingError)))
+			})
+
 			It("should not dispatch an event event when the configMap hash hasn't changed", func() {
+				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 				fakes.configMapHasntChangedFor(desiredCassandra, configMapNamespaceName)
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
@@ -249,10 +336,10 @@ var _ = Describe("reconciliation", func() {
 				configHashes := map[string]string{"rack1": "some hash", "rack2": "some other hash"}
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
 				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.UpdateCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.UpdateCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
@@ -266,16 +353,17 @@ var _ = Describe("reconciliation", func() {
 
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
 				fakes.customConfigIsAssociatedTo(desiredCassandra, configHashes)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.AddCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.AddCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
 			})
+
 		})
 
 		Context("service changes only", func() {
@@ -287,8 +375,8 @@ var _ = Describe("reconciliation", func() {
 
 			It("should dispatch an AddService event when the Service does not exists", func() {
 				fakes.cassandraServiceIsNotFoundIn(clusterNamespaceName)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.AddService,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.AddService,
 					Key:  desiredCassandra.QualifiedName(),
 					Data: desiredCassandra,
 				})
@@ -296,6 +384,19 @@ var _ = Describe("reconciliation", func() {
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
+			})
+
+			It("should re-enqueue the request when the AddService event processing failed", func() {
+				fakes.cassandraServiceIsNotFoundIn(clusterNamespaceName)
+				eventProcessingError := fakes.eventFailsToProcess(&event.Event{
+					Kind: event.AddService,
+					Key:  desiredCassandra.QualifiedName(),
+					Data: desiredCassandra,
+				})
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to process event %s: %s", event.AddService, eventProcessingError)))
 			})
 
 			It("should not dispatch an AddService event when the Service exists", func() {
@@ -329,20 +430,20 @@ var _ = Describe("reconciliation", func() {
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
 				fakes.configMapIsFoundIn(configMapNamespaceName, configMap)
 				fakes.noCustomConfigIsAssociatedTo(desiredCassandra)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.AddCustomConfig,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.AddCustomConfig,
 					Key:  desiredCassandra.QualifiedName(),
-					Data: operations.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
+					Data: event.ConfigMapChange{Cassandra: desiredCassandra, ConfigMap: configMap},
 				})
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.UpdateCluster, Key: desiredCassandra.QualifiedName(),
-					Data: operations.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.UpdateCluster, Key: desiredCassandra.QualifiedName(),
+					Data: event.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
-				Expect(fakes.recorderDispatchedEventsKind()).To(Equal([]string{operations.AddCustomConfig, operations.UpdateCluster}))
+				Expect(fakes.recorderDispatchedEventsKind()).To(Equal([]string{event.AddCustomConfig, event.UpdateCluster}))
 			})
 
 			It("should dispatch add service before Cassandra events", func() {
@@ -352,20 +453,20 @@ var _ = Describe("reconciliation", func() {
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
 				fakes.cassandraServiceIsNotFoundIn(clusterNamespaceName)
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.AddService,
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.AddService,
 					Key:  desiredCassandra.QualifiedName(),
 					Data: desiredCassandra,
 				})
-				fakes.eventIsDispatched(&dispatcher.Event{
-					Kind: operations.UpdateCluster, Key: desiredCassandra.QualifiedName(),
-					Data: operations.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
+				fakes.eventIsProcessedSuccessfully(&event.Event{
+					Kind: event.UpdateCluster, Key: desiredCassandra.QualifiedName(),
+					Data: event.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
 				})
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(reconcile.Result{}))
-				Expect(fakes.recorderDispatchedEventsKind()).To(Equal([]string{operations.AddService, operations.UpdateCluster}))
+				Expect(fakes.recorderDispatchedEventsKind()).To(Equal([]string{event.AddService, event.UpdateCluster}))
 			})
 		})
 
@@ -380,33 +481,47 @@ var _ = Describe("reconciliation", func() {
 			})
 
 			It("should not dispatch an event but re-enqueue the request when an error occurs while looking up the current config hash", func() {
-				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 				fakes.configMapIsFoundIn(configMapNamespaceName, &corev1.ConfigMap{})
 				unknownError := fmt.Errorf("something when wrong when talking to api server")
 				fakes.errorWhenLookingForCustomConfigStateFor(desiredCassandra, unknownError)
 
 				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal(fmt.Sprintf("failed to look up config hash: %s", unknownError)))
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to look up config hash: %s", unknownError)))
 			})
 
 			It("should not dispatch an event but re-enqueue the request when an error occurs while looking up a potential configMap", func() {
-				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 				unknownError := fakes.anErrorIsReturnWhenFindingConfigMapIn(configMapNamespaceName)
 
 				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal(fmt.Sprintf("failed to lookup potential configMap. Will retry. Error: %s", unknownError)))
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to lookup potential configMap: %s", unknownError)))
 			})
 
 			It("should not dispatch an event but re-enqueue the request when an error occurs while looking up the Cassandra service", func() {
-				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
+				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
 				fakes.noConfigMapToReconcile(configMapNamespaceName, desiredCassandra)
 				unknownError := fakes.anErrorIsReturnWhenFindingServiceIn(clusterNamespaceName)
 
 				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal(fmt.Sprintf("failed to lookup Cassandra service. Will retry. Error: %s", unknownError)))
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to lookup Cassandra service: %s", unknownError)))
+			})
+
+			It("should re-enqueue a single request when multiple error occur", func() {
+				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
+				serviceLookupError := fakes.anErrorIsReturnWhenFindingServiceIn(clusterNamespaceName)
+				configmapLookupError := fakes.anErrorIsReturnWhenFindingConfigMapIn(configMapNamespaceName)
+
+				_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("One or more error(s) occurred during reconciliation. Will retry. Error: 2 errors occurred"))
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to lookup Cassandra service: %s", serviceLookupError)))
+				Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("failed to lookup potential configMap: %s", configmapLookupError)))
 			})
 
 			It("should not dispatch an event nor retry the reconciliation when desired Cassandra fails validation", func() {
@@ -456,14 +571,28 @@ var _ = Describe("reconciliation", func() {
 		})
 
 		It("should not contain the name of the cluster being deleted", func() {
+			clusters[clusterNamespaceName] = &v1alpha1.Cassandra{}
 			fakes.cassandraIsNotFoundIn(clusterNamespaceName)
-			fakes.eventIsDispatched(&dispatcher.Event{
-				Kind: operations.DeleteCluster,
+			fakes.eventIsProcessedSuccessfully(&event.Event{
+				Kind: event.DeleteCluster,
 				Key:  fmt.Sprintf("%s.%s", clusterNamespaceName.Namespace, clusterNamespaceName.Name),
 				Data: &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: clusterNamespaceName.Name, Namespace: clusterNamespaceName.Namespace}}})
 
 			_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(clusters).NotTo(HaveKey(clusterNamespaceName))
+		})
+
+		It("should not contain the name of the cluster being deleted even when the delete event failed to complete", func() {
+			clusters[clusterNamespaceName] = &v1alpha1.Cassandra{}
+			fakes.cassandraIsNotFoundIn(clusterNamespaceName)
+			_ = fakes.eventFailsToProcess(&event.Event{
+				Kind: event.DeleteCluster,
+				Key:  fmt.Sprintf("%s.%s", clusterNamespaceName.Namespace, clusterNamespaceName.Name),
+				Data: &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: clusterNamespaceName.Name, Namespace: clusterNamespaceName.Namespace}}})
+
+			_, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
+			Expect(err).To(HaveOccurred())
 			Expect(clusters).NotTo(HaveKey(clusterNamespaceName))
 		})
 
@@ -488,17 +617,17 @@ func rackSpec(name string) v1alpha1.Rack {
 
 type mocks struct {
 	client           *mockClient
-	dispatcher       *mockDispatcher
+	receiver         *mockReceiver
 	eventRecorder    *mockEventRecorder
 	stateFinder      *mockStateFinder
 	objectFactory    *mockObjectFactory
-	dispatchedEvents *[]dispatcher.Event
+	dispatchedEvents *[]event.Event
 }
 
 func (m mocks) assertAll(t GinkgoTInterface) {
 	m.client.AssertExpectations(t)
 	m.stateFinder.AssertExpectations(t)
-	m.dispatcher.AssertExpectations(t)
+	m.receiver.AssertExpectations(t)
 	m.objectFactory.AssertExpectations(t)
 	m.eventRecorder.AssertExpectations(t)
 }
@@ -612,15 +741,21 @@ func (m mocks) invalidChangeEventIsRecordedWithError(desiredCassandra *v1alpha1.
 	m.eventRecorder.On("Event", desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, errorStr).Return()
 }
 
-func (m mocks) eventIsDispatched(event *dispatcher.Event) {
-	m.dispatcher.On("Dispatch", event).Return()
+func (m mocks) eventIsProcessedSuccessfully(event *event.Event) {
+	m.receiver.On("Receive", event).Return(nil)
 	*m.dispatchedEvents = append(*m.dispatchedEvents, *event)
+}
+
+func (m mocks) eventFailsToProcess(event *event.Event) error {
+	eventProcessingError := fmt.Errorf("some error")
+	m.receiver.On("Receive", event).Return(eventProcessingError)
+	return eventProcessingError
 }
 
 func (m mocks) recorderDispatchedEventsKind() []string {
 	var eventsKind []string
-	for _, event := range *m.dispatchedEvents {
-		eventsKind = append(eventsKind, event.Kind)
+	for _, evt := range *m.dispatchedEvents {
+		eventsKind = append(eventsKind, evt.Kind)
 	}
 	return eventsKind
 }
@@ -643,6 +778,9 @@ func (m mocks) cassandraServiceIsNotFoundIn(namespaceName types.NamespacedName) 
 type mockObjectFactory struct {
 	mock.Mock
 }
+
+// implements objectReferenceFactory at compilation time
+var _ objectReferenceFactory = &mockObjectFactory{}
 
 func (o *mockObjectFactory) newCassandra() *v1alpha1.Cassandra {
 	args := o.Called()
@@ -674,6 +812,9 @@ type mockStateFinder struct {
 	mock.Mock
 }
 
+// implements cluster.StateFinder at compilation time
+var _ cluster.StateFinder = &mockStateFinder{}
+
 func (b *mockStateFinder) FindCurrentStateFor(desiredCassandra *v1alpha1.Cassandra) (*v1alpha1.Cassandra, error) {
 	args := b.Called(desiredCassandra)
 	if args.Get(0) == nil {
@@ -690,14 +831,18 @@ func (b *mockStateFinder) FindCurrentConfigHashFor(desiredCassandra *v1alpha1.Ca
 	return args.Get(0).(map[string]string), args.Error(1)
 }
 
-// mockDispatcher
+// mockReceiver
 
-type mockDispatcher struct {
+type mockReceiver struct {
 	mock.Mock
 }
 
-func (d *mockDispatcher) Dispatch(e *dispatcher.Event) {
-	d.Called(e)
+// force implementation of  operations.Receiver at compilation time
+var _ event.Receiver = &mockReceiver{}
+
+func (d *mockReceiver) Receive(e *event.Event) error {
+	args := d.Called(e)
+	return args.Error(0)
 }
 
 // mockClient
@@ -705,6 +850,9 @@ func (d *mockDispatcher) Dispatch(e *dispatcher.Event) {
 type mockClient struct {
 	mock.Mock
 }
+
+// force implementation of client.Client at compilation time
+var _ client.Client = &mockClient{}
 
 func (c *mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 	args := c.Called(ctx, key, obj)
@@ -746,6 +894,9 @@ func (c *mockClient) Status() client.StatusWriter {
 type mockEventRecorder struct {
 	mock.Mock
 }
+
+// force implementation of record.EventRecorder at compilation time
+var _ record.EventRecorder = &mockEventRecorder{}
 
 func (e *mockEventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
 	e.Called(object, eventtype, reason, message)

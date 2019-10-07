@@ -7,9 +7,8 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/client/clientset/versioned"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +33,7 @@ import (
 type Operator struct {
 	clusters      map[types.NamespacedName]*v1alpha1.Cassandra
 	config        *Config
-	eventReceiver *operations.Receiver
+	eventReceiver event.Receiver
 	manager       manager.Manager
 	controller    controller.Controller
 	stopCh        chan struct{}
@@ -59,12 +58,11 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	metricsPoller := metrics.NewMetrics(kubeClientset.CoreV1(), &metrics.Config{RequestTimeout: operatorConfig.MetricRequestDuration})
 	eventRecorder := cluster.NewEventRecorder(kubeClientset, scheme)
 	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder)
-	receiver := operations.NewEventReceiver(
+	eventReceiver := event.NewEventReceiver(
 		clusterAccessor,
 		metricsPoller,
 		eventRecorder,
 	)
-	eventDispatcher := dispatcher.New(receiver.Receive, stopCh)
 
 	mgr, err := manager.New(kubeConfig, manager.Options{SyncPeriod: &operatorConfig.ControllerSyncPeriod, Scheme: scheme, Namespace: operatorConfig.Namespace})
 	if err != nil {
@@ -72,7 +70,8 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	}
 
 	ctrl, err := controller.New("cassandra", mgr, controller.Options{
-		Reconciler: NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventDispatcher, operatorConfig),
+		Reconciler:              NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventReceiver, operatorConfig),
+		MaxConcurrentReconciles: 100,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to set up Cassandra reconciler controller: %v", err)
@@ -81,7 +80,7 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	return &Operator{
 		config:        operatorConfig,
 		clusters:      clusters,
-		eventReceiver: receiver,
+		eventReceiver: eventReceiver,
 		controller:    ctrl,
 		manager:       mgr,
 		stopCh:        stopCh,
@@ -191,7 +190,7 @@ func (o *Operator) startMetricPolling() {
 		for {
 			for _, c := range o.clusters {
 				// Use the receiver directly as this is a regular event that should not be queued behind other operations
-				o.eventReceiver.Receive(&dispatcher.Event{Kind: operations.GatherMetrics, Key: c.QualifiedName(), Data: c})
+				o.eventReceiver.Receive(&event.Event{Kind: event.GatherMetrics, Key: c.QualifiedName(), Data: c})
 			}
 			time.Sleep(o.config.MetricPollInterval)
 		}

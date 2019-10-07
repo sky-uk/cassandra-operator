@@ -15,7 +15,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -426,16 +425,6 @@ func (s *mockStateFinder) anErrorIsReturnWhenFindingStatefulSetsFor(desiredCassa
 
 func (s *mockStateFinder) statefulSetsFoundFor(desiredCassandra *v1alpha1.Cassandra, foundStatefulSets *v1beta2.StatefulSetList) {
 	s.On("findStatefulSetsFor", desiredCassandra).Return(foundStatefulSets, nil)
-}
-
-// mockDispatcher
-
-type mockDispatcher struct {
-	mock.Mock
-}
-
-func (d *mockDispatcher) Dispatch(e *dispatcher.Event) {
-	d.Called(e)
 }
 
 // mockClient

@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"k8s.io/api/batch/v1beta1"
@@ -18,27 +17,28 @@ type UpdateSnapshotCleanupOperation struct {
 }
 
 // Execute performs the operation
-func (o *UpdateSnapshotCleanupOperation) Execute() {
+func (o *UpdateSnapshotCleanupOperation) Execute() error {
 	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotCleanupJobName()))
 	if err != nil {
-		log.Errorf("Error while retrieving snapshot cleanup job for cluster %s: %v", o.cassandra.QualifiedName(), err)
+		return fmt.Errorf("error while retrieving snapshot cleanup job for cluster %s: %v", o.cassandra.QualifiedName(), err)
 	}
 
 	if job != nil {
-		o.updateSnapshotCleanupJob(job)
+		return o.updateSnapshotCleanupJob(job)
 	}
+	return nil
 }
 
-func (o *UpdateSnapshotCleanupOperation) updateSnapshotCleanupJob(job *v1beta1.CronJob) {
+func (o *UpdateSnapshotCleanupOperation) updateSnapshotCleanupJob(job *v1beta1.CronJob) error {
 	c := cluster.New(o.cassandra)
 	job.Spec.Schedule = o.cassandra.Spec.Snapshot.RetentionPolicy.CleanupSchedule
 	job.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotCleanupContainer(o.cassandra.Spec.Snapshot)
 	err := o.clusterAccessor.UpdateCronJob(job)
 	if err != nil {
-		log.Errorf("Error while updating snapshot cleanup job %s for cluster %s: %v", job.Name, o.cassandra.QualifiedName(), err)
-		return
+		return fmt.Errorf("error while updating snapshot cleanup job %s for cluster %s: %v", job.Name, o.cassandra.QualifiedName(), err)
 	}
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterSnapshotCleanupModificationEvent, "Snapshot cleanup modified for cluster %s", o.cassandra.QualifiedName())
+	return nil
 }
 
 func (o *UpdateSnapshotCleanupOperation) String() string {

@@ -1,35 +1,18 @@
-package operations
+package event
 
 import (
+	"fmt"
+	"github.com/hashicorp/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
-)
-
-const (
-	// AddCluster is a kind of event which the receiver is able to handle
-	AddCluster = "ADD_CLUSTER"
-	// DeleteCluster is a kind of event which the receiver is able to handle
-	DeleteCluster = "DELETE_CLUSTER"
-	// UpdateCluster is a kind of event which the receiver is able to handle
-	UpdateCluster = "UPDATE_CLUSTER"
-	// GatherMetrics is a kind of event which the receiver is able to handle
-	GatherMetrics = "GATHER_METRICS"
-	// AddCustomConfig is a kind of event which the receiver is able to handle
-	AddCustomConfig = "ADD_CUSTOM_CONFIG"
-	// UpdateCustomConfig is a kind of event which the receiver is able to handle
-	UpdateCustomConfig = "UPDATE_CUSTOM_CONFIG"
-	// DeleteCustomConfig is a kind of event which the receiver is able to handle
-	DeleteCustomConfig = "DELETE_CUSTOM_CONFIG"
-	// AddService is a kind of event which the receiver is able to handle
-	AddService = "ADD_SERVICE"
 )
 
 // ClusterUpdate encapsulates Cassandra specs before and after the change
@@ -45,45 +28,49 @@ type ConfigMapChange struct {
 }
 
 // Receiver receives events dispatched by the operator
-type Receiver struct {
-	clusterAccessor     cluster.Accessor
-	statefulSetAccessor *statefulSetAccessor
-	metricsPoller       *metrics.PrometheusMetrics
-	eventRecorder       record.EventRecorder
-	adjuster            *adjuster.Adjuster
+type Receiver interface {
+	Receive(event *Event) error
 }
 
-// NewEventReceiver creates a new Receiver
-func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) *Receiver {
-	return &Receiver{
-		clusterAccessor:     clusterAccessor,
-		statefulSetAccessor: &statefulSetAccessor{clusterAccessor: clusterAccessor},
-		eventRecorder:       eventRecorder,
-		adjuster:            adjuster.New(),
-		metricsPoller:       metricsPoller,
+// OperatorEventReceiver implements Receiver
+type OperatorEventReceiver struct {
+	clusterAccessor  cluster.Accessor
+	operationFactory operations.OperationFactory
+}
+
+// NewEventReceiver creates a new OperatorEventReceiver
+func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) Receiver {
+	return &OperatorEventReceiver{
+		clusterAccessor:  clusterAccessor,
+		operationFactory: operations.NewOperationFactory(clusterAccessor, metricsPoller, eventRecorder, adjuster.New()),
 	}
 }
 
 // Receive receives operator events and delegates their processing to the appropriate handler
-func (r *Receiver) Receive(event *dispatcher.Event) {
+func (r *OperatorEventReceiver) Receive(event *Event) error {
 	logger := r.eventLogger(event)
 	logger.Debug("Event received")
-	operations := r.operationsToExecute(event)
-	logger.Infof("Event will trigger %d operations: %v", len(operations), operations)
+	operationsToRun := r.operationsToExecute(event)
+	logger.Infof("Event will trigger %d operations: %v", len(operationsToRun), operationsToRun)
 
-	for _, operation := range operations {
+	result := &multierror.Error{}
+	for _, operation := range operationsToRun {
 		logger.Debugf("Executing operation %s", operation.String())
-		operation.Execute()
+		if err := operation.Execute(); err != nil {
+			result = multierror.Append(result, fmt.Errorf("error while execution operation %s: %v", operation.String(), err))
+		}
 	}
 	logger.Debug("Event complete")
+
+	return result.ErrorOrNil()
 }
 
-func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
+func (r *OperatorEventReceiver) operationsToExecute(event *Event) []operations.Operation {
 	logger := r.eventLogger(event)
 
 	switch event.Kind {
 	case AddService:
-		return []Operation{r.newAddService(event.Data.(*v1alpha1.Cassandra))}
+		return []operations.Operation{r.operationFactory.NewAddService(event.Data.(*v1alpha1.Cassandra))}
 	case AddCluster:
 		return r.operationsForAddCluster(event.Data.(*v1alpha1.Cassandra))
 	case DeleteCluster:
@@ -101,7 +88,7 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 			logOperationNotAllowed(logger)
 			return nil
 		}
-		return []Operation{r.newGatherMetrics(cassandra)}
+		return []operations.Operation{r.operationFactory.NewGatherMetrics(cassandra)}
 	case UpdateCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
 		cassandra := configMapChange.Cassandra
@@ -109,7 +96,7 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 			logOperationNotAllowed(logger)
 			return nil
 		}
-		return []Operation{r.newUpdateCustomConfig(cassandra, configMapChange.ConfigMap)}
+		return []operations.Operation{r.operationFactory.NewUpdateCustomConfig(cassandra, configMapChange.ConfigMap)}
 	case AddCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
 		cassandra := configMapChange.Cassandra
@@ -117,7 +104,7 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 			logOperationNotAllowed(logger)
 			return nil
 		}
-		return []Operation{r.newAddCustomConfig(cassandra, configMapChange.ConfigMap)}
+		return []operations.Operation{r.operationFactory.NewAddCustomConfig(cassandra, configMapChange.ConfigMap)}
 	case DeleteCustomConfig:
 		configMapChange := event.Data.(ConfigMapChange)
 		cassandra := configMapChange.Cassandra
@@ -125,7 +112,7 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 			logOperationNotAllowed(logger)
 			return nil
 		}
-		return []Operation{r.newDeleteCustomConfig(cassandra)}
+		return []operations.Operation{r.operationFactory.NewDeleteCustomConfig(cassandra)}
 	default:
 		logger.Error("Event type is not supported")
 	}
@@ -133,64 +120,63 @@ func (r *Receiver) operationsToExecute(event *dispatcher.Event) []Operation {
 	return nil
 }
 
-func (r *Receiver) operationsForAddCluster(cassandra *v1alpha1.Cassandra) []Operation {
-	operations := []Operation{r.newAddCluster(cassandra)}
+func (r *OperatorEventReceiver) operationsForAddCluster(cassandra *v1alpha1.Cassandra) []operations.Operation {
+	ops := []operations.Operation{r.operationFactory.NewAddCluster(cassandra)}
 	if cassandra.Spec.Snapshot != nil {
-		operations = append(operations, r.newAddSnapshot(cassandra))
+		ops = append(ops, r.operationFactory.NewAddSnapshot(cassandra))
 		if cassandra.Spec.Snapshot.RetentionPolicy != nil {
-			operations = append(operations, r.newAddSnapshotCleanup(cassandra))
+			ops = append(ops, r.operationFactory.NewAddSnapshotCleanup(cassandra))
 		}
 	}
-	return operations
+	return ops
 }
 
-func (r *Receiver) operationsForDeleteCluster(cassandra *v1alpha1.Cassandra) []Operation {
-	operations := []Operation{r.newDeleteCluster(cassandra)}
+func (r *OperatorEventReceiver) operationsForDeleteCluster(cassandra *v1alpha1.Cassandra) []operations.Operation {
+	ops := []operations.Operation{r.operationFactory.NewDeleteCluster(cassandra)}
 	if cassandra.Spec.Snapshot != nil {
-		operations = append(operations, r.newDeleteSnapshot(cassandra))
+		ops = append(ops, r.operationFactory.NewDeleteSnapshot(cassandra))
 		if cassandra.Spec.Snapshot.RetentionPolicy != nil {
-			operations = append(operations, r.newDeleteSnapshotCleanup(cassandra))
+			ops = append(ops, r.operationFactory.NewDeleteSnapshotCleanup(cassandra))
 		}
 	}
-	return operations
+	return ops
 }
 
-func (r *Receiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []Operation {
-	var operations []Operation
+func (r *OperatorEventReceiver) operationsForUpdateCluster(clusterUpdate ClusterUpdate) []operations.Operation {
+	var ops []operations.Operation
 	oldCluster := clusterUpdate.OldCluster
 	newCluster := clusterUpdate.NewCluster
 
-	operations = append(operations, r.newUpdateCluster(clusterUpdate))
+	ops = append(ops, r.operationFactory.NewUpdateCluster(clusterUpdate.OldCluster, clusterUpdate.NewCluster))
 	if newCluster.Spec.Snapshot == nil && oldCluster.Spec.Snapshot != nil {
-		operations = append(operations, r.newDeleteSnapshot(clusterUpdate.NewCluster))
+		ops = append(ops, r.operationFactory.NewDeleteSnapshot(clusterUpdate.NewCluster))
 		if oldCluster.Spec.Snapshot.RetentionPolicy != nil {
-			operations = append(operations, r.newDeleteSnapshotCleanup(clusterUpdate.NewCluster))
+			ops = append(ops, r.operationFactory.NewDeleteSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 	} else if newCluster.Spec.Snapshot != nil && oldCluster.Spec.Snapshot != nil {
 		if newCluster.Spec.Snapshot.RetentionPolicy == nil && oldCluster.Spec.Snapshot.RetentionPolicy != nil {
-			operations = append(operations, r.newDeleteSnapshotCleanup(clusterUpdate.NewCluster))
+			ops = append(ops, r.operationFactory.NewDeleteSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 		if v1alpha1helpers.SnapshotPropertiesUpdated(oldCluster.Spec.Snapshot, newCluster.Spec.Snapshot) {
-			operations = append(operations, r.newUpdateSnapshot(newCluster))
+			ops = append(ops, r.operationFactory.NewUpdateSnapshot(newCluster))
 		}
 		if v1alpha1helpers.SnapshotCleanupPropertiesUpdated(oldCluster.Spec.Snapshot, newCluster.Spec.Snapshot) {
-			operations = append(operations, r.newUpdateSnapshotCleanup(newCluster))
+			ops = append(ops, r.operationFactory.NewUpdateSnapshotCleanup(newCluster))
 		}
 	} else if newCluster.Spec.Snapshot != nil && oldCluster.Spec.Snapshot == nil {
-		operations = append(operations, r.newAddSnapshot(clusterUpdate.NewCluster))
+		ops = append(ops, r.operationFactory.NewAddSnapshot(clusterUpdate.NewCluster))
 		if newCluster.Spec.Snapshot.RetentionPolicy != nil {
-			operations = append(operations, r.newAddSnapshotCleanup(clusterUpdate.NewCluster))
+			ops = append(ops, r.operationFactory.NewAddSnapshotCleanup(clusterUpdate.NewCluster))
 		}
 	}
-	return operations
+	return ops
 }
 
-func (r *Receiver) eventLogger(event *dispatcher.Event) *log.Entry {
+func (r *OperatorEventReceiver) eventLogger(event *Event) *log.Entry {
 	logger := log.WithFields(
 		log.Fields{
 			"type":   event.Kind,
 			"key":    event.Key,
-			"id":     event.ID,
 			"logger": "receiver.go",
 		},
 	)
@@ -201,7 +187,7 @@ func logOperationNotAllowed(logger *log.Entry) {
 	logger.Warn("Operation is not allowed. Cluster does not exist or is being deleted")
 }
 
-func (r *Receiver) clusterDoesNotExistOrIsBeingDeleted(clusterToFind *v1alpha1.Cassandra) bool {
+func (r *OperatorEventReceiver) clusterDoesNotExistOrIsBeingDeleted(clusterToFind *v1alpha1.Cassandra) bool {
 	cassandra, err := r.clusterAccessor.GetCassandraForCluster(clusterToFind.Namespace, clusterToFind.Name)
 	return errors.IsNotFound(err) || cassandra.DeletionTimestamp != nil
 }

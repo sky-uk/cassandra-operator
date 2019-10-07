@@ -78,7 +78,7 @@ type Probe struct {
 	// Minimum consecutive failures for the probe to be considered failed after having succeeded. Minimum value is 1.
 	// +optional
 	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
-    // Number of seconds after the container has started before probes are initiated.
+	// Number of seconds after the container has started before probes are initiated.
 	// +optional
 	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
 	// How often (in seconds) to perform the probe. Minimum value is 1.
@@ -129,14 +129,14 @@ type CassandraList struct {
 // At least one rack must be supplied.
 type Rack struct {
 	// Name of the rack.
-	Name     string    `json:"name"`
+	Name string `json:"name"`
 	// Zone in which the rack resides.
 	// This is set against the `failure-domain.beta.kubernetes.io/zone` value in the node affinity rule of the corresponding `StatefulSet`.
-	Zone     string    `json:"zone"`
+	Zone string `json:"zone"`
 	// The desired number of replicas in the rack.
-	Replicas int32     `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 	// The rack storage options.
-	Storage  []Storage `json:"storage"`
+	Storage []Storage `json:"storage"`
 }
 
 // Storage defines the storage properties shared by pods in the same rack.

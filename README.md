@@ -47,7 +47,8 @@ Other Kubernetes versions are likely to work, but we do not actively test agains
 
 Cassandra Operator | Kubernetes | Cassandra
 --- | --- | ---
-0.74.0-alpha | 1.10 | 3.11
+0.75.0-alpha | 1.11 | 3.11
+0.70.1-alpha | 1.10 | 3.11
 
 ## Questions or Problems?
 

@@ -16,11 +16,12 @@ type DeleteClusterOperation struct {
 }
 
 // Execute performs the operation
-func (o *DeleteClusterOperation) Execute() {
+func (o *DeleteClusterOperation) Execute() error {
 	log.Infof("Cassandra cluster definition deleted for cluster: %s.%s", o.cassandra.Namespace, o.cassandra.Name)
 
 	c := cluster.New(o.cassandra)
 	o.metricsPoller.DeleteMetrics(c)
+	return nil
 }
 
 func (o *DeleteClusterOperation) String() string {

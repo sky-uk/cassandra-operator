@@ -1,8 +1,9 @@
-package operations
+package event
 
 import (
 	"fmt"
 	"github.com/onsi/gomega/types"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/api/apps/v1beta2"
@@ -16,21 +17,19 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestOperations(t *testing.T) {
+func TestReceiver(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecsWithDefaultAndCustomReporters(t, "Operations Suite", test.CreateParallelReporters("operations"))
+	RunSpecsWithDefaultAndCustomReporters(t, "Receiver Suite", test.CreateParallelReporters("receiver"))
 }
 
 var _ = Describe("operations to execute based on event", func() {
 	var (
-		receiver      *Receiver
+		receiver      *OperatorEventReceiver
 		fakes         *mockAccessor
 		oldClusterDef *v1alpha1.Cassandra
 		newClusterDef *v1alpha1.Cassandra
@@ -48,7 +47,10 @@ var _ = Describe("operations to execute based on event", func() {
 		newClusterDef = oldClusterDef.DeepCopy()
 
 		fakes = &mockAccessor{}
-		receiver = NewEventReceiver(fakes, &metrics.PrometheusMetrics{}, nil)
+		receiver = &OperatorEventReceiver{
+			clusterAccessor:  fakes,
+			operationFactory: operations.NewOperationFactory(nil, nil, nil, nil),
+		}
 	})
 
 	Context("when a AddCluster event is received", func() {
@@ -57,11 +59,11 @@ var _ = Describe("operations to execute based on event", func() {
 			newClusterDef.Spec.Snapshot = nil
 
 			// when
-			operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCluster, Data: newClusterDef})
+			ops := receiver.operationsToExecute(&Event{Kind: AddCluster, Data: newClusterDef})
 
 			//then
-			Expect(operations).To(HaveOperationsOfType([]Operation{
-				&AddClusterOperation{},
+			Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+				&operations.AddClusterOperation{},
 			}))
 		})
 
@@ -72,24 +74,24 @@ var _ = Describe("operations to execute based on event", func() {
 				newClusterDef.Spec.Snapshot.RetentionPolicy = nil
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCluster, Data: newClusterDef})
+				ops := receiver.operationsToExecute(&Event{Kind: AddCluster, Data: newClusterDef})
 
 				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&AddClusterOperation{},
-					&AddSnapshotOperation{},
+				Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+					&operations.AddClusterOperation{},
+					&operations.AddSnapshotOperation{},
 				}))
 			})
 
 			It("should return add cluster, add snapshot and add cleanup snapshot operations when a snapshot retention spec exists", func() {
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCluster, Data: newClusterDef})
+				ops := receiver.operationsToExecute(&Event{Kind: AddCluster, Data: newClusterDef})
 
 				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&AddClusterOperation{},
-					&AddSnapshotOperation{},
-					&AddSnapshotCleanupOperation{},
+				Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+					&operations.AddClusterOperation{},
+					&operations.AddSnapshotOperation{},
+					&operations.AddSnapshotCleanupOperation{},
 				}))
 			})
 		})
@@ -102,11 +104,11 @@ var _ = Describe("operations to execute based on event", func() {
 			newClusterDef.Spec.Snapshot = nil
 
 			// when
-			operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCluster, Data: newClusterDef})
+			ops := receiver.operationsToExecute(&Event{Kind: DeleteCluster, Data: newClusterDef})
 
 			//then
-			Expect(operations).To(HaveOperationsOfType([]Operation{
-				&DeleteClusterOperation{},
+			Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+				&operations.DeleteClusterOperation{},
 			}))
 		})
 
@@ -116,23 +118,23 @@ var _ = Describe("operations to execute based on event", func() {
 				newClusterDef.Spec.Snapshot.RetentionPolicy = nil
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCluster, Data: newClusterDef})
+				ops := receiver.operationsToExecute(&Event{Kind: DeleteCluster, Data: newClusterDef})
 
 				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&DeleteClusterOperation{},
-					&DeleteSnapshotOperation{},
+				Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+					&operations.DeleteClusterOperation{},
+					&operations.DeleteSnapshotOperation{},
 				}))
 			})
 			It("should return a delete cluster, delete snapshot and delete snapshot cleanup operations when a retention policy is defined", func() {
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCluster, Data: newClusterDef})
+				ops := receiver.operationsToExecute(&Event{Kind: DeleteCluster, Data: newClusterDef})
 
 				//then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&DeleteClusterOperation{},
-					&DeleteSnapshotOperation{},
-					&DeleteSnapshotCleanupOperation{},
+				Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+					&operations.DeleteClusterOperation{},
+					&operations.DeleteSnapshotOperation{},
+					&operations.DeleteSnapshotCleanupOperation{},
 				}))
 			})
 		})
@@ -146,8 +148,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraDoesNotExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+				Expect(ops).To(HaveLen(0))
 			})
 
 			It("should return no operations when the cluster is beind deleted", func() {
@@ -155,8 +157,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraIsBeingDeleted(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+				Expect(ops).To(HaveLen(0))
 			})
 
 		})
@@ -168,11 +170,11 @@ var _ = Describe("operations to execute based on event", func() {
 
 			It("should return an update cluster operation", func() {
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 				// then
-				Expect(operations).To(HaveOperationsOfType([]Operation{
-					&UpdateClusterOperation{},
+				Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+					&operations.UpdateClusterOperation{},
 				}))
 			})
 
@@ -182,13 +184,13 @@ var _ = Describe("operations to execute based on event", func() {
 					newClusterDef.Spec.Snapshot = nil
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&DeleteSnapshotOperation{},
-						&DeleteSnapshotCleanupOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.DeleteSnapshotOperation{},
+						&operations.DeleteSnapshotCleanupOperation{},
 					}))
 				})
 				It("should return update cluster and delete snapshot cleanup when snapshot retention policy is removed", func() {
@@ -196,12 +198,12 @@ var _ = Describe("operations to execute based on event", func() {
 					newClusterDef.Spec.Snapshot.RetentionPolicy = nil
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&DeleteSnapshotCleanupOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.DeleteSnapshotCleanupOperation{},
 					}))
 				})
 			})
@@ -212,13 +214,13 @@ var _ = Describe("operations to execute based on event", func() {
 					oldClusterDef.Spec.Snapshot = nil
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&AddSnapshotOperation{},
-						&AddSnapshotCleanupOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.AddSnapshotOperation{},
+						&operations.AddSnapshotCleanupOperation{},
 					}))
 				})
 				It("should return update cluster and add snapshot when snapshot without retention policy is added", func() {
@@ -227,12 +229,12 @@ var _ = Describe("operations to execute based on event", func() {
 					newClusterDef.Spec.Snapshot.RetentionPolicy = nil
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&AddSnapshotOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.AddSnapshotOperation{},
 					}))
 				})
 			})
@@ -243,12 +245,12 @@ var _ = Describe("operations to execute based on event", func() {
 					newClusterDef.Spec.Snapshot.Schedule = "1 13 4 * *"
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&UpdateSnapshotOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.UpdateSnapshotOperation{},
 					}))
 				})
 			})
@@ -259,12 +261,12 @@ var _ = Describe("operations to execute based on event", func() {
 					newClusterDef.Spec.Snapshot.RetentionPolicy.CleanupSchedule = "1 13 4 * *"
 
 					// when
-					operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
+					ops := receiver.operationsToExecute(&Event{Kind: UpdateCluster, Data: ClusterUpdate{OldCluster: oldClusterDef, NewCluster: newClusterDef}})
 
 					// then
-					Expect(operations).To(HaveOperationsOfType([]Operation{
-						&UpdateClusterOperation{},
-						&UpdateSnapshotCleanupOperation{},
+					Expect(ops).To(HaveOperationsOfType([]operations.Operation{
+						&operations.UpdateClusterOperation{},
+						&operations.UpdateSnapshotCleanupOperation{},
 					}))
 				})
 			})
@@ -278,8 +280,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraDoesNotExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: GatherMetrics, Data: newClusterDef})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: GatherMetrics, Data: newClusterDef})
+				Expect(ops).To(HaveLen(0))
 			})
 
 			It("should return no operations when the cluster is being deleted", func() {
@@ -287,8 +289,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraIsBeingDeleted(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: GatherMetrics, Data: newClusterDef})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: GatherMetrics, Data: newClusterDef})
+				Expect(ops).To(HaveLen(0))
 			})
 
 		})
@@ -299,11 +301,11 @@ var _ = Describe("operations to execute based on event", func() {
 			})
 			It("should return a gather metrics operation", func() {
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: GatherMetrics, Data: newClusterDef})
+				ops := receiver.operationsToExecute(&Event{Kind: GatherMetrics, Data: newClusterDef})
 
 				// then
-				Expect(operations).To(HaveLen(1))
-				Expect(reflect.TypeOf(operations[0])).To(Equal(reflect.TypeOf(&GatherMetricsOperation{})))
+				Expect(ops).To(HaveLen(1))
+				Expect(reflect.TypeOf(ops[0])).To(Equal(reflect.TypeOf(&operations.GatherMetricsOperation{})))
 			})
 		})
 	})
@@ -322,8 +324,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraDoesNotExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 			It("should return no operations when the cluster is beind deleted", func() {
@@ -331,8 +333,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraIsBeingDeleted(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 		})
@@ -344,11 +346,11 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: UpdateCustomConfig, Data: configMapChange})
+				ops := receiver.operationsToExecute(&Event{Kind: UpdateCustomConfig, Data: configMapChange})
 
 				// then
-				Expect(operations).To(HaveLen(1))
-				Expect(reflect.TypeOf(operations[0])).To(Equal(reflect.TypeOf(&UpdateCustomConfigOperation{})))
+				Expect(ops).To(HaveLen(1))
+				Expect(reflect.TypeOf(ops[0])).To(Equal(reflect.TypeOf(&operations.UpdateCustomConfigOperation{})))
 			})
 		})
 
@@ -368,8 +370,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraDoesNotExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: AddCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 			It("should return no operations when the cluster is beind deleted", func() {
@@ -377,8 +379,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraIsBeingDeleted(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: AddCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 		})
@@ -389,11 +391,11 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddCustomConfig, Data: configMapChange})
+				ops := receiver.operationsToExecute(&Event{Kind: AddCustomConfig, Data: configMapChange})
 
 				// then
-				Expect(operations).To(HaveLen(1))
-				Expect(reflect.TypeOf(operations[0])).To(Equal(reflect.TypeOf(&AddCustomConfigOperation{})))
+				Expect(ops).To(HaveLen(1))
+				Expect(reflect.TypeOf(ops[0])).To(Equal(reflect.TypeOf(&operations.AddCustomConfigOperation{})))
 			})
 		})
 
@@ -413,8 +415,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraDoesNotExists(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: DeleteCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 			It("should return no operations when the cluster is beind deleted", func() {
@@ -422,8 +424,8 @@ var _ = Describe("operations to execute based on event", func() {
 				fakes.cassandraIsBeingDeleted(newClusterDef)
 
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCustomConfig, Data: configMapChange})
-				Expect(operations).To(HaveLen(0))
+				ops := receiver.operationsToExecute(&Event{Kind: DeleteCustomConfig, Data: configMapChange})
+				Expect(ops).To(HaveLen(0))
 			})
 
 		})
@@ -435,11 +437,11 @@ var _ = Describe("operations to execute based on event", func() {
 
 			It("should return a delete custom config operation", func() {
 				// when
-				operations := receiver.operationsToExecute(&dispatcher.Event{Kind: DeleteCustomConfig, Data: configMapChange})
+				ops := receiver.operationsToExecute(&Event{Kind: DeleteCustomConfig, Data: configMapChange})
 
 				// then
-				Expect(operations).To(HaveLen(1))
-				Expect(reflect.TypeOf(operations[0])).To(Equal(reflect.TypeOf(&DeleteCustomConfigOperation{})))
+				Expect(ops).To(HaveLen(1))
+				Expect(reflect.TypeOf(ops[0])).To(Equal(reflect.TypeOf(&operations.DeleteCustomConfigOperation{})))
 			})
 		})
 	})
@@ -447,15 +449,141 @@ var _ = Describe("operations to execute based on event", func() {
 	Context("when a AddService event is received", func() {
 		It("should return an add service operation", func() {
 			// when
-			operations := receiver.operationsToExecute(&dispatcher.Event{Kind: AddService, Data: newClusterDef})
+			ops := receiver.operationsToExecute(&Event{Kind: AddService, Data: newClusterDef})
 
 			//then
-			Expect(operations).To(HaveLen(1))
-			Expect(reflect.TypeOf(operations[0])).To(Equal(reflect.TypeOf(&AddServiceOperation{})))
+			Expect(ops).To(HaveLen(1))
+			Expect(reflect.TypeOf(ops[0])).To(Equal(reflect.TypeOf(&operations.AddServiceOperation{})))
 		})
 	})
-
 })
+
+var _ = Describe("operations execution", func() {
+	var (
+		receiver *OperatorEventReceiver
+		fakes    *mockOperationFactory
+	)
+
+	BeforeEach(func() {
+		fakes = &mockOperationFactory{}
+		receiver = &OperatorEventReceiver{
+			clusterAccessor:  nil,
+			operationFactory: fakes,
+		}
+	})
+
+	It("should execute subsequent operations when one fails", func() {
+		// given
+		clusterDef := apis.ACassandra().WithDefaults().WithSpec(
+			apis.ACassandraSpec().
+				WithDefaults().
+				WithSnapshot(
+					apis.ASnapshot().
+						WithDefaults().
+						WithRetentionPolicy(apis.ARetentionPolicy().WithDefaults()))).
+			Build()
+		fakes.On("NewAddCluster", clusterDef).Return(failureOperation("some error"))
+		fakes.On("NewAddSnapshot", clusterDef).Return(failureOperation("some other error"))
+		fakes.On("NewAddSnapshotCleanup", clusterDef).Return(successfulOperation())
+
+		// when
+		err := receiver.Receive(&Event{Kind: AddCluster, Key: "mycluster", Data: clusterDef})
+
+		// then
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("some error"))
+		Expect(err.Error()).To(ContainSubstring("some other error"))
+	})
+})
+
+type stubOperation struct {
+	msg     string
+	success bool
+}
+
+func successfulOperation() operations.Operation {
+	return &stubOperation{"success", true}
+}
+
+func failureOperation(msg string) operations.Operation {
+	return &stubOperation{msg: msg, success: false}
+}
+
+func (o *stubOperation) Execute() error {
+	if o.success {
+		return nil
+	}
+
+	return fmt.Errorf(o.msg)
+}
+
+func (o *stubOperation) String() string {
+	return "stubOperation"
+}
+
+//
+type mockOperationFactory struct {
+	mock.Mock
+}
+
+var _ operations.OperationFactory = &mockOperationFactory{}
+
+func (o *mockOperationFactory) NewAddCluster(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewAddService(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewDeleteCluster(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewDeleteSnapshot(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewDeleteSnapshotCleanup(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewAddSnapshot(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewAddSnapshotCleanup(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewUpdateCluster(oldCassandra, newCassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(oldCassandra, newCassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewUpdateSnapshot(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewUpdateSnapshotCleanup(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewGatherMetrics(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewUpdateCustomConfig(cassandra *v1alpha1.Cassandra, configMap *corev1.ConfigMap) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewAddCustomConfig(cassandra *v1alpha1.Cassandra, configMap *corev1.ConfigMap) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
+func (o *mockOperationFactory) NewDeleteCustomConfig(cassandra *v1alpha1.Cassandra) operations.Operation {
+	args := o.Called(cassandra)
+	return args.Get(0).(operations.Operation)
+}
 
 // implements Accessor
 type mockAccessor struct {
@@ -538,30 +666,30 @@ func (m *mockAccessor) CreateStatefulSetForRack(c *cluster.Cluster, rack *v1alph
 //
 // HaveOperationsOfType matcher
 //
-func HaveOperationsOfType(operations []Operation) types.GomegaMatcher {
+func HaveOperationsOfType(operations []operations.Operation) types.GomegaMatcher {
 	return &haveOperations{expectedOperations: operations}
 }
 
 type haveOperations struct {
-	expectedOperations []Operation
+	expectedOperations []operations.Operation
 }
 
 func (m *haveOperations) Match(actual interface{}) (success bool, err error) {
-	operations := actual.([]Operation)
-	return reflect.DeepEqual(m.typesOf(operations), m.typesOf(m.expectedOperations)), nil
+	ops := actual.([]operations.Operation)
+	return reflect.DeepEqual(m.typesOf(ops), m.typesOf(m.expectedOperations)), nil
 }
 
 func (m *haveOperations) FailureMessage(actual interface{}) (message string) {
-	operations := actual.([]Operation)
-	return fmt.Sprintf("Expected operations type to be the same. Expected: %v. Actual: %v.", m.typesOf(m.expectedOperations), m.typesOf(operations))
+	ops := actual.([]operations.Operation)
+	return fmt.Sprintf("Expected operations type to be the same. Expected: %v. Actual: %v.", m.typesOf(m.expectedOperations), m.typesOf(ops))
 }
 
 func (m *haveOperations) NegatedFailureMessage(actual interface{}) (message string) {
-	operations := actual.([]Operation)
-	return fmt.Sprintf("Expected operations type not to be the same. Expected: %v. Actual: %v.", m.typesOf(m.expectedOperations), m.typesOf(operations))
+	ops := actual.([]operations.Operation)
+	return fmt.Sprintf("Expected operations type not to be the same. Expected: %v. Actual: %v.", m.typesOf(m.expectedOperations), m.typesOf(ops))
 }
 
-func (m *haveOperations) typesOf(ops []Operation) []reflect.Type {
+func (m *haveOperations) typesOf(ops []operations.Operation) []reflect.Type {
 	var opTypes []reflect.Type
 	for _, op := range ops {
 		opTypes = append(opTypes, reflect.TypeOf(op))

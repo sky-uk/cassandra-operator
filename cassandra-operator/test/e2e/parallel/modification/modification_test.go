@@ -22,7 +22,6 @@ import (
 var (
 	resources          *parallel.ResourceSemaphore
 	resourcesToReclaim int
-	testStartTime      time.Time
 )
 
 func TestModification(t *testing.T) {
@@ -46,9 +45,12 @@ func registerResourcesUsed(size int) {
 }
 
 var _ = Context("Allowable cluster modifications", func() {
-	var clusterName string
-	var podEvents *PodEventLog
-	var podWatcher watch.Interface
+	var (
+		clusterName   string
+		podEvents     *PodEventLog
+		podWatcher    watch.Interface
+		testStartTime time.Time
+	)
 
 	BeforeEach(func() {
 		testStartTime = time.Now()

@@ -11,7 +11,8 @@ import (
 
 var _ = Context("Incomplete cluster modifications", func() {
 	var (
-		clusterName string
+		clusterName   string
+		testStartTime time.Time
 	)
 
 	BeforeEach(func() {
@@ -40,7 +41,7 @@ var _ = Context("Incomplete cluster modifications", func() {
 				Exists()
 
 			// when
-			rackAHash := ClusterConfigHashForRack(Namespace, clusterName, "a")
+			expectedConfigHash := ClusterConfigHashForRack(Namespace, clusterName, "a")
 			modificationTime := time.Now().Truncate(time.Second)
 			// pretend this rack was left on an old config
 			TheCustomConfigHashIsChangedForRack(Namespace, clusterName, "b")
@@ -51,7 +52,7 @@ var _ = Context("Incomplete cluster modifications", func() {
 				Should(BeTemporally(">=", modificationTime))
 			Eventually(PodsForCluster(Namespace, clusterName), NodeRestartDuration, CheckInterval).Should(Each(And(
 				HaveAnnotation("clusterConfigHash"),
-				HaveAnnotationValue(AnnotationValueAssertion{Name: "clusterConfigHash", Value: rackAHash}),
+				HaveAnnotationValue(AnnotationValueAssertion{Name: "clusterConfigHash", Value: expectedConfigHash}),
 			)))
 		})
 	})

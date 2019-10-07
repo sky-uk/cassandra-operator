@@ -13,6 +13,8 @@ func PrintDiagnosis(namespace string, testStartTime time.Time, clusterNames ...s
 	var diagnosis []string
 	diagnosis = append(diagnosis, "\n\t\t=== OPERATOR DIAGNOSIS ===\n")
 	diagnosis = append(diagnosis, operatorDiagnosis(namespace, testStartTime))
+	diagnosis = append(diagnosis, "\n\t\t=== PERSISTENT VOLUMES DIAGNOSIS ===\n")
+	diagnosis = append(diagnosis, persistentVolumeDiagnosis(namespace))
 	for _, clusterName := range clusterNames {
 		diagnosis = append(diagnosis, fmt.Sprintf("\n\t\t=== CLUSTER %s DIAGNOSIS ===\n", clusterName))
 		diagnosis = append(diagnosis, clusterDiagnosis(namespace, clusterName))
@@ -34,6 +36,10 @@ func operatorDiagnosis(namespace string, logSince time.Time) string {
 	diagnosis = append(diagnosis, fmt.Sprintf("==== Logs for Operator pod %s since %v =====", operatorPod.Name, logSince))
 	diagnosis = append(diagnosis, fmt.Sprintf("%v", podLogsSince(namespace, &operatorPod, "cassandra-operator", logSince)))
 	return strings.Join(diagnosis, "\n")
+}
+
+func persistentVolumeDiagnosis(namespace string) string {
+	return KubectlOutputAsString(namespace, "get", "pv")
 }
 
 func clusterDiagnosis(namespace, clusterName string) string {

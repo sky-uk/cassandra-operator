@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
@@ -20,16 +19,16 @@ type AddCustomConfigOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddCustomConfigOperation) Execute() {
+func (o *AddCustomConfigOperation) Execute() error {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config created for cluster %s", o.cassandra.QualifiedName())
 	for _, rack := range o.cassandra.Spec.Racks {
 		err := o.statefulSetAccessor.updateStatefulSet(c, o.configMap, &rack, c.AddCustomConfigVolumeToStatefulSet)
 		if err != nil {
-			log.Errorf("unable to add custom configMap to statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
-			return
+			return fmt.Errorf("unable to add custom configMap to statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
 		}
 	}
+	return nil
 }
 
 func (o *AddCustomConfigOperation) String() string {

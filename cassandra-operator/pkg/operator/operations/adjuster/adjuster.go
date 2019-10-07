@@ -54,7 +54,7 @@ func New() *Adjuster {
 
 // ChangesForCluster compares oldCluster with newCluster, and produces an ordered list of ClusterChanges which need to
 // be applied in order for the running cluster to be in the state matching newCluster.
-func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster *v1alpha1.Cassandra) ([]ClusterChange, error) {
+func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster *v1alpha1.Cassandra) []ClusterChange {
 	addedRacks, matchedRacks, _ := v1alpha1helpers.MatchRacks(&oldCluster.Spec, &newCluster.Spec)
 	var clusterChanges []ClusterChange
 
@@ -71,7 +71,7 @@ func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster 
 			clusterChanges = append(clusterChanges, ClusterChange{Rack: matchedRack, ChangeType: UpdateRack})
 		}
 	}
-	return clusterChanges, nil
+	return clusterChanges
 }
 
 // CreateConfigMapHashPatchForRack produces a ClusterChange which need to be applied for the given rack

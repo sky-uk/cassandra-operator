@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"k8s.io/api/core/v1"
@@ -17,20 +16,21 @@ type DeleteSnapshotOperation struct {
 }
 
 // Execute performs the operation
-func (o *DeleteSnapshotOperation) Execute() {
+func (o *DeleteSnapshotOperation) Execute() error {
 	qualifiedName := o.cassandra.QualifiedName()
 	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotJobName()))
 	if err != nil {
-		log.Errorf("Error while retrieving snapshot job list for cluster %s: %v", qualifiedName, err)
+		return fmt.Errorf("error while retrieving snapshot job list for cluster %s: %v", qualifiedName, err)
 	}
 
 	if job != nil {
 		err = o.clusterAccessor.DeleteCronJob(job)
 		if err != nil {
-			log.Errorf("Error while deleting snapshot job %s for cluster %s: %v", job.Name, qualifiedName, err)
+			return fmt.Errorf("error while deleting snapshot job %s for cluster %s: %v", job.Name, qualifiedName, err)
 		}
 		o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterSnapshotCreationUnscheduleEvent, "Snapshot creation unscheduled for cluster %s", qualifiedName)
 	}
+	return nil
 }
 
 func (o *DeleteSnapshotOperation) String() string {

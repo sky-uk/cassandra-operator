@@ -2,7 +2,6 @@ package operations
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"k8s.io/api/core/v1"
@@ -18,16 +17,16 @@ type DeleteCustomConfigOperation struct {
 }
 
 // Execute performs the operation
-func (o *DeleteCustomConfigOperation) Execute() {
+func (o *DeleteCustomConfigOperation) Execute() error {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config deleted for cluster %s", o.cassandra.QualifiedName())
 	for _, rack := range o.cassandra.Spec.Racks {
 		err := o.statefulSetAccessor.updateStatefulSet(c, o.configMap, &rack, c.RemoveCustomConfigVolumeFromStatefulSet)
 		if err != nil {
-			log.Errorf("unable to remove custom configMap from statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
-			return
+			return fmt.Errorf("unable to remove custom configMap from statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
 		}
 	}
+	return nil
 }
 
 func (o *DeleteCustomConfigOperation) String() string {

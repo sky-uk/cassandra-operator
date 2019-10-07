@@ -1,5 +1,12 @@
 # Changes
 
+## 0.75.0-alpha
+
+- [FEATURE] [Reconcile request synchronously](#201) (@sebbonnet)
+- [BUGFIX] [Fix use of ginkgo `-nodes` to run tests in parallel](#203) (@sebbonnet)
+- [ENHANCEMENT] [Increase event publication timeout for tests to 1min](#200) (@sebbonnet)
+- [ENHANCEMENT] [Add log for previous cassandra container in tests diagnosis](#199) (@sebbonnet)
+
 ## 0.74.0-alpha
 
 - [FEATURE] [Document CRD fields #194](#194) (@sebbonnet)

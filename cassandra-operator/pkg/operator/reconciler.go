@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
+	"github.com/hashicorp/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/validation"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -19,8 +21,6 @@ import (
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/dispatcher"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations"
 )
 
 type objectReferenceFactory interface {
@@ -33,6 +33,7 @@ type objectReferenceFactory interface {
 type defaultReferenceFactory struct {
 }
 
+
 type requestContext struct {
 	eventKey      string
 	logger        *log.Entry
@@ -41,32 +42,39 @@ type requestContext struct {
 
 // CassandraReconciler is a controller that reconciles Cassandra resources
 type CassandraReconciler struct {
-	clusters        map[types.NamespacedName]*v1alpha1.Cassandra
-	client          client.Client
-	eventRecorder   record.EventRecorder
-	eventDispatcher dispatcher.Dispatcher
-	objectFactory   objectReferenceFactory
-	stateFinder     cluster.StateFinder
-	operatorConfig  *Config
+	clusters       map[types.NamespacedName]*v1alpha1.Cassandra
+	client         client.Client
+	eventRecorder  record.EventRecorder
+	eventReceiver  event.Receiver
+	objectFactory  objectReferenceFactory
+	stateFinder    cluster.StateFinder
+	operatorConfig *Config
 }
 
 // Implement reconcile.Reconciler so the controller can reconcile objects
 var _ reconcile.Reconciler = &CassandraReconciler{}
 
 // NewReconciler creates a CassandraReconciler
-func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventDispatcher dispatcher.Dispatcher, operatorConfig *Config) *CassandraReconciler {
+func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventReceiver event.Receiver, operatorConfig *Config) *CassandraReconciler {
 	return &CassandraReconciler{
-		clusters:        clusters,
-		client:          client,
-		eventRecorder:   eventRecorder,
-		eventDispatcher: eventDispatcher,
-		objectFactory:   &defaultReferenceFactory{},
-		stateFinder:     cluster.NewStateFinder(client),
-		operatorConfig:  operatorConfig,
+		clusters:       clusters,
+		client:         client,
+		eventRecorder:  eventRecorder,
+		eventReceiver:  eventReceiver,
+		objectFactory:  &defaultReferenceFactory{},
+		stateFinder:    cluster.NewStateFinder(client),
+		operatorConfig: operatorConfig,
 	}
 }
 
 // Reconcile implements reconcile.Reconciler
+// Reconciliation for all watched resources is attempted in a single pass.
+// Each request compares the current to the desired state and determines what has changed for each watched resource.
+// Changes are calculated in one go for all watched resources so that the delta is calculated at a given point in time (as much as possible).
+// Changes are applied one at a time without stopping on error to try bringing the cluster to the desired state as much as possible.
+// Applying changes synchronously for a cluster while allowing concurrent updates for different clusters is made possible
+// because the controller internal queue prevents concurrent updates for the same resource name -
+// see https://github.com/kubernetes-sigs/controller-runtime/issues/616
 func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	ctx := newContext(request)
 	logger := ctx.logger
@@ -79,37 +87,50 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 		return retryReconciliation("failed to lookup cassandra definition", err)
 	} else if errors.IsNotFound(err) || cassandraIsBeingDeleted(desiredCassandra) {
 		logger.Debug("Cassandra definition not found. Going to delete associated resources")
-		cassandraToDelete := &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace}}
-		r.eventDispatcher.Dispatch(&dispatcher.Event{Kind: operations.DeleteCluster, Key: ctx.eventKey, Data: cassandraToDelete})
 		delete(r.clusters, ctx.namespaceName)
+		cassandraToDelete := &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace}}
+		if err := r.eventReceiver.Receive(&event.Event{Kind: event.DeleteCluster, Key: ctx.eventKey, Data: cassandraToDelete}); err != nil {
+			return retryReconciliation(fmt.Sprintf("failed to process event %s", event.DeleteCluster), err)
+		}
 		return completeReconciliation()
 	}
 	r.clusters[ctx.namespaceName] = desiredCassandra
 
 	// Reconcile the custom config first, as new statefulSet won't bootstrap
 	// if they need to mount a volume for a configMap that no longer exists
-	result, err := r.reconcileCustomConfig(ctx, desiredCassandra)
-	if err != nil {
-		logger.Errorf("An error occurred while reconciling custom config for Cassandra: %v", err)
-		return result, err
+	// This is an optimisation as the cluster will eventually self heal
+	var combinedEvents []*event.Event
+	combinedError := &multierror.Error{}
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCustomConfig, ctx, desiredCassandra, combinedEvents, combinedError)
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraService, ctx, desiredCassandra, combinedEvents, combinedError)
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraDefinition, ctx, desiredCassandra, combinedEvents, combinedError)
+	for _, evt := range combinedEvents {
+		if err := r.eventReceiver.Receive(evt); err != nil {
+			combinedError = multierror.Append(combinedError, fmt.Errorf("failed to process event %s: %v", evt.Kind, err))
+		}
 	}
 
-	// Create the service before Cassandra pods to allow pods to access that service (e.g. to find seeds)
-	result, err = r.reconcileCassandraService(ctx, desiredCassandra)
-	if err != nil {
-		logger.Errorf("An error occurred while reconciling Cassandra service: %v", err)
-		return result, err
-	}
-
-	result, err = r.reconcileCassandraDefinition(ctx, desiredCassandra)
-	if err != nil {
-		logger.Errorf("An error occurred while reconciling Cassandra definition: %v", err)
-		return result, err
+	if len(combinedError.Errors) > 0 {
+		logger.Error(combinedError.ErrorOrNil())
+		return retryReconciliation("One or more error(s) occurred during reconciliation", combinedError.ErrorOrNil())
 	}
 	return completeReconciliation()
 }
 
-func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
+type changeDeterminer = func(*requestContext, *v1alpha1.Cassandra) (*event.Event, error)
+
+func (r *CassandraReconciler) appendChanges(determineChange changeDeterminer, ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, events []*event.Event, errors *multierror.Error) ([]*event.Event, *multierror.Error) {
+	evt, err := determineChange(ctx, desiredCassandra)
+	if evt != nil {
+		events = append(events, evt)
+	}
+	if err != nil {
+		errors = multierror.Append(errors, err)
+	}
+	return events, errors
+}
+
+func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra")
 
@@ -118,16 +139,15 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)
 		r.eventRecorder.Event(desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, validationError.Error())
-		return completeReconciliation()
+		return nil, nil
 	}
 
 	currentCassandra, err := r.stateFinder.FindCurrentStateFor(desiredCassandra)
 	if unexpectedError(err) {
-		return retryReconciliation("could not determine current state for Cassandra", err)
+		return nil, fmt.Errorf("could not determine current state for Cassandra: %v", err)
 	} else if errors.IsNotFound(err) {
 		logger.Debug("No resources found for this Cassandra definition. Going to add cluster")
-		r.eventDispatcher.Dispatch(&dispatcher.Event{Kind: operations.AddCluster, Key: ctx.eventKey, Data: desiredCassandra})
-		return completeReconciliation()
+		return &event.Event{Kind: event.AddCluster, Key: ctx.eventKey, Data: desiredCassandra}, nil
 	}
 
 	v1alpha1helpers.SetDefaultsForCassandra(currentCassandra, &v1alpha1helpers.TemplatedImageScheme{RepositoryPath: r.operatorConfig.RepositoryPath, ImageVersion: r.operatorConfig.Version})
@@ -135,24 +155,23 @@ func (r *CassandraReconciler) reconcileCassandraDefinition(ctx *requestContext, 
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)
 		r.eventRecorder.Event(desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, validationError.Error())
-		return completeReconciliation()
+		return nil, nil
 	}
 
 	if !cmp.Equal(currentCassandra.Spec, desiredCassandra.Spec) {
 		logger.Debug(spew.Sprintf("Cluster definition has changed. Update will be performed between current cluster: %+v \ndesired cluster: %+v", currentCassandra, desiredCassandra))
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.UpdateCluster,
+		return &event.Event{
+			Kind: event.UpdateCluster,
 			Key:  ctx.eventKey,
-			Data: operations.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
-		})
-		return completeReconciliation()
+			Data: event.ClusterUpdate{OldCluster: currentCassandra, NewCluster: desiredCassandra},
+		}, nil
 	}
 
 	logger.Debug("No cassandra definition changes detected")
-	return completeReconciliation()
+	return nil, nil
 }
 
-func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
+func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra custom config")
 
@@ -160,51 +179,48 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 	configMapErr := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.CustomConfigMapName()}, configMap)
 	configMapFound := configMapErr == nil
 	if unexpectedError(configMapErr) {
-		return retryReconciliation("failed to lookup potential configMap", configMapErr)
+		return nil, fmt.Errorf("failed to lookup potential configMap: %v", configMapErr)
 	}
 
 	configHashes, configHashErr := r.stateFinder.FindCurrentConfigHashFor(desiredCassandra)
 	logger.Debugf("Custom config hash looked up: %v", configHashes)
 	if unexpectedError(configHashErr) {
-		return reconcile.Result{}, fmt.Errorf("failed to look up config hash: %v", configHashErr)
+		return nil, fmt.Errorf("failed to look up config hash: %v", configHashErr)
 	} else if errors.IsNotFound(configHashErr) {
 		logger.Debug("No custom config changes required as no corresponding Cassandra cluster found")
-		return completeReconciliation()
+		return nil, nil
 	}
 
 	currentCassandraHasCustomConfig := len(configHashes) > 0
 	if errors.IsNotFound(configMapErr) {
 		if currentCassandraHasCustomConfig {
 			logger.Debug("Custom config configured but no configMap exists. Going to delete configuration")
-			r.eventDispatcher.Dispatch(&dispatcher.Event{
-				Kind: operations.DeleteCustomConfig,
+			return &event.Event{
+				Kind: event.DeleteCustomConfig,
 				Key:  ctx.eventKey,
-				Data: operations.ConfigMapChange{Cassandra: desiredCassandra},
-			})
-		} else {
-			logger.Debug("Custom config not configured and no configMap exists. Nothing to do")
+				Data: event.ConfigMapChange{Cassandra: desiredCassandra},
+			}, nil
 		}
-		return completeReconciliation()
+		logger.Debug("Custom config not configured and no configMap exists. Nothing to do")
+		return nil, nil
 	}
 
 	if configMapFound && !currentCassandraHasCustomConfig {
 		logger.Debug("Custom config exists, but not configured. Going to add configuration")
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.AddCustomConfig,
+		return &event.Event{
+			Kind: event.AddCustomConfig,
 			Key:  ctx.eventKey,
-			Data: operations.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
-		})
-		return completeReconciliation()
+			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+		}, nil
 	}
 
 	if len(configHashes) != len(desiredCassandra.Spec.Racks) {
 		logger.Debugf("Custom config is missing on one or more racks. Custom config hashes: %v. Going to add the configuration", configHashes)
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.AddCustomConfig,
+		return &event.Event{
+			Kind: event.AddCustomConfig,
 			Key:  ctx.eventKey,
-			Data: operations.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
-		})
-		return completeReconciliation()
+			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+		}, nil
 	}
 
 	configHashNotChanged := true
@@ -213,36 +229,34 @@ func (r *CassandraReconciler) reconcileCustomConfig(ctx *requestContext, desired
 	}
 	if !configHashNotChanged {
 		logger.Debug("Custom config has changed. Going to update configuration")
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.UpdateCustomConfig,
+		return &event.Event{
+			Kind: event.UpdateCustomConfig,
 			Key:  ctx.eventKey,
-			Data: operations.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
-		})
-		return completeReconciliation()
+			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+		}, nil
 	}
 
 	logger.Debugf("No config map changes detected for configMap %s.%s", configMap.Namespace, configMap.Name)
-	return completeReconciliation()
+	return nil, nil
 }
 
-func (r *CassandraReconciler) reconcileCassandraService(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (reconcile.Result, error) {
+func (r *CassandraReconciler) determineChangesForCassandraService(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra Service")
 
 	service := r.objectFactory.newService()
 	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.Name}, service)
 	if unexpectedError(err) {
-		return retryReconciliation("failed to lookup Cassandra service", err)
+		return nil, fmt.Errorf("failed to lookup Cassandra service: %v", err)
 	} else if errors.IsNotFound(err) {
 		logger.Debug("Cassandra service not found. Going to create it")
-		r.eventDispatcher.Dispatch(&dispatcher.Event{
-			Kind: operations.AddService,
+		return &event.Event{
+			Kind: event.AddService,
 			Key:  ctx.eventKey,
 			Data: desiredCassandra,
-		})
-		return completeReconciliation()
+		}, nil
 	}
-	return completeReconciliation()
+	return nil, nil
 }
 
 func newContext(request reconcile.Request) *requestContext {
