@@ -11,7 +11,6 @@ CASSANDRA_BOOTSTRAPPER_IMAGE ?= $(TEST_REGISTRY)/cassandra-bootstrapper:v$(gitRe
 CASSANDRA_SIDECAR_IMAGE ?= $(TEST_REGISTRY)/cassandra-sidecar:v$(gitRev)
 CASSANDRA_SNAPSHOT_IMAGE ?= $(TEST_REGISTRY)/cassandra-snapshot:v$(gitRev)
 NAMESPACE ?= test-cassandra-operator
-GINKGO_NODES ?= 0
 GINKGO_COMPILERS ?= 0
 
 gitRev := $(shell git rev-parse --short HEAD)

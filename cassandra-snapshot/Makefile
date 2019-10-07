@@ -8,7 +8,7 @@ USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)
 IMAGE_UNDER_TEST ?= $(dockerTestImage)
 NAMESPACE ?= test-cassandra-operator
-GINKGO_NODES ?= 0
+GINKGO_PARALLEL_OPTIONS ?= $(if $(GINKGO_NODES),-p -nodes=$(GINKGO_NODES),-p)
 GINKGO_COMPILERS ?= 0
 E2E_TEST ?=
 GOOS ?= linux
@@ -88,7 +88,7 @@ ensure-test-report-dir-exists: ensure-build-dir-exists
 
 test: ensure-test-report-dir-exists
 	@echo "== test"
-	ginkgo -p -nodes=$(GINKGO_NODES) -r -compilers=$(GINKGO_COMPILERS) --v --progress pkg cmd -- -junit-report-dir $(junitReportDir)
+	ginkgo $(GINKGO_PARALLEL_OPTIONS) -r -compilers=$(GINKGO_COMPILERS) --v --progress pkg cmd -- -junit-report-dir $(junitReportDir)
 
 integration-test: ensure-test-report-dir-exists
 	@echo "== integration-test"

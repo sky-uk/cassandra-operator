@@ -15,6 +15,7 @@ env:
     # DOCKER_PASSWORD
     - secure: yK3dkfdQOUn+vUk8t+H5j3XdL5N3twk1SNBHzHSv1fB+Gldu9W5KfmM+4yhS7HQnbn2xa5mmgPxfwdasOyj+GtX+I6smTs+QvUqFwA50X1JMLJKjzfTEnbSiqrxjpwWH37Tvt8jYk5cIRt7VQFEfJGTZBMC+uFQMV4IziSTjeEo45DIBDHBKlnHwIzDZJBRbFHfqJVUs8DF91w5ETY6EkQWgg869q+d1yIRQpl6XoGh5vMRuSeS+GlKU+xyfZYIq23MqRAyUEHr+t2KsWmi/Ttk8Ae8PM1ofv149UXF8r9mOFVauTKIfV9qhvPrldsFDaqILXtUSDq5a1V+N3k1JoMqhQIsA6/HyE2fya3vPxTenYnvVsM7v29flXynFQXdXvrAmED60eViVSc+ftbADzAHI3IsjgzDBdQ0BDrwwHexDOhvUtA7G3eMOutGFPbo4jENVETe50+UANQUqCEWxtC8BH/10YtLXR4JXugiSxNr6+VeAl9svN/ARGoO1lgHvQGpG2Biz+cJCYAtSUbyNcnbLitbGE7SRZ95vjsHYlISSCWh0M84R3nOltDAwZD1AOjGjy8fsRU2poHw4SyRqSCmi80VmArcBzYoT/deIa/OiKBZ6/cIfyqeD1cjL+HbEzI8eMLsqiW3gr4DoWpQvwKmv+LCz4QpJpvcTzTGJ5uI=
     - GO111MODULE: "on"
+    - GINKGO_NODES: 1
 
 # This applies to `push` types only, not pull request
 # Travis will trigger `push` builds on master or tag to avoid building branches twice for pull requests - see https://docs.travis-ci.com/user/pull-requests/#double-builds-on-pull-requests
