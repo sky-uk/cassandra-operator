@@ -9,7 +9,7 @@ apply plugin: 'com.github.johnrengelman.shadow'
 dependencies {
     // expect seed provider to be loaded from within a cassandra jar, so exclude cassandra dependencies
     compileOnly 'org.apache.cassandra:cassandra-all:3.11.2'
-    compile 'io.fabric8:kubernetes-client:3.1.10'
+    compile 'io.fabric8:kubernetes-client:4.6.0'
 
     testCompile 'org.apache.cassandra:cassandra-all:3.11.2'
     testCompile 'org.assertj:assertj-core:3.3.0'
@@ -18,10 +18,12 @@ dependencies {
     testCompile 'pl.pragmatists:JUnitParams:1.1.1'
 }
 
+// maintain compatibility with cassandra 3:11 which uses jdk 1.8
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
 shadowJar {
-    baseName = 'cassandra-seed-provider'
-    version = ''
-    classifier = ''
+    archiveFileName = 'cassandra-seed-provider.jar'
 }
 
 shadowJar.dependsOn check

@@ -1,4 +1,4 @@
-FROM openjdk:8-slim
+FROM openjdk:11.0.4-jre-slim
 
 ENV CONF_STAGING_DIRECTORY=/staging/conf
 ENV LIB_STAGING_DIRECTORY=/staging/lib

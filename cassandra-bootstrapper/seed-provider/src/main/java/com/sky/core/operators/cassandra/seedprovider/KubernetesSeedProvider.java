@@ -76,6 +76,7 @@ public class KubernetesSeedProvider implements SeedProvider {
                         .withGroup("core.sky.uk")
                         .withNames(new CustomResourceDefinitionNamesBuilder().withPlural("cassandras").build())
                         .withVersion("v1alpha1")
+                        .withScope("Namespaced")
                         .build())
                 .build();
     }

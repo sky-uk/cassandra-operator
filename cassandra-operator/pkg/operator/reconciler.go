@@ -33,7 +33,6 @@ type objectReferenceFactory interface {
 type defaultReferenceFactory struct {
 }
 
-
 type requestContext struct {
 	eventKey      string
 	logger        *log.Entry

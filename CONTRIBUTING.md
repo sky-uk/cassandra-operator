@@ -14,7 +14,7 @@ The following must be installed on your development machine:
 
 - `go` (>=1.12)
 - `docker`
-- `openjdk-8` or another JDK
+- `jdk-11` or above
 - `gcc` (or `build-essential` package on debian distributions)
 - `kubectl`
 - `curl`

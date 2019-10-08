@@ -21,9 +21,7 @@ dependencies {
 }
 
 shadowJar {
-    baseName = 'fake-cassandra'
-    version = ''
-    classifier = ''
+    archiveFileName = 'fake-cassandra.jar'
 }
 
 task doShadowJar(dependsOn: ['shadowJar', 'check'])

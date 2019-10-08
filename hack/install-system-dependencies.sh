@@ -17,9 +17,9 @@ curl --silent \
      --output kubectl \
      https://storage.googleapis.com/kubernetes-release/release/v1.10.13/bin/linux/amd64/kubectl \
      --output goss \
-     https://github.com/aelsabbahy/goss/releases/download/v0.3.5/goss-linux-amd64 \
+     https://github.com/aelsabbahy/goss/releases/download/v0.3.7/goss-linux-amd64 \
      --output dgoss \
-     https://raw.githubusercontent.com/aelsabbahy/goss/v0.3.5/extras/dgoss/dgoss \
+     https://github.com/aelsabbahy/goss/releases/download/v0.3.7/dgoss \
      --output kind \
      https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
 chmod +x kubectl goss dgoss kind

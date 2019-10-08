@@ -1,4 +1,4 @@
-FROM openjdk:8-slim
+FROM openjdk:11.0.4-jre-slim
 
 RUN apt-get update && \
     apt-get install -y curl lsof && \
