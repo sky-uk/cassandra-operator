@@ -1,5 +1,10 @@
 # Changes
 
+## 0.76.0-alpha
+
+- [BUGFIX] [Allow operator and node containers to run as non-root user](#208) (@alangibson01 @sebbonnet)
+- [ENHANCEMENT] [Upgrade to Java 11](#205) (@sebbonnet)
+
 ## 0.75.0-alpha
 
 - [FEATURE] [Reconcile request synchronously](#201) (@sebbonnet)

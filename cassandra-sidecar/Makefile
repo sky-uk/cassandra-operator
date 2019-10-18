@@ -39,7 +39,7 @@ setup:
 
 go-build: ensure-build-dir-exists ensure-go-modules
 	@echo "== build"
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(buildDir)/bin/cassandra-sidecar -v github.com/sky-uk/cassandra-operator/cassandra-sidecar/cmd
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(buildDir)/bin/cassandra-sidecar -v github.com/sky-uk/cassandra-operator/cassandra-sidecar/cmd
 
 go-install:
 	@echo "== go-install"

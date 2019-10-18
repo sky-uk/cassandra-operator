@@ -30,6 +30,7 @@ function waitForDeployment {
     echo "Deployment is ready"
 }
 
+
 function deployOperator() {
     local operatorImage=$1
     local context=$2

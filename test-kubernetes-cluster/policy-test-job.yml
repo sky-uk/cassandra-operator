@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: policy-test
+  namespace: test-cassandra-operator
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - args: [whoami]
+        image: alpine
+        imagePullPolicy: Always
+        name: policy-test

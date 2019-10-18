@@ -3,6 +3,8 @@ package e2e
 import (
 	"fmt"
 	"github.com/onsi/gomega"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"io/ioutil"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -50,6 +52,9 @@ func createCassandraPod(labels map[string]string, podName string) (*v1.Pod, erro
 			Labels:    labels,
 		},
 		Spec: v1.PodSpec{
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsUser: ptr.Int64(cluster.UserID),
+			},
 			Containers: []v1.Container{
 				{
 					Name:           "cassandra",
@@ -74,6 +79,9 @@ func createCassandraPodWithCustomConfig(labels map[string]string, podName string
 			Labels:    labels,
 		},
 		Spec: v1.PodSpec{
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsUser: ptr.Int64(cluster.UserID),
+			},
 			InitContainers: []v1.Container{
 				{
 					Name:      "copy-default-cassandra-config",
@@ -192,6 +200,9 @@ func RunCommandInCassandraSnapshotPod(clusterName, command string, arg ...string
 			Labels:    map[string]string{OperatorLabel: clusterName, "test-command-runner": ""},
 		},
 		Spec: v1.PodSpec{
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsUser: ptr.Int64(cluster.UserID),
+			},
 			ServiceAccountName: "cassandra-snapshot",
 			RestartPolicy:      v1.RestartPolicyNever,
 			Containers: []v1.Container{

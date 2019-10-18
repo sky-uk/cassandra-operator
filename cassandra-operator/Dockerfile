@@ -1,5 +1,8 @@
-FROM phusion/baseimage:0.10.1
+FROM alpine:3.10.2
 
+RUN adduser -S -u 999 cassandra-operator
 COPY build/bin/cassandra-operator /cassandra-operator
 
-ENTRYPOINT ["/sbin/my_init", "--quiet", "--", "/cassandra-operator"]
+USER 999
+
+ENTRYPOINT ["/cassandra-operator"]

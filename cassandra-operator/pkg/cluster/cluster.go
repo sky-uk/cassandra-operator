@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ import (
 )
 
 const (
+	// UserID is the ID of the operating system user which the various containers provisioned by the operator should
+	// be run as.
+	UserID = 999
+
 	// OperatorLabel is a label used on all kubernetes resources created by this Operator
 	OperatorLabel = "sky.uk/cassandra-operator"
 
@@ -131,6 +136,9 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 					InitContainers: []v1.Container{
 						c.createInitConfigContainer(),
 						c.createCassandraBootstrapperContainer(rack),
+					},
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsUser: ptr.Int64(UserID),
 					},
 					Containers: []v1.Container{
 						c.createCassandraContainer(rack),
@@ -307,6 +315,9 @@ func (c *Cluster) createCronJob(objectName, serviceAccountName, schedule string,
 					Template: v1.PodTemplateSpec{
 						ObjectMeta: c.objectMetadataWithOwner(objectName, "app", objectName),
 						Spec: v1.PodSpec{
+							SecurityContext: &v1.PodSecurityContext{
+								RunAsUser: ptr.Int64(UserID),
+							},
 							RestartPolicy:      v1.RestartPolicyOnFailure,
 							ServiceAccountName: serviceAccountName,
 							Containers:         []v1.Container{*container},

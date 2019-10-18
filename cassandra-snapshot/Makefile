@@ -50,7 +50,7 @@ setup: ensure-go-modules
 
 go-build: ensure-build-dir-exists ensure-go-modules
 	@echo "== build"
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(buildDir)/bin/cassandra-snapshot -v github.com/sky-uk/cassandra-operator/cassandra-snapshot/cmd
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(buildDir)/bin/cassandra-snapshot -v github.com/sky-uk/cassandra-operator/cassandra-snapshot/cmd
 	KUBE_CONTEXT=ignore go test -run xxxxx $(testPkgs)  # build the test code but don't run any tests yet
 
 go-install:
