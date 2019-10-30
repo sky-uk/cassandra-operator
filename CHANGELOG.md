@@ -1,5 +1,9 @@
 # Changes
 
+## 0.77.0-alpha
+
+- [FEATURE] [Upgrade to Kubernetes 1.12](#211) (@sebbonnet)
+
 ## 0.76.1-alpha
 
 - [BUGFIX] [Unable to create /var/lib/cassandra/data on EBS volumes](#209)

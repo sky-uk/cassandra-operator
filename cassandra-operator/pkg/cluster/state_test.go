@@ -289,19 +289,19 @@ func (m mocks) assertAll(t GinkgoTInterface) {
 
 func (m mocks) anEmptyStatefulsetsListIsFoundIn(namespaceName types.NamespacedName) {
 	m.objectFactory.On("newStatefulSetList").Return(&v1beta2.StatefulSetList{})
-	m.client.On("List", context.TODO(), &v1beta2.StatefulSetList{}, mock.AnythingOfType("[]client.ListOptionFunc")).
+	m.client.On("List", context.TODO(), &v1beta2.StatefulSetList{}, mock.AnythingOfType("[]client.ListOption")).
 		Return(nil)
 }
 
 func (m mocks) noStatefulsetsAreFoundIn(namespaceName types.NamespacedName) {
 	m.objectFactory.On("newStatefulSetList").Return(&v1beta2.StatefulSetList{})
-	m.client.On("List", context.TODO(), &v1beta2.StatefulSetList{}, mock.AnythingOfType("[]client.ListOptionFunc")).
+	m.client.On("List", context.TODO(), &v1beta2.StatefulSetList{}, mock.AnythingOfType("[]client.ListOption")).
 		Return(errors.NewNotFound(v1beta2.Resource("statefulset"), namespaceName.Name))
 }
 
 func (m mocks) statefulsetsAreFoundIn(namespaceName types.NamespacedName, statefulsetsFound *v1beta2.StatefulSetList) {
 	m.objectFactory.On("newStatefulSetList").Return(statefulsetsFound)
-	m.client.On("List", context.TODO(), statefulsetsFound, mock.AnythingOfType("[]client.ListOptionFunc")).
+	m.client.On("List", context.TODO(), statefulsetsFound, mock.AnythingOfType("[]client.ListOption")).
 		Return(nil)
 }
 
@@ -437,7 +437,7 @@ func (c *mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.
 	args := c.Called(ctx, key, obj)
 	return args.Error(0)
 }
-func (c *mockClient) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOptionFunc) error {
+func (c *mockClient) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 	var args mock.Arguments
 	if len(opts) > 0 {
 		args = c.Called(ctx, obj, opts)
@@ -446,7 +446,7 @@ func (c *mockClient) Update(ctx context.Context, obj runtime.Object, opts ...cli
 	}
 	return args.Error(0)
 }
-func (c *mockClient) List(ctx context.Context, list runtime.Object, opts ...client.ListOptionFunc) error {
+func (c *mockClient) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 	var args mock.Arguments
 	if len(opts) > 0 {
 		args = c.Called(ctx, list, opts)
@@ -455,13 +455,16 @@ func (c *mockClient) List(ctx context.Context, list runtime.Object, opts ...clie
 	}
 	return args.Error(0)
 }
-func (c *mockClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOptionFunc) error {
+func (c *mockClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
 	return fmt.Errorf("not implemented")
 }
-func (c *mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOptionFunc) error {
+func (c *mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOption) error {
 	return fmt.Errorf("not implemented")
 }
-func (c *mockClient) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOptionFunc) error {
+func (c *mockClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
+	return fmt.Errorf("not implemented")
+}
+func (c *mockClient) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
 	return fmt.Errorf("not implemented")
 }
 func (c *mockClient) Status() client.StatusWriter {

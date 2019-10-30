@@ -15,7 +15,7 @@ curl --silent \
      --show-error \
      --location \
      --output kubectl \
-     https://storage.googleapis.com/kubernetes-release/release/v1.10.13/bin/linux/amd64/kubectl \
+     https://storage.googleapis.com/kubernetes-release/release/v1.13.12/bin/linux/amd64/kubectl \
      --output goss \
      https://github.com/aelsabbahy/goss/releases/download/v0.3.7/goss-linux-amd64 \
      --output dgoss \

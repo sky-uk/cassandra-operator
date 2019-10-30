@@ -68,7 +68,7 @@ func (cass *currentClusterStateFinder) findClusterStateFor(desiredCassandra *v1a
 
 func (cass *currentClusterStateFinder) findStatefulSetsFor(desiredCassandra *v1alpha1.Cassandra) (*v1beta2.StatefulSetList, error) {
 	statefulSets := cass.objectFactory.newStatefulSetList()
-	options := []client.ListOptionFunc{
+	options := []client.ListOption{
 		client.InNamespace(desiredCassandra.Namespace),
 		client.MatchingLabels(map[string]string{OperatorLabel: desiredCassandra.Name}),
 	}

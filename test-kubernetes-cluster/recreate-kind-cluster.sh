@@ -47,9 +47,6 @@ data:
     standard-zone-${zone}:
        hostDir: /mnt/pv-zone-${zone}
        mountDir: /mnt/pv-zone-${zone}
-       blockCleanerCommand:
-         - "/scripts/shred.sh"
-         - "2"
        volumeMode: Filesystem
        fsType: ext4
 ---
@@ -69,7 +66,7 @@ spec:
     spec:
       serviceAccountName: local-storage-admin
       containers:
-        - image: "quay.io/external_storage/local-volume-provisioner:v2.2.0"
+        - image: "quay.io/external_storage/local-volume-provisioner:v2.3.3"
           name: provisioner
           securityContext:
             privileged: true
@@ -166,7 +163,7 @@ nodes:
 EOF
 
 # node image officially supported for v0.5.1 - see https://github.com/kubernetes-sigs/kind/releases/tag/v0.5.1
-KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.11.10@sha256:bb22258625199ba5e47fb17a8a8a7601e536cd03456b42c1ee32672302b1f909"}
+KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.12.10@sha256:e43003c6714cc5a9ba7cf1137df3a3b52ada5c3f2c77f8c94a4d73c82b64f6f3"}
 kind create cluster --loglevel=info --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
 export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
 kubectl config rename-context "kubernetes-admin@kind" "kind"
