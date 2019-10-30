@@ -471,6 +471,22 @@ var _ = Describe("creation of stateful sets", func() {
 			Expect(*sidecarContainer.Resources.Requests.Memory()).To(Equal(resource.MustParse("1")))
 		})
 	})
+
+	Describe("security context", func() {
+		It("should set runAsUser, runAsGroup and fsGroup to the correct values on the pod spec", func() {
+			// when
+			statefulSets := createStatefulSetsFor(clusterDef)
+
+			// then
+			Expect(statefulSets.Items).To(HaveLen(2))
+			for _, statefulSet := range statefulSets.Items {
+				securityContext := statefulSet.Spec.Template.Spec.SecurityContext
+				Expect(*securityContext.RunAsUser).To(Equal(UserID))
+				Expect(*securityContext.FSGroup).To(Equal(GroupID))
+				Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
+			}
+		})
+	})
 })
 
 var _ = Describe("modification of stateful sets", func() {
@@ -743,6 +759,19 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(snapshotContainer.Image).To(ContainSubstring("somerepo/snapshot:v1"))
 	})
 
+	It("should set runAsUser, runAsGroup and fsGroup to the correct values on the pod spec", func() {
+		// given
+		cluster := ACluster(clusterDef)
+
+		// when
+		cronJob := cluster.CreateSnapshotJob()
+
+		// then
+		securityContext := cronJob.Spec.JobTemplate.Spec.Template.Spec.SecurityContext
+		Expect(*securityContext.RunAsUser).To(Equal(UserID))
+		Expect(*securityContext.FSGroup).To(Equal(GroupID))
+		Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
+	})
 })
 
 var _ = Describe("creation of snapshot cleanup job", func() {
@@ -840,6 +869,19 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(cleanupContainer.Image).To(ContainSubstring("somerepo/snapshot:v1"))
 	})
 
+	It("should set runAsUser, runAsGroup and fsGroup to the correct values on the pod spec", func() {
+		// given
+		cluster := ACluster(clusterDef)
+
+		// when
+		cronJob := cluster.CreateSnapshotCleanupJob()
+
+		// then
+		securityContext := cronJob.Spec.JobTemplate.Spec.Template.Spec.SecurityContext
+		Expect(*securityContext.RunAsUser).To(Equal(UserID))
+		Expect(*securityContext.FSGroup).To(Equal(GroupID))
+		Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
+	})
 })
 
 func ACluster(clusterDef *v1alpha1.Cassandra) *Cluster {

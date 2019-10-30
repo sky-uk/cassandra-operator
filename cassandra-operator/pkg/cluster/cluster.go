@@ -23,7 +23,10 @@ import (
 const (
 	// UserID is the ID of the operating system user which the various containers provisioned by the operator should
 	// be run as.
-	UserID = 999
+	UserID = int64(999)
+
+	// GroupID is the primary group of the user which runs the containers.
+	GroupID = UserID
 
 	// OperatorLabel is a label used on all kubernetes resources created by this Operator
 	OperatorLabel = "sky.uk/cassandra-operator"
@@ -53,6 +56,7 @@ var (
 	sidecarCPULimit         resource.Quantity
 	operatorManagedVolumes  map[string]bool
 	alphanumericChars       *regexp.Regexp
+	securityContext         *v1.PodSecurityContext
 )
 
 func init() {
@@ -64,6 +68,11 @@ func init() {
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
 	alphanumericChars = regexp.MustCompile("[^a-zA-Z0-9]+")
+	securityContext = &v1.PodSecurityContext{
+		RunAsUser:  ptr.Int64(UserID),
+		RunAsGroup: ptr.Int64(GroupID),
+		FSGroup:    ptr.Int64(GroupID),
+	}
 }
 
 // Cluster defines the properties of a Cassandra cluster which the operator should manage.
@@ -137,9 +146,7 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 						c.createInitConfigContainer(),
 						c.createCassandraBootstrapperContainer(rack),
 					},
-					SecurityContext: &v1.PodSecurityContext{
-						RunAsUser: ptr.Int64(UserID),
-					},
+					SecurityContext: securityContext,
 					Containers: []v1.Container{
 						c.createCassandraContainer(rack),
 						c.createCassandraSidecarContainer(rack),
@@ -315,9 +322,7 @@ func (c *Cluster) createCronJob(objectName, serviceAccountName, schedule string,
 					Template: v1.PodTemplateSpec{
 						ObjectMeta: c.objectMetadataWithOwner(objectName, "app", objectName),
 						Spec: v1.PodSpec{
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser: ptr.Int64(UserID),
-							},
+							SecurityContext:    securityContext,
 							RestartPolicy:      v1.RestartPolicyOnFailure,
 							ServiceAccountName: serviceAccountName,
 							Containers:         []v1.Container{*container},

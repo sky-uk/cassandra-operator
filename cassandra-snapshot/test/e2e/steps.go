@@ -22,6 +22,11 @@ const (
 
 var (
 	TerminateImmediately = int64(0)
+	securityContext      = &v1.PodSecurityContext{
+		RunAsUser:  ptr.Int64(cluster.UserID),
+		RunAsGroup: ptr.Int64(cluster.GroupID),
+		FSGroup:    ptr.Int64(cluster.GroupID),
+	}
 )
 
 func CassandraPodExistsWithLabels(labelsAndValues ...string) *v1.Pod {
@@ -52,9 +57,7 @@ func createCassandraPod(labels map[string]string, podName string) (*v1.Pod, erro
 			Labels:    labels,
 		},
 		Spec: v1.PodSpec{
-			SecurityContext: &v1.PodSecurityContext{
-				RunAsUser: ptr.Int64(cluster.UserID),
-			},
+			SecurityContext: securityContext,
 			Containers: []v1.Container{
 				{
 					Name:           "cassandra",
@@ -79,9 +82,7 @@ func createCassandraPodWithCustomConfig(labels map[string]string, podName string
 			Labels:    labels,
 		},
 		Spec: v1.PodSpec{
-			SecurityContext: &v1.PodSecurityContext{
-				RunAsUser: ptr.Int64(cluster.UserID),
-			},
+			SecurityContext: securityContext,
 			InitContainers: []v1.Container{
 				{
 					Name:      "copy-default-cassandra-config",
@@ -200,9 +201,7 @@ func RunCommandInCassandraSnapshotPod(clusterName, command string, arg ...string
 			Labels:    map[string]string{OperatorLabel: clusterName, "test-command-runner": ""},
 		},
 		Spec: v1.PodSpec{
-			SecurityContext: &v1.PodSecurityContext{
-				RunAsUser: ptr.Int64(cluster.UserID),
-			},
+			SecurityContext:    securityContext,
 			ServiceAccountName: "cassandra-snapshot",
 			RestartPolicy:      v1.RestartPolicyNever,
 			Containers: []v1.Container{

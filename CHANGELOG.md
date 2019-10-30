@@ -1,5 +1,9 @@
 # Changes
 
+## 0.76.1-alpha
+
+- [BUGFIX] [Unable to create /var/lib/cassandra/data on EBS volumes](#209)
+
 ## 0.76.0-alpha
 
 - [BUGFIX] [Allow operator and node containers to run as non-root user](#208) (@alangibson01 @sebbonnet)
