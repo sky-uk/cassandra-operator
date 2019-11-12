@@ -32,6 +32,10 @@ func (h *statefulSetAccessor) registerStatefulSet(c *cluster.Cluster, rack *v1al
 	log.Infof("Stateful set created for cluster : %s in rack: %s", c.QualifiedName(), rack.Name)
 
 	if err = h.clusterAccessor.WaitUntilRackChangeApplied(c, statefulSet); err != nil {
+		if err == cluster.ErrReconciliationInterrupted {
+			return err
+		}
+
 		log.Warnf("%v: subsequent stateful sets will still be created but some pods may restart", err)
 	}
 
@@ -52,7 +56,12 @@ func (h *statefulSetAccessor) updateStatefulSet(c *cluster.Cluster, customConfig
 		return fmt.Errorf("unable to update statefulSet for rack %s: %v. Other racks will not be updated", rack.Name, err)
 	}
 
-	if err = h.clusterAccessor.WaitUntilRackChangeApplied(c, updatedStatefulSet); err != nil {
+	err = h.clusterAccessor.WaitUntilRackChangeApplied(c, updatedStatefulSet)
+	if err == cluster.ErrReconciliationInterrupted {
+		return err
+	}
+
+	if err != nil {
 		return fmt.Errorf("%v: other racks will not be updated", err)
 	}
 
@@ -63,6 +72,10 @@ func (h *statefulSetAccessor) patchStatefulSet(c *cluster.Cluster, clusterChange
 	log.Infof("Applying patch for rack %s in cluster %s: %s", clusterChange.Rack.Name, c.QualifiedName(), clusterChange.Patch)
 
 	updatedStatefulSet, err := h.clusterAccessor.PatchStatefulSet(c, &clusterChange.Rack, clusterChange.Patch)
+	if err == cluster.ErrReconciliationInterrupted {
+		return err
+	}
+
 	if err != nil {
 		return fmt.Errorf("unable to update rack %s: %v. Other racks will not be updated", clusterChange.Rack.Name, err)
 	}

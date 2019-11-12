@@ -14,15 +14,15 @@ type AddServiceOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddServiceOperation) Execute() error {
+func (o *AddServiceOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 
 	_, err := o.clusterAccessor.CreateServiceForCluster(c)
 	if err != nil {
-		return fmt.Errorf("error while creating headless service for cluster %s: %v", c.QualifiedName(), err)
+		return false, fmt.Errorf("error while creating headless service for cluster %s: %v", c.QualifiedName(), err)
 	}
 	log.Infof("Headless service created for cluster : %s", c.QualifiedName())
-	return nil
+	return false, nil
 }
 
 func (o *AddServiceOperation) String() string {

@@ -7,20 +7,21 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/hashicorp/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/validation"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"path/filepath"
+	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 )
 
 type objectReferenceFactory interface {
@@ -41,13 +42,13 @@ type requestContext struct {
 
 // CassandraReconciler is a controller that reconciles Cassandra resources
 type CassandraReconciler struct {
-	clusters       map[types.NamespacedName]*v1alpha1.Cassandra
-	client         client.Client
-	eventRecorder  record.EventRecorder
-	eventReceiver  event.Receiver
-	objectFactory  objectReferenceFactory
-	stateFinder    cluster.StateFinder
-	operatorConfig *Config
+	clusters              map[types.NamespacedName]*v1alpha1.Cassandra
+	client                client.Client
+	eventRecorder         record.EventRecorder
+	eventReceiver         event.Receiver
+	objectFactory         objectReferenceFactory
+	stateFinder           cluster.StateFinder
+	operatorConfig        *Config
 }
 
 // Implement reconcile.Reconciler so the controller can reconcile objects
@@ -56,13 +57,13 @@ var _ reconcile.Reconciler = &CassandraReconciler{}
 // NewReconciler creates a CassandraReconciler
 func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventReceiver event.Receiver, operatorConfig *Config) *CassandraReconciler {
 	return &CassandraReconciler{
-		clusters:       clusters,
-		client:         client,
-		eventRecorder:  eventRecorder,
-		eventReceiver:  eventReceiver,
-		objectFactory:  &defaultReferenceFactory{},
-		stateFinder:    cluster.NewStateFinder(client),
-		operatorConfig: operatorConfig,
+		clusters:              clusters,
+		client:                client,
+		eventRecorder:         eventRecorder,
+		eventReceiver:         eventReceiver,
+		objectFactory:         &defaultReferenceFactory{},
+		stateFinder:           cluster.NewStateFinder(client),
+		operatorConfig:        operatorConfig,
 	}
 }
 
@@ -82,9 +83,12 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 	// Lookup the object to reconcile or delete it right away and exit early
 	desiredCassandra := r.objectFactory.newCassandra()
 	err := r.client.Get(context.TODO(), request.NamespacedName, desiredCassandra)
+	cassandraNotFound := errors.IsNotFound(err)
 	if unexpectedError(err) {
 		return retryReconciliation("failed to lookup cassandra definition", err)
-	} else if errors.IsNotFound(err) || cassandraIsBeingDeleted(desiredCassandra) {
+	}
+
+	if cassandraNotFound || cassandraIsBeingDeleted(desiredCassandra) {
 		logger.Debug("Cassandra definition not found. Going to delete associated resources")
 		delete(r.clusters, ctx.namespaceName)
 		cassandraToDelete := &v1alpha1.Cassandra{ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace}}
@@ -95,14 +99,20 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 	r.clusters[ctx.namespaceName] = desiredCassandra
 
+	desiredConfigMap := r.objectFactory.newConfigMap()
+	err = r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.CustomConfigMapName()}, desiredConfigMap)
+	if unexpectedError(err) {
+		return retryReconciliation("failed to lookup potential configMap", err)
+	}
+
 	// Reconcile the custom config first, as new statefulSet won't bootstrap
 	// if they need to mount a volume for a configMap that no longer exists
 	// This is an optimisation as the cluster will eventually self heal
 	var combinedEvents []*event.Event
 	combinedError := &multierror.Error{}
-	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCustomConfig, ctx, desiredCassandra, combinedEvents, combinedError)
-	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraService, ctx, desiredCassandra, combinedEvents, combinedError)
-	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraDefinition, ctx, desiredCassandra, combinedEvents, combinedError)
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCustomConfig, ctx, desiredCassandra, desiredConfigMap, combinedEvents, combinedError)
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraService, ctx, desiredCassandra, desiredConfigMap, combinedEvents, combinedError)
+	combinedEvents, combinedError = r.appendChanges(r.determineChangesForCassandraDefinition, ctx, desiredCassandra, desiredConfigMap, combinedEvents, combinedError)
 	for _, evt := range combinedEvents {
 		if err := r.eventReceiver.Receive(evt); err != nil {
 			combinedError = multierror.Append(combinedError, fmt.Errorf("failed to process event %s: %v", evt.Kind, err))
@@ -116,10 +126,10 @@ func (r *CassandraReconciler) Reconcile(request reconcile.Request) (reconcile.Re
 	return completeReconciliation()
 }
 
-type changeDeterminer = func(*requestContext, *v1alpha1.Cassandra) (*event.Event, error)
+type changeDeterminer = func(*requestContext, *v1alpha1.Cassandra, *corev1.ConfigMap) (*event.Event, error)
 
-func (r *CassandraReconciler) appendChanges(determineChange changeDeterminer, ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, events []*event.Event, errors *multierror.Error) ([]*event.Event, *multierror.Error) {
-	evt, err := determineChange(ctx, desiredCassandra)
+func (r *CassandraReconciler) appendChanges(determineChange changeDeterminer, ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, desiredConfigMap *corev1.ConfigMap, events []*event.Event, errors *multierror.Error) ([]*event.Event, *multierror.Error) {
+	evt, err := determineChange(ctx, desiredCassandra, desiredConfigMap)
 	if evt != nil {
 		events = append(events, evt)
 	}
@@ -129,7 +139,7 @@ func (r *CassandraReconciler) appendChanges(determineChange changeDeterminer, ct
 	return events, errors
 }
 
-func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
+func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, desiredConfigMap *corev1.ConfigMap) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra")
 
@@ -170,16 +180,11 @@ func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *reques
 	return nil, nil
 }
 
-func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
+func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, desiredConfigMap *corev1.ConfigMap) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra custom config")
 
-	configMap := r.objectFactory.newConfigMap()
-	configMapErr := r.client.Get(context.TODO(), types.NamespacedName{Namespace: desiredCassandra.Namespace, Name: desiredCassandra.CustomConfigMapName()}, configMap)
-	configMapFound := configMapErr == nil
-	if unexpectedError(configMapErr) {
-		return nil, fmt.Errorf("failed to lookup potential configMap: %v", configMapErr)
-	}
+	configMapFound := desiredConfigMap.ResourceVersion != ""
 
 	configHashes, configHashErr := r.stateFinder.FindCurrentConfigHashFor(desiredCassandra)
 	logger.Debugf("Custom config hash looked up: %v", configHashes)
@@ -191,7 +196,7 @@ func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContex
 	}
 
 	currentCassandraHasCustomConfig := len(configHashes) > 0
-	if errors.IsNotFound(configMapErr) {
+	if !configMapFound {
 		if currentCassandraHasCustomConfig {
 			logger.Debug("Custom config configured but no configMap exists. Going to delete configuration")
 			return &event.Event{
@@ -209,7 +214,7 @@ func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContex
 		return &event.Event{
 			Kind: event.AddCustomConfig,
 			Key:  ctx.eventKey,
-			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+			Data: event.ConfigMapChange{ConfigMap: desiredConfigMap, Cassandra: desiredCassandra},
 		}, nil
 	}
 
@@ -218,28 +223,28 @@ func (r *CassandraReconciler) determineChangesForCustomConfig(ctx *requestContex
 		return &event.Event{
 			Kind: event.AddCustomConfig,
 			Key:  ctx.eventKey,
-			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+			Data: event.ConfigMapChange{ConfigMap: desiredConfigMap, Cassandra: desiredCassandra},
 		}, nil
 	}
 
 	configHashNotChanged := true
 	for _, configHash := range configHashes {
-		configHashNotChanged = configHashNotChanged && configHash == hash.ConfigMapHash(configMap)
+		configHashNotChanged = configHashNotChanged && configHash == hash.ConfigMapHash(desiredConfigMap)
 	}
 	if !configHashNotChanged {
 		logger.Debug("Custom config has changed. Going to update configuration")
 		return &event.Event{
 			Kind: event.UpdateCustomConfig,
 			Key:  ctx.eventKey,
-			Data: event.ConfigMapChange{ConfigMap: configMap, Cassandra: desiredCassandra},
+			Data: event.ConfigMapChange{ConfigMap: desiredConfigMap, Cassandra: desiredCassandra},
 		}, nil
 	}
 
-	logger.Debugf("No config map changes detected for configMap %s.%s", configMap.Namespace, configMap.Name)
+	logger.Debugf("No config map changes detected for configMap %s.%s", desiredConfigMap.Namespace, desiredConfigMap.Name)
 	return nil, nil
 }
 
-func (r *CassandraReconciler) determineChangesForCassandraService(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra) (*event.Event, error) {
+func (r *CassandraReconciler) determineChangesForCassandraService(ctx *requestContext, desiredCassandra *v1alpha1.Cassandra, desiredConfigMap *corev1.ConfigMap) (*event.Event, error) {
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra Service")
 
@@ -264,12 +269,21 @@ func newContext(request reconcile.Request) *requestContext {
 		eventKey: clusterID,
 		logger: log.WithFields(
 			log.Fields{
-				"logger":  "reconciler.go",
+				"logger":  callerFilename(),
 				"cluster": clusterID,
 			},
 		),
 		namespaceName: types.NamespacedName{Namespace: request.Namespace, Name: request.Name},
 	}
+}
+
+func callerFilename() string {
+	logger := "reconciler.go"
+	_, file, _, ok := runtime.Caller(2)
+	if ok {
+		logger = filepath.Base(file)
+	}
+	return logger
 }
 
 func retryReconciliation(reason string, err error) (reconcile.Result, error) {

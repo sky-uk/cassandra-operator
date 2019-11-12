@@ -186,3 +186,22 @@ At a high level, the sequence of events is as follows:
 - current and desired states are compared to determine the type of changes to apply
 - for each change a corresponding event is triggered synchronously
 - the event is then processed by the `receiver` which applies the changes 
+
+## Interrupting in-progress reconciliations
+
+The process of applying the changes required in a reconciliation may take some time. For example, the `StatefulSet` for
+the racks of the cluster will be updated one by one, and if an update involves adding new pods, an unknown amount of
+time will be required in order for data streaming to that pod to complete. While this process is happening, the
+reconciler enters a polling loop, waiting for the operation to complete.
+
+There are also cases where it will be impossible for the update of all pods in a `StatefulSet` to complete successfully,
+perhaps if there is insufficient memory, CPU or storage in a cluster to allow a pod to be scheduled. In this event, it
+is possible for the reconciliation process to become "stuck" waiting for an operation to complete.
+
+In order to account for this possibility, the operator also contains a second component called the interrupter, which
+is also watching for changes made to `Cassandra` resources. When notified of a change to a `Cassandra` or related
+`ConfigMap` which is currently the subject of a reconciliation, it will check if the `resourceVersion` of either is
+different from the one which triggered the current reconciliation. If this is the case, the interrupter will send an
+interrupt message down a channel to the reconciler, which will force the reconciler to stop polling.
+
+Following this, the reconciler will then begin processing the most recent update to the `Cassandra` resource.

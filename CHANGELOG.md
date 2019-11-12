@@ -1,5 +1,9 @@
 # Changes
 
+## 0.78.0-alpha
+
+- [FEATURE] [Implement operation interruption](#212) (@alangibson01)
+
 ## 0.77.0-alpha
 
 - [FEATURE] [Upgrade to Kubernetes 1.12](#211) (@sebbonnet)

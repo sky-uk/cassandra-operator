@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"regexp"
 	"strings"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
 )
 
 const (

@@ -15,7 +15,7 @@ type AddClusterOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddClusterOperation) Execute() error {
+func (o *AddClusterOperation) Execute() (bool, error) {
 	log.Infof("New Cassandra cluster definition added: %s.%s", o.cassandra.Namespace, o.cassandra.Name)
 	configMap := o.clusterAccessor.FindCustomConfigMap(o.cassandra.Namespace, o.cassandra.Name)
 	if configMap != nil {
@@ -24,10 +24,14 @@ func (o *AddClusterOperation) Execute() error {
 
 	c := cluster.New(o.cassandra)
 	err := o.statefulSetAccessor.registerStatefulSets(c, configMap)
-	if err != nil {
-		return fmt.Errorf("error while creating stateful sets for cluster %s: %v", c.QualifiedName(), err)
+	if err == cluster.ErrReconciliationInterrupted {
+		return true, nil
 	}
-	return nil
+
+	if err != nil {
+		return false, fmt.Errorf("error while creating stateful sets for cluster %s: %v", c.QualifiedName(), err)
+	}
+	return false, nil
 }
 
 func (o *AddClusterOperation) String() string {

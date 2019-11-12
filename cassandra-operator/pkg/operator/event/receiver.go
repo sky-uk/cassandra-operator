@@ -1,8 +1,6 @@
 package event
 
 import (
-	"fmt"
-	"github.com/hashicorp/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
@@ -34,15 +32,17 @@ type Receiver interface {
 
 // OperatorEventReceiver implements Receiver
 type OperatorEventReceiver struct {
-	clusterAccessor  cluster.Accessor
-	operationFactory operations.OperationFactory
+	clusterAccessor   cluster.Accessor
+	operationFactory  operations.OperationFactory
+	operationComposer operations.OperationComposer
 }
 
 // NewEventReceiver creates a new OperatorEventReceiver
 func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) Receiver {
 	return &OperatorEventReceiver{
-		clusterAccessor:  clusterAccessor,
-		operationFactory: operations.NewOperationFactory(clusterAccessor, metricsPoller, eventRecorder, adjuster.New()),
+		clusterAccessor:   clusterAccessor,
+		operationComposer: operations.NewOperationComposer(),
+		operationFactory:  operations.NewOperationFactory(clusterAccessor, metricsPoller, eventRecorder, adjuster.New()),
 	}
 }
 
@@ -53,16 +53,14 @@ func (r *OperatorEventReceiver) Receive(event *Event) error {
 	operationsToRun := r.operationsToExecute(event)
 	logger.Infof("Event will trigger %d operations: %v", len(operationsToRun), operationsToRun)
 
-	result := &multierror.Error{}
-	for _, operation := range operationsToRun {
-		logger.Debugf("Executing operation %s", operation.String())
-		if err := operation.Execute(); err != nil {
-			result = multierror.Append(result, fmt.Errorf("error while execution operation %s: %v", operation.String(), err))
-		}
+	stopped, err := r.operationComposer.Execute(operationsToRun)
+	if stopped {
+		logger.Debug("Event complete - not all operations were executed")
+	} else {
+		logger.Debug("Event complete")
 	}
-	logger.Debug("Event complete")
 
-	return result.ErrorOrNil()
+	return err
 }
 
 func (r *OperatorEventReceiver) operationsToExecute(event *Event) []operations.Operation {

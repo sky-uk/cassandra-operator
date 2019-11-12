@@ -19,16 +19,21 @@ type UpdateCustomConfigOperation struct {
 }
 
 // Execute performs the operation
-func (o *UpdateCustomConfigOperation) Execute() error {
+func (o *UpdateCustomConfigOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config updated for cluster %s", o.cassandra.QualifiedName())
 	for _, rack := range o.cassandra.Spec.Racks {
 		patchChange := o.adjuster.CreateConfigMapHashPatchForRack(&rack, o.configMap)
-		if err := o.statefulSetAccessor.patchStatefulSet(c, patchChange); err != nil {
-			return fmt.Errorf("error while attempting to update rack %s in cluster %s as a result of a custom config change. No further updates will be applied: %v", rack.Name, o.cassandra.QualifiedName(), err)
+		err := o.statefulSetAccessor.patchStatefulSet(c, patchChange)
+		if err == cluster.ErrReconciliationInterrupted {
+			return true, nil
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("error while attempting to update rack %s in cluster %s as a result of a custom config change. No further updates will be applied: %v", rack.Name, o.cassandra.QualifiedName(), err)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func (o *UpdateCustomConfigOperation) String() string {

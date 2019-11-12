@@ -16,21 +16,21 @@ type DeleteSnapshotCleanupOperation struct {
 }
 
 // Execute performs the operation
-func (o *DeleteSnapshotCleanupOperation) Execute() error {
+func (o *DeleteSnapshotCleanupOperation) Execute() (bool, error) {
 	qualifiedName := o.cassandra.QualifiedName()
 	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotCleanupJobName()))
 	if err != nil {
-		return fmt.Errorf("error while retrieving snapshot cleanup job for cluster %s: %v", qualifiedName, err)
+		return false, fmt.Errorf("error while retrieving snapshot cleanup job for cluster %s: %v", qualifiedName, err)
 	}
 
 	if job != nil {
 		err = o.clusterAccessor.DeleteCronJob(job)
 		if err != nil {
-			return fmt.Errorf("error while deleting snapshot cleanup job %s for cluster %s: %v", job.Name, qualifiedName, err)
+			return false, fmt.Errorf("error while deleting snapshot cleanup job %s for cluster %s: %v", job.Name, qualifiedName, err)
 		}
 		o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterSnapshotCleanupUnscheduleEvent, "Snapshot cleanup unscheduled for cluster %s", qualifiedName)
 	}
-	return nil
+	return false, nil
 }
 
 func (o *DeleteSnapshotCleanupOperation) String() string {

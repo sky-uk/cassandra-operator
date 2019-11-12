@@ -17,16 +17,16 @@ type UpdateSnapshotCleanupOperation struct {
 }
 
 // Execute performs the operation
-func (o *UpdateSnapshotCleanupOperation) Execute() error {
+func (o *UpdateSnapshotCleanupOperation) Execute() (bool, error) {
 	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotCleanupJobName()))
 	if err != nil {
-		return fmt.Errorf("error while retrieving snapshot cleanup job for cluster %s: %v", o.cassandra.QualifiedName(), err)
+		return false, fmt.Errorf("error while retrieving snapshot cleanup job for cluster %s: %v", o.cassandra.QualifiedName(), err)
 	}
 
 	if job != nil {
-		return o.updateSnapshotCleanupJob(job)
+		return false, o.updateSnapshotCleanupJob(job)
 	}
-	return nil
+	return false, nil
 }
 
 func (o *UpdateSnapshotCleanupOperation) updateSnapshotCleanupJob(job *v1beta1.CronJob) error {

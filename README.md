@@ -17,7 +17,8 @@ It is not yet recommended for use in production environments.
 * deployable cluster-wide
 * customisable Cassandra config (`cassandra.yaml`, `jvm.options`, extra libs)
 * customisable liveness / readiness probes
-* automated rolling update of Cassandra cluster definition changes 
+* automated rolling update of Cassandra cluster definition changes
+* interruption of in-progress reconciliations when newer changes are detected
 * cluster and node level metrics
 * a comprehensive e2e test suite
 

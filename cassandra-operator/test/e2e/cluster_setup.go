@@ -109,7 +109,7 @@ func (c *ClusterBuilder) IsDefined() {
 	}
 
 	if !c.withoutCustomConfig {
-		_, err := customCassandraConfigMap(Namespace, c.clusterName, c.extraConfigFile)
+		_, err := customCassandraConfigMap(Namespace, c.clusterName, false, c.extraConfigFile)
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	}
 	_, err := cassandraResource(Namespace, c.clusterName, c.clusterSpec)
@@ -189,7 +189,7 @@ func cassandraResource(namespace, clusterName string, clusterSpec *v1alpha1.Cass
 	})
 }
 
-func customCassandraConfigMap(namespace, clusterName string, extraFiles ...*ExtraConfigFile) (*coreV1.ConfigMap, error) {
+func customCassandraConfigMap(namespace, clusterName string, update bool, extraFiles ...*ExtraConfigFile) (*coreV1.ConfigMap, error) {
 	configData := make(map[string]string)
 
 	for _, extraFile := range extraFiles {
@@ -205,17 +205,28 @@ func customCassandraConfigMap(namespace, clusterName string, extraFiles ...*Extr
 	configData["jvm.options"] = fileContent
 
 	cmClient := KubeClientset.CoreV1().ConfigMaps(namespace)
-	cm := &coreV1.ConfigMap{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: fmt.Sprintf("%s-config", clusterName),
-			Labels: map[string]string{
-				cluster.OperatorLabel: clusterName,
-			},
-		},
-		Data: configData,
-	}
+	var cm *coreV1.ConfigMap
+	if update {
+		cm, err = cmClient.Get(fmt.Sprintf("%s-config", clusterName), metaV1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		cm.Data = configData
 
-	return cmClient.Create(cm)
+		return cmClient.Update(cm)
+	} else {
+		cm = &coreV1.ConfigMap{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: fmt.Sprintf("%s-config", clusterName),
+				Labels: map[string]string{
+					cluster.OperatorLabel: clusterName,
+				},
+			},
+			Data: configData,
+		}
+
+		return cmClient.Create(cm)
+	}
 }
 
 func defaultJVMOptionsLocation() string {

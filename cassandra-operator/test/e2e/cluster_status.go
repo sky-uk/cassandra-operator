@@ -57,6 +57,11 @@ func statefulSetsWithLabel(namespace, label string) func() ([]*kubernetesResourc
 	}
 }
 
+func StatefulSetForRack(namespace, clusterName, rack string) (*kubernetesResource, error) {
+	statefulSet, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(fmt.Sprintf("%s-%s", clusterName, rack), metaV1.GetOptions{})
+	return &kubernetesResource{statefulSet}, err
+}
+
 func HeadlessServiceForCluster(namespace, clusterName string) func() (*kubernetesResource, error) {
 	return func() (*kubernetesResource, error) {
 		svcClient := KubeClientset.CoreV1().Services(namespace)

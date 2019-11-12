@@ -21,14 +21,14 @@ type UpdateClusterOperation struct {
 }
 
 // Execute performs the operation
-func (o *UpdateClusterOperation) Execute() error {
+func (o *UpdateClusterOperation) Execute() (bool, error) {
 	log.Infof("Cluster definition has been updated for cluster %s.%s", o.oldCassandra.Namespace, o.oldCassandra.Name)
 	c := cluster.New(o.newCassandra)
 
 	clusterChanges := o.adjuster.ChangesForCluster(o.oldCassandra, o.newCassandra)
 	if len(clusterChanges) == 0 {
 		log.Infof("No changes are required to be applied for cluster %s", o.oldCassandra.QualifiedName())
-		return nil
+		return false, nil
 	}
 
 	log.Debugf("%d cluster changes will be applied: \n%v", len(clusterChanges), clusterChanges)
@@ -37,23 +37,32 @@ func (o *UpdateClusterOperation) Execute() error {
 		case adjuster.UpdateRack:
 			customConfigMap := o.clusterAccessor.FindCustomConfigMap(o.newCassandra.Namespace, o.newCassandra.Name)
 			err := o.statefulSetAccessor.updateStatefulSet(c, customConfigMap, &clusterChange.Rack, c.UpdateStatefulSetToDesiredState)
+			if err == cluster.ErrReconciliationInterrupted {
+				return true, nil
+			}
+
 			if err != nil {
-				return fmt.Errorf("error while updating rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
+				return false, fmt.Errorf("error while updating rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
 			}
 		case adjuster.AddRack:
 			log.Infof("Adding new rack %s to cluster %s", clusterChange.Rack.Name, o.newCassandra.QualifiedName())
 
 			customConfigMap := o.clusterAccessor.FindCustomConfigMap(o.newCassandra.Namespace, o.newCassandra.Name)
-			if err := o.statefulSetAccessor.registerStatefulSet(c, &clusterChange.Rack, customConfigMap); err != nil {
-				return fmt.Errorf("error while creating stateful sets for added rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
+			err := o.statefulSetAccessor.registerStatefulSet(c, &clusterChange.Rack, customConfigMap)
+			if err == cluster.ErrReconciliationInterrupted {
+				return true, nil
+			}
+
+			if err != nil {
+				return false, fmt.Errorf("error while creating stateful sets for added rack %s in cluster %s: %v", clusterChange.Rack.Name, o.newCassandra.QualifiedName(), err)
 			}
 		default:
 			message := fmt.Sprintf("Change type '%s' isn't supported for cluster %s", clusterChange.ChangeType, o.newCassandra.QualifiedName())
 			o.eventRecorder.Event(o.oldCassandra, v1.EventTypeWarning, cluster.InvalidChangeEvent, message)
-			return fmt.Errorf(message)
+			return false, fmt.Errorf(message)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func (o *UpdateClusterOperation) String() string {

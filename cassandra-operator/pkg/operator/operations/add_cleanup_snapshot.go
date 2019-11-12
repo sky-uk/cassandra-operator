@@ -16,14 +16,14 @@ type AddSnapshotCleanupOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddSnapshotCleanupOperation) Execute() error {
+func (o *AddSnapshotCleanupOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	_, err := o.clusterAccessor.CreateCronJobForCluster(c, c.CreateSnapshotCleanupJob())
 	if err != nil {
-		return fmt.Errorf("error while creating snapshot cleanup job for cluster %s: %v", c.QualifiedName(), err)
+		return false, fmt.Errorf("error while creating snapshot cleanup job for cluster %s: %v", c.QualifiedName(), err)
 	}
 	o.eventRecorder.Eventf(c.Definition(), v1.EventTypeNormal, cluster.ClusterSnapshotCleanupScheduleEvent, "Snapshot cleanup scheduled for cluster %s", c.QualifiedName())
-	return nil
+	return false, nil
 }
 
 func (o *AddSnapshotCleanupOperation) String() string {

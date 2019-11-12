@@ -1,7 +1,9 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -12,11 +14,63 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/client/clientset/versioned"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
+
+// ActiveReconciliation is a record of a reconciliation which is currently in progress. It offers a way to mark a
+// reconciliation as complete or interrupted.
+type ActiveReconciliation struct {
+	CassandraRevision string
+	ConfigMapRevision string
+	interruptChannel  chan struct{}
+	complete          bool
+
+	sync.Mutex
+}
+
+// NewReconciliation creates a new ActiveReconciliation
+func NewReconciliation(cassandraRevision, configMapRevision string) *ActiveReconciliation {
+	return &ActiveReconciliation{
+		CassandraRevision: cassandraRevision,
+		ConfigMapRevision: configMapRevision,
+		interruptChannel:  make(chan struct{}),
+		complete:          false,
+	}
+}
+
+// Interrupt will send an interrupt message down the interruptChannel, if the reconciliation isn't already complete.
+func (a *ActiveReconciliation) Interrupt() {
+	a.Lock()
+	defer a.Unlock()
+
+	if !a.complete {
+		a.complete = true
+		a.interruptChannel <- struct{}{}
+	}
+}
+
+// Complete will mark a not-yet-complete reconciliation as complete, and close its interruptChannel.
+func (a *ActiveReconciliation) Complete() {
+	a.Lock()
+	defer a.Unlock()
+
+	if !a.complete {
+		a.complete = true
+		close(a.interruptChannel)
+	}
+}
+
+// InterruptChannel returns a receive-only channel which should be checked for an interrupt message, which would
+// mean the reconciliation should be interrupted.
+func (a *ActiveReconciliation) InterruptChannel() <-chan struct{} {
+	return a.interruptChannel
+}
+
+// ErrReconciliationInterrupted is an error which signifies that a reconciliation was interrupted.
+var ErrReconciliationInterrupted = errors.New("reconciliation interrupted by a more recent version")
 
 // Accessor exposes operations to access various kubernetes resources belonging to a Cluster
 type Accessor interface {
@@ -36,17 +90,19 @@ type Accessor interface {
 
 // clientsetBasedAccessor implements Accessor
 type clientsetBasedAccessor struct {
-	kubeClientset      *kubernetes.Clientset
-	cassandraClientset *versioned.Clientset
-	eventRecorder      record.EventRecorder
+	kubeClientset         *kubernetes.Clientset
+	cassandraClientset    *versioned.Clientset
+	eventRecorder         record.EventRecorder
+	activeReconciliations *sync.Map
 }
 
 // NewAccessor creates a new Accessor
-func NewAccessor(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clientset, eventRecorder record.EventRecorder) Accessor {
+func NewAccessor(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clientset, eventRecorder record.EventRecorder, activeReconciliations *sync.Map) Accessor {
 	return &clientsetBasedAccessor{
-		kubeClientset:      kubeClientset,
-		cassandraClientset: cassandraClientset,
-		eventRecorder:      eventRecorder,
+		kubeClientset:         kubeClientset,
+		cassandraClientset:    cassandraClientset,
+		eventRecorder:         eventRecorder,
+		activeReconciliations: activeReconciliations,
 	}
 }
 
@@ -109,7 +165,18 @@ func (h *clientsetBasedAccessor) WaitUntilRackChangeApplied(cluster *Cluster, st
 	// operations on other clusters.
 	time.Sleep(timeBeforeFirstCheck)
 
-	if err := wait.PollImmediateInfinite(timeBetweenChecks, h.statefulSetChangeApplied(cluster, statefulSet)); err != nil {
+	reconciliation := h.activeReconciliationForCluster(cluster)
+	h.activeReconciliations.Store(cluster.definition.QualifiedName(), reconciliation)
+	defer func() {
+		h.activeReconciliations.Delete(cluster.definition.QualifiedName())
+		reconciliation.Complete()
+	}()
+
+	if err := wait.PollImmediateInfinite(timeBetweenChecks, h.statefulSetChangeApplied(cluster, statefulSet, reconciliation.InterruptChannel())); err != nil {
+		if err == ErrReconciliationInterrupted {
+			return err
+		}
+
 		return fmt.Errorf("error while waiting for stateful set %s.%s creation to complete: %v", statefulSet.Namespace, statefulSet.Name, err)
 	}
 
@@ -117,6 +184,16 @@ func (h *clientsetBasedAccessor) WaitUntilRackChangeApplied(cluster *Cluster, st
 	log.Infof("stateful set %s.%s is ready", statefulSet.Namespace, statefulSet.Name)
 
 	return nil
+}
+
+func (h *clientsetBasedAccessor) activeReconciliationForCluster(cluster *Cluster) *ActiveReconciliation {
+	configMap := h.FindCustomConfigMap(cluster.definition.Namespace, cluster.definition.Name)
+	var configMapVersion string
+	if configMap != nil {
+		configMapVersion = configMap.ResourceVersion
+	}
+	reconciliation := NewReconciliation(cluster.definition.ResourceVersion, configMapVersion)
+	return reconciliation
 }
 
 // CreateCronJobForCluster creates a cronjob that will trigger the data snapshot for the supplied cluster
@@ -152,19 +229,25 @@ func (h *clientsetBasedAccessor) UpdateCronJob(job *v1beta1.CronJob) error {
 	return err
 }
 
-func (h *clientsetBasedAccessor) statefulSetChangeApplied(cluster *Cluster, appliedStatefulSet *v1beta2.StatefulSet) func() (bool, error) {
+func (h *clientsetBasedAccessor) statefulSetChangeApplied(cluster *Cluster, appliedStatefulSet *v1beta2.StatefulSet, stopCh <-chan struct{}) func() (bool, error) {
 	return func() (bool, error) {
-		currentStatefulSet, err := h.kubeClientset.AppsV1beta1().StatefulSets(appliedStatefulSet.Namespace).Get(appliedStatefulSet.Name, metaV1.GetOptions{})
-		if err != nil {
-			return false, err
+		select {
+		case <-stopCh:
+			return false, ErrReconciliationInterrupted
+
+		default:
+			currentStatefulSet, err := h.kubeClientset.AppsV1beta1().StatefulSets(appliedStatefulSet.Namespace).Get(appliedStatefulSet.Name, metaV1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+
+			controllerObservedChange := currentStatefulSet.Status.ObservedGeneration != nil &&
+				*currentStatefulSet.Status.ObservedGeneration >= appliedStatefulSet.Generation
+			updateCompleted := currentStatefulSet.Status.UpdateRevision == currentStatefulSet.Status.CurrentRevision
+			allReplicasReady := currentStatefulSet.Status.ReadyReplicas == currentStatefulSet.Status.Replicas
+
+			return controllerObservedChange && updateCompleted && allReplicasReady, nil
 		}
-
-		controllerObservedChange := currentStatefulSet.Status.ObservedGeneration != nil &&
-			*currentStatefulSet.Status.ObservedGeneration >= appliedStatefulSet.Generation
-		updateCompleted := currentStatefulSet.Status.UpdateRevision == currentStatefulSet.Status.CurrentRevision
-		allReplicasReady := currentStatefulSet.Status.ReadyReplicas == currentStatefulSet.Status.Replicas
-
-		return controllerObservedChange && updateCompleted && allReplicasReady, nil
 	}
 }
 

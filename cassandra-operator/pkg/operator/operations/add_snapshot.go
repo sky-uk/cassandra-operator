@@ -16,14 +16,14 @@ type AddSnapshotOperation struct {
 }
 
 // Execute performs the operation
-func (o *AddSnapshotOperation) Execute() error {
+func (o *AddSnapshotOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	_, err := o.clusterAccessor.CreateCronJobForCluster(c, c.CreateSnapshotJob())
 	if err != nil {
-		return fmt.Errorf("error while creating snapshot creation job for cluster %s: %v", c.QualifiedName(), err)
+		return false, fmt.Errorf("error while creating snapshot creation job for cluster %s: %v", c.QualifiedName(), err)
 	}
 	o.eventRecorder.Eventf(c.Definition(), v1.EventTypeNormal, cluster.ClusterSnapshotCreationScheduleEvent, "Snapshot creation scheduled for cluster %s", c.QualifiedName())
-	return nil
+	return false, nil
 }
 
 func (o *AddSnapshotOperation) String() string {

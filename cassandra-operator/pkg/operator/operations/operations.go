@@ -1,6 +1,10 @@
 package operations
 
 import (
+	"fmt"
+	"github.com/hashicorp/go-multierror"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
@@ -11,10 +15,47 @@ import (
 
 // Operation describes a single unit of work
 type Operation interface {
-	// Execute actually performs the operation
-	Execute() error
+	// Execute actually performs the operation.
+	// stop will be true if subsequent operations should not be performed as a consequence of something which happened
+	// during this operation.
+	Execute() (stop bool, err error)
 	// Human-readable description of the operation
 	String() string
+}
+
+// OperationComposer takes a sequence of Operations and executes them one by one.
+type OperationComposer interface {
+	// Execute the supplied operations in order.
+	// stopped will be true upon return if not all operations were executed.
+	// err wraps all errors which arose in the execution of the operations.
+	Execute(operations []Operation) (stopped bool, err error)
+}
+
+// NewOperationComposer returns an OperationComposer
+func NewOperationComposer() OperationComposer {
+	return &operationComposer{}
+}
+
+type operationComposer struct{}
+
+func (c *operationComposer) Execute(operations []Operation) (bool, error) {
+	stopped := false
+	allErrors := &multierror.Error{}
+	for _, operation := range operations {
+		log.Debugf("Executing operation %s", operation.String())
+		stop, err := operation.Execute()
+		if err != nil {
+			allErrors = multierror.Append(allErrors, fmt.Errorf("error while executing operation %s: %v", operation.String(), err))
+		}
+
+		if stop {
+			stopped = true
+			log.Debugf("Operation execution interrupted during %s. No further operations will be executed.", operation.String())
+			break
+		}
+	}
+
+	return stopped, allErrors.ErrorOrNil()
 }
 
 // OperationFactory creates Operation for each operation supported by the operator

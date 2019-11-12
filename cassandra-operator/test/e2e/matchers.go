@@ -657,9 +657,7 @@ type configMapVolumeAssertion struct {
 }
 
 func (m *configMapVolumeAssertion) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*kubernetesResource)
-	pod := lr.Resource.(coreV1.Pod)
-	for _, volume := range pod.Spec.Volumes {
+	for _, volume := range podSpecFrom(actual.(*kubernetesResource)).Volumes {
 		if volume.VolumeSource.ConfigMap != nil {
 			return volume.VolumeSource.ConfigMap.LocalObjectReference.Name == m.configMapName, nil
 		}
@@ -668,15 +666,31 @@ func (m *configMapVolumeAssertion) Match(actual interface{}) (success bool, err 
 }
 
 func (m *configMapVolumeAssertion) FailureMessage(actual interface{}) (message string) {
-	lr := actual.(*kubernetesResource)
-	pod := lr.Resource.(coreV1.Pod)
-	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s. Actual volumes: %v", m.configMapName, pod.Spec.Volumes)
+	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s. Actual volumes: %v",
+		m.configMapName,
+		podSpecFrom(actual.(*kubernetesResource)).Volumes)
 }
 
 func (m *configMapVolumeAssertion) NegatedFailureMessage(actual interface{}) (message string) {
-	lr := actual.(*kubernetesResource)
-	pod := lr.Resource.(coreV1.Pod)
-	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s not to exist. Actual volumes: %v", m.configMapName, pod.Spec.Volumes)
+	return fmt.Sprintf("Expected a volume referencing the configMap with name: %s not to exist. Actual volumes: %v",
+		m.configMapName,
+		podSpecFrom(actual.(*kubernetesResource)).Volumes)
+}
+
+func podSpecFrom(resource *kubernetesResource) *coreV1.PodSpec {
+	switch x := resource.Resource.(type) {
+	case coreV1.Pod:
+		return &x.Spec
+
+	case *coreV1.Pod:
+		return &x.Spec
+
+	case *v1beta2.StatefulSet:
+		return &x.Spec.Template.Spec
+
+	default:
+		panic("Attempted to find PodSpec for a resource which isn't a Pod or StatefulSet")
+	}
 }
 
 //

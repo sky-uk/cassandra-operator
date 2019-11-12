@@ -17,16 +17,20 @@ type DeleteCustomConfigOperation struct {
 }
 
 // Execute performs the operation
-func (o *DeleteCustomConfigOperation) Execute() error {
+func (o *DeleteCustomConfigOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config deleted for cluster %s", o.cassandra.QualifiedName())
 	for _, rack := range o.cassandra.Spec.Racks {
 		err := o.statefulSetAccessor.updateStatefulSet(c, o.configMap, &rack, c.RemoveCustomConfigVolumeFromStatefulSet)
+		if err == cluster.ErrReconciliationInterrupted {
+			return true, nil
+		}
+
 		if err != nil {
-			return fmt.Errorf("unable to remove custom configMap from statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
+			return false, fmt.Errorf("unable to remove custom configMap from statefulSet for rack %s in cluster %s: %v. Other racks will not be updated", rack.Name, o.cassandra.QualifiedName(), err)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func (o *DeleteCustomConfigOperation) String() string {

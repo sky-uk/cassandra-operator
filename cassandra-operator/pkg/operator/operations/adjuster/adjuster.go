@@ -6,7 +6,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/hash"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	v1 "k8s.io/api/core/v1"
 	"reflect"
 )

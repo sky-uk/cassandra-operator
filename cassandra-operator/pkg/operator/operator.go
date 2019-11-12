@@ -26,17 +26,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"strings"
+	"sync"
 	"time"
 )
 
 // The Operator itself.
 type Operator struct {
-	clusters      map[types.NamespacedName]*v1alpha1.Cassandra
-	config        *Config
-	eventReceiver event.Receiver
-	manager       manager.Manager
-	controller    controller.Controller
-	stopCh        chan struct{}
+	clusters            map[types.NamespacedName]*v1alpha1.Cassandra
+	config              *Config
+	eventReceiver       event.Receiver
+	manager             manager.Manager
+	reconcileController controller.Controller
+	interruptController controller.Controller
+	stopCh              chan struct{}
 }
 
 // The Config for the Operator
@@ -49,15 +51,18 @@ type Config struct {
 	RepositoryPath        string
 }
 
+const maxConcurrentReconciles = 100
+
 // New creates a new Operator.
 func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clientset, operatorConfig *Config, kubeConfig *rest.Config) (*Operator, error) {
 	clusters := make(map[types.NamespacedName]*v1alpha1.Cassandra)
 	stopCh := make(chan struct{})
 	scheme := registerScheme()
+	var activeReconciliations sync.Map
 
 	metricsPoller := metrics.NewMetrics(kubeClientset.CoreV1(), &metrics.Config{RequestTimeout: operatorConfig.MetricRequestDuration})
 	eventRecorder := cluster.NewEventRecorder(kubeClientset, scheme)
-	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder)
+	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder, &activeReconciliations)
 	eventReceiver := event.NewEventReceiver(
 		clusterAccessor,
 		metricsPoller,
@@ -69,21 +74,27 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 		return nil, fmt.Errorf("unable to set up overall controller manager: %v", err)
 	}
 
-	ctrl, err := controller.New("cassandra", mgr, controller.Options{
+	reconciler, err := controller.New("cassandra", mgr, controller.Options{
 		Reconciler:              NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventReceiver, operatorConfig),
-		MaxConcurrentReconciles: 100,
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to set up Cassandra reconciler controller: %v", err)
+		return nil, fmt.Errorf("unable to set up Cassandra reconciler reconcileController: %v", err)
 	}
 
+	interrupter, err := controller.New("interrupter", mgr, controller.Options{
+		Reconciler:              NewInterrupter(&activeReconciliations, mgr.GetClient(), eventRecorder),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
+	})
+
 	return &Operator{
-		config:        operatorConfig,
-		clusters:      clusters,
-		eventReceiver: eventReceiver,
-		controller:    ctrl,
-		manager:       mgr,
-		stopCh:        stopCh,
+		config:              operatorConfig,
+		clusters:            clusters,
+		eventReceiver:       eventReceiver,
+		reconcileController: reconciler,
+		interruptController: interrupter,
+		manager:             mgr,
+		stopCh:              stopCh,
 	}, nil
 }
 
@@ -113,32 +124,45 @@ func (o *Operator) Run() {
 	entryLog.Info("Starting server")
 	o.startServer()
 
-	// Setup the Controller
-	entryLog.Info("Setting up controller")
+	entryLog.Info("Setting up ReconcileController")
+	o.setupController(o.reconcileController, entryLog)
 
+	entryLog.Info("Setting up InterruptController")
+	o.setupController(o.interruptController, entryLog)
+
+	entryLog.Info("Starting manager")
+	if err := o.manager.Start(signals.SetupSignalHandler()); err != nil {
+		entryLog.Fatalf("Unable to run manager: %v", err)
+	}
+
+	<-o.stopCh
+	entryLog.Info("Operator shutting down")
+}
+
+func (o *Operator) setupController(controller controller.Controller, entryLog *log.Entry) {
 	// Watch Cassandras and enqueue Cassandra object key
-	if err := o.controller.Watch(&source.Kind{Type: &v1alpha1.Cassandra{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err := controller.Watch(&source.Kind{Type: &v1alpha1.Cassandra{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		entryLog.Fatalf("Unable to watch Cassandras: %v", err)
 	}
 
 	// Watch StatefulSets and enqueue owning Cassandra key
 	enqueueRequestsForObjectsOwnedByCassandra := &handler.EnqueueRequestForOwner{OwnerType: &v1alpha1.Cassandra{}, IsController: true}
-	if err := o.controller.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+	if err := controller.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
 		entryLog.Fatalf("Unable to watch StatefulSets: %v", err)
 	}
 
 	// Watch CronJobs and enqueue owning Cassandra key
-	if err := o.controller.Watch(&source.Kind{Type: &v1beta1.CronJob{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+	if err := controller.Watch(&source.Kind{Type: &v1beta1.CronJob{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
 		entryLog.Fatalf("Unable to watch CronJobs: %v", err)
 	}
 
 	// Watch Service and enqueue owning Cassandra key
-	if err := o.controller.Watch(&source.Kind{Type: &corev1.Service{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
+	if err := controller.Watch(&source.Kind{Type: &corev1.Service{}}, enqueueRequestsForObjectsOwnedByCassandra); err != nil {
 		entryLog.Fatalf("Unable to watch Services: %v", err)
 	}
 
 	// Watch ConfigMaps and enqueue a likely cluster
-	err := o.controller.Watch(
+	err := controller.Watch(
 		&source.Kind{Type: &corev1.ConfigMap{}},
 		&handler.EnqueueRequestsFromMapFunc{
 			ToRequests: handler.ToRequestsFunc(func(a handler.MapObject) []reconcile.Request {
@@ -160,14 +184,6 @@ func (o *Operator) Run() {
 	if err != nil {
 		entryLog.Fatalf("Unable to watch ConfigMaps: %v", err)
 	}
-
-	entryLog.Info("Starting manager")
-	if err := o.manager.Start(signals.SetupSignalHandler()); err != nil {
-		entryLog.Fatalf("Unable to run manager: %v", err)
-	}
-
-	<-o.stopCh
-	entryLog.Info("Operator shutting down")
 }
 
 func (o *Operator) startServer() {

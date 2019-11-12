@@ -42,6 +42,13 @@ func TheImageImmutablePropertyIsChangedTo(namespace, clusterName, imageName stri
 	log.Infof("Updated pod image for cluster %s", clusterName)
 }
 
+func TheBootstrapperImageImmutablePropertyIsChangedTo(namespace, clusterName, imageName string) {
+	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
+		spec.Pod.BootstrapperImage = &imageName
+	})
+	log.Infof("Updated pod image for cluster %s", clusterName)
+}
+
 func TheRackReplicationIsChangedTo(namespace, clusterName, rackName string, replicas int) {
 	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
 		for i := range spec.Racks {
@@ -65,7 +72,13 @@ func TheRackStorageIsChangedTo(namespace, clusterName, rackName string, storages
 }
 
 func TheCustomConfigIsAddedForCluster(namespace, clusterName string, extraConfigFile *ExtraConfigFile) {
-	_, err := customCassandraConfigMap(namespace, clusterName, extraConfigFile)
+	_, err := customCassandraConfigMap(namespace, clusterName, false, extraConfigFile)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	log.Infof("Added custom config for cluster %s", clusterName)
+}
+
+func TheCustomConfigIsModifiedForCluster(namespace, clusterName string, extraConfigFile *ExtraConfigFile) {
+	_, err := customCassandraConfigMap(namespace, clusterName, true, extraConfigFile)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	log.Infof("Added custom config for cluster %s", clusterName)
 }

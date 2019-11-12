@@ -15,6 +15,8 @@ const (
 	InvalidChangeEvent = "InvalidChange"
 	// ClusterUpdateEvent describes an event for a cluster update
 	ClusterUpdateEvent = "ClusterUpdate"
+	// ReconciliationInterruptedEvent describes an event where a reconciliation is interrupted
+	ReconciliationInterruptedEvent = "ReconciliationInterrupted"
 	// WaitingForStatefulSetChange is an event created when waiting for a stateful set change to complete
 	WaitingForStatefulSetChange = "WaitingForStatefulSetChange"
 	// StatefulSetChangeComplete is an event created when a stateful set change iscomplete

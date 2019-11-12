@@ -467,8 +467,8 @@ var _ = Describe("operations execution", func() {
 	BeforeEach(func() {
 		fakes = &mockOperationFactory{}
 		receiver = &OperatorEventReceiver{
-			clusterAccessor:  nil,
-			operationFactory: fakes,
+			operationFactory:  fakes,
+			operationComposer: operations.NewOperationComposer(),
 		}
 	})
 
@@ -509,12 +509,12 @@ func failureOperation(msg string) operations.Operation {
 	return &stubOperation{msg: msg, success: false}
 }
 
-func (o *stubOperation) Execute() error {
+func (o *stubOperation) Execute() (bool, error) {
 	if o.success {
-		return nil
+		return false, nil
 	}
 
-	return fmt.Errorf(o.msg)
+	return false, fmt.Errorf(o.msg)
 }
 
 func (o *stubOperation) String() string {
