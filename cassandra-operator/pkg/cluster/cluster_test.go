@@ -67,45 +67,80 @@ var _ = Describe("creation of stateful sets", func() {
 		clusterDef = apis.ACassandra().WithDefaults().WithName(CLUSTER).WithNamespace(NAMESPACE).Build()
 	})
 
-	It("should add init containers for config initialisation and bootstrapping", func() {
-		// given
-		clusterDef.Spec.Pod.BootstrapperImage = ptr.String("skyuk/cassandra-bootstrapper:latest")
-		cluster := ACluster(clusterDef)
+	Describe("Init Containers", func() {
+		It("should be added for config initialisation and bootstrapping", func() {
+			// given
+			clusterDef.Spec.Pod.BootstrapperImage = ptr.String("skyuk/cassandra-bootstrapper:latest")
+			cluster := ACluster(clusterDef)
 
-		// when
-		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 
-		// then
-		Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			// then
+			Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Name).To(Equal("init-config"))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Image).To(Equal(*cluster.definition.Spec.Pod.Image))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Command).To(Equal([]string{"sh", "-c", "cp -vr /etc/cassandra/* /configuration"}))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(clusterDef.Spec.Pod.Resources))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Name).To(Equal("init-config"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Image).To(Equal(*cluster.definition.Spec.Pod.Image))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Command).To(Equal([]string{"sh", "-c", "cp -vr /etc/cassandra/* /configuration"}))
 
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("skyuk/cassandra-bootstrapper:latest"))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources).To(Equal(clusterDef.Spec.Pod.Resources))
-	})
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("skyuk/cassandra-bootstrapper:latest"))
+		})
 
-	It("should create the bootstrapper init container with the specified image if one is given", func() {
-		clusterDef.Spec.Pod.BootstrapperImage = ptr.String("somerepo/abootstapperimage:v1")
-		cluster := ACluster(clusterDef)
+		It("should be created with the specified image if one is given", func() {
+			clusterDef.Spec.Pod.BootstrapperImage = ptr.String("somerepo/abootstapperimage:v1")
+			cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(Equal("somerepo/abootstapperimage:v1"))
-	})
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Name).To(Equal("cassandra-bootstrapper"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Image).To(Equal("somerepo/abootstapperimage:v1"))
+		})
 
-	It("should define environment variables for pod memory and cpu in bootstrapper init-container", func() {
-		clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Gi")
-		clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("100m")
-		cluster := ACluster(clusterDef)
+		It("should define environment variables for pod memory and cpu in bootstrapper init-container", func() {
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Gi")
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("100m")
+			cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
-		Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_CPU_MILLICORES", Value: "100"}))
-		Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_MEMORY_BYTES", Value: strconv.Itoa(1024 * 1024 * 1024)}))
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_CPU_MILLICORES", Value: "100"}))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Env).To(ContainElement(coreV1.EnvVar{Name: "POD_MEMORY_BYTES", Value: strconv.Itoa(1024 * 1024 * 1024)}))
+		})
+
+		It("should be assigned no cpu", func() {
+			cluster := ACluster(clusterDef)
+
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Requests[coreV1.ResourceCPU]).To(Equal(resource.Quantity{}))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Limits[coreV1.ResourceCPU]).To(Equal(resource.Quantity{}))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Requests[coreV1.ResourceCPU]).To(Equal(resource.Quantity{}))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Limits[coreV1.ResourceCPU]).To(Equal(resource.Quantity{}))
+		})
+
+		It("should be assigned minimum memory resources", func() {
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Gi")
+
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Requests.Memory().String()).To(Equal("100Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Limits.Memory().String()).To(Equal("100Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Requests.Memory().String()).To(Equal("100Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Limits.Memory().String()).To(Equal("100Mi"))
+		})
+
+		It("should be assigned memory resources no greater than the pod is configured with", func() {
+			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("10Mi")
+
+			cluster := ACluster(clusterDef)
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Requests.Memory().String()).To(Equal("10Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[0].Resources.Limits.Memory().String()).To(Equal("10Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Requests.Memory().String()).To(Equal("10Mi"))
+			Expect(statefulSet.Spec.Template.Spec.InitContainers[1].Resources.Limits.Memory().String()).To(Equal("10Mi"))
+		})
 	})
 
 	It("should define environment variable for extra classpath in main container", func() {

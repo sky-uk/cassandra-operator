@@ -60,13 +60,13 @@ var _ = Describe("reconciler", func() {
 		clusters = make(map[types.NamespacedName]*v1alpha1.Cassandra)
 
 		reconciler = CassandraReconciler{
-			clusters:              clusters,
-			client:                fakes.client,
-			eventReceiver:         fakes.receiver,
-			eventRecorder:         fakes.eventRecorder,
-			objectFactory:         fakes.objectFactory,
-			stateFinder:           fakes.stateFinder,
-			operatorConfig:        &Config{Version: "latest", RepositoryPath: "skyuk"},
+			clusters:       clusters,
+			client:         fakes.client,
+			eventReceiver:  fakes.receiver,
+			eventRecorder:  fakes.eventRecorder,
+			objectFactory:  fakes.objectFactory,
+			stateFinder:    fakes.stateFinder,
+			operatorConfig: &Config{Version: "latest", RepositoryPath: "skyuk"},
 		}
 	})
 

@@ -50,16 +50,18 @@ const (
 )
 
 var (
-	maxSidecarMemoryRequest resource.Quantity
-	sidecarMemoryLimit      resource.Quantity
-	maxSidecarCPURequest    resource.Quantity
-	sidecarCPULimit         resource.Quantity
-	operatorManagedVolumes  map[string]bool
-	alphanumericChars       *regexp.Regexp
-	securityContext         *v1.PodSecurityContext
+	maxSidecarMemoryRequest    resource.Quantity
+	sidecarMemoryLimit         resource.Quantity
+	maxSidecarCPURequest       resource.Quantity
+	sidecarCPULimit            resource.Quantity
+	initContainerMemoryRequest resource.Quantity
+	operatorManagedVolumes     map[string]bool
+	alphanumericChars          *regexp.Regexp
+	securityContext            *v1.PodSecurityContext
 )
 
 func init() {
+	initContainerMemoryRequest = resource.MustParse("100Mi")
 	maxSidecarMemoryRequest = resource.MustParse("50Mi")
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
@@ -629,6 +631,8 @@ func (c *Cluster) customConfigMapVolumeName() string {
 	return fmt.Sprintf("cassandra-custom-config-%s", c.definition.Name)
 }
 func (c *Cluster) createInitConfigContainer() v1.Container {
+    memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
+
 	return v1.Container{
 		Name:    "init-config",
 		Image:   *c.definition.Spec.Pod.Image,
@@ -636,20 +640,37 @@ func (c *Cluster) createInitConfigContainer() v1.Container {
 		VolumeMounts: []v1.VolumeMount{
 			{Name: "configuration", MountPath: "/configuration"},
 		},
-		Resources: c.definition.Spec.Pod.Resources,
+		Resources: v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: memory,
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory:memory,
+			},
+		},
 	}
 }
+
 func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.Container {
+    memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
+
 	mounts := []v1.VolumeMount{
 		{Name: "configuration", MountPath: "/configuration"},
 		{Name: "extra-lib", MountPath: "/extra-lib"},
 	}
 
 	return v1.Container{
-		Name:         cassandraBootstrapperContainerName,
-		Env:          c.createEnvironmentVariableDefinition(rack),
-		Image:        *c.definition.Spec.Pod.BootstrapperImage,
-		Resources:    c.definition.Spec.Pod.Resources,
+		Name:  cassandraBootstrapperContainerName,
+		Env:   c.createEnvironmentVariableDefinition(rack),
+		Image: *c.definition.Spec.Pod.BootstrapperImage,
+		Resources: v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: memory,
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory:memory,
+			},
+		},
 		VolumeMounts: mounts,
 	}
 }

@@ -42,13 +42,13 @@ type requestContext struct {
 
 // CassandraReconciler is a controller that reconciles Cassandra resources
 type CassandraReconciler struct {
-	clusters              map[types.NamespacedName]*v1alpha1.Cassandra
-	client                client.Client
-	eventRecorder         record.EventRecorder
-	eventReceiver         event.Receiver
-	objectFactory         objectReferenceFactory
-	stateFinder           cluster.StateFinder
-	operatorConfig        *Config
+	clusters       map[types.NamespacedName]*v1alpha1.Cassandra
+	client         client.Client
+	eventRecorder  record.EventRecorder
+	eventReceiver  event.Receiver
+	objectFactory  objectReferenceFactory
+	stateFinder    cluster.StateFinder
+	operatorConfig *Config
 }
 
 // Implement reconcile.Reconciler so the controller can reconcile objects
@@ -57,13 +57,13 @@ var _ reconcile.Reconciler = &CassandraReconciler{}
 // NewReconciler creates a CassandraReconciler
 func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventReceiver event.Receiver, operatorConfig *Config) *CassandraReconciler {
 	return &CassandraReconciler{
-		clusters:              clusters,
-		client:                client,
-		eventRecorder:         eventRecorder,
-		eventReceiver:         eventReceiver,
-		objectFactory:         &defaultReferenceFactory{},
-		stateFinder:           cluster.NewStateFinder(client),
-		operatorConfig:        operatorConfig,
+		clusters:       clusters,
+		client:         client,
+		eventRecorder:  eventRecorder,
+		eventReceiver:  eventReceiver,
+		objectFactory:  &defaultReferenceFactory{},
+		stateFinder:    cluster.NewStateFinder(client),
+		operatorConfig: operatorConfig,
 	}
 }
 
