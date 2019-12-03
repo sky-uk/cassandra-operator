@@ -1,5 +1,9 @@
 # Changes
 
+## 0.78.1-alpha
+
+- [BUGFIX] [Assign no cpu & minimum memory to init containers](#215) (@sebbonnet)
+
 ## 0.78.0-alpha
 
 - [FEATURE] [Implement operation interruption](#212) (@alangibson01)
