@@ -1,5 +1,9 @@
 # Changes
 
+## 0.79.0-alpha
+
+- [FEATURE] [Stop enqueueing requests for configmaps unrelated to a Cassandra resource](#218) (@sebbonnet)
+
 ## 0.78.1-alpha
 
 - [BUGFIX] [Assign no cpu & minimum memory to init containers](#215) (@sebbonnet)

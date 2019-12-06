@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -12,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -19,6 +21,7 @@ import (
 	"k8s.io/client-go/rest"
 	"net/http"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -125,10 +128,10 @@ func (o *Operator) Run() {
 	o.startServer()
 
 	entryLog.Info("Setting up ReconcileController")
-	o.setupController(o.reconcileController, entryLog)
+	o.setupController(o.reconcileController, o.manager.GetClient(), entryLog)
 
 	entryLog.Info("Setting up InterruptController")
-	o.setupController(o.interruptController, entryLog)
+	o.setupController(o.interruptController, o.manager.GetClient(), entryLog)
 
 	entryLog.Info("Starting manager")
 	if err := o.manager.Start(signals.SetupSignalHandler()); err != nil {
@@ -139,7 +142,7 @@ func (o *Operator) Run() {
 	entryLog.Info("Operator shutting down")
 }
 
-func (o *Operator) setupController(controller controller.Controller, entryLog *log.Entry) {
+func (o *Operator) setupController(controller controller.Controller, client client.Client, entryLog *log.Entry) {
 	// Watch Cassandras and enqueue Cassandra object key
 	if err := controller.Watch(&source.Kind{Type: &v1alpha1.Cassandra{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		entryLog.Fatalf("Unable to watch Cassandras: %v", err)
@@ -161,16 +164,23 @@ func (o *Operator) setupController(controller controller.Controller, entryLog *l
 		entryLog.Fatalf("Unable to watch Services: %v", err)
 	}
 
-	// Watch ConfigMaps and enqueue a likely cluster
+	// Watch ConfigMaps and enqueue the corresponding cluster
 	err := controller.Watch(
 		&source.Kind{Type: &corev1.ConfigMap{}},
 		&handler.EnqueueRequestsFromMapFunc{
 			ToRequests: handler.ToRequestsFunc(func(a handler.MapObject) []reconcile.Request {
 				if !strings.HasSuffix(a.Meta.GetName(), "-config") {
+					// nothing to do: not looking like a ConfigMap for a Cassandra cluster
 					return []reconcile.Request{}
 				}
 
 				clusterName := strings.TrimSuffix(a.Meta.GetName(), "-config")
+				err := client.Get(context.TODO(), types.NamespacedName{Namespace: a.Meta.GetNamespace(), Name: clusterName}, &v1alpha1.Cassandra{})
+				// attempt to reconcile on unknown error
+				if errors.IsNotFound(err) {
+					// nothing to do: no associated Cassandra definition found
+					return []reconcile.Request{}
+				}
 
 				return []reconcile.Request{
 					{NamespacedName: types.NamespacedName{
