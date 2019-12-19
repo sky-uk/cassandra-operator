@@ -1,5 +1,9 @@
 # Changes
 
+## 0.80.0-alpha
+
+- [ENHANCEMENT] [Remap jsonpath module to be firewall friendly](#222) (@sebbonnet)
+
 ## 0.79.0-alpha
 
 - [FEATURE] [Stop enqueueing requests for configmaps unrelated to a Cassandra resource](#218) (@sebbonnet)
