@@ -14,21 +14,23 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    app: cassandra-operator
+    app.kubernetes.io/name: cassandra-operator
+    app.kubernetes.io/version: "$VERSION"
   name: cassandra-operator
   namespace: $TARGET_NAMESPACE
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: cassandra-operator
+      app.kubernetes.io/name: cassandra-operator
       deployment: cassandra-operator
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: cassandra-operator
+        app.kubernetes.io/name: cassandra-operator
+        app.kubernetes.io/version: "$VERSION"
         deployment: cassandra-operator
     spec:
       containers:
@@ -66,6 +68,9 @@ kind: Service
 metadata:
   name: cassandra-operator
   namespace: $TARGET_NAMESPACE
+  labels:
+    app.kubernetes.io/name: cassandra-operator
+    app.kubernetes.io/version: "$VERSION"
 spec:
   ports:
   - name: http
@@ -73,7 +78,7 @@ spec:
     protocol: TCP
     targetPort: 9090
   selector:
-    app: cassandra-operator
+    app.kubernetes.io/name: cassandra-operator
   type: ClusterIP
 ---
 apiVersion: extensions/v1beta1
@@ -83,6 +88,8 @@ metadata:
     sky.uk/frontend-elb-scheme: internal
     sky.uk/strip-path: "true"
   labels:
+    app.kubernetes.io/name: cassandra-operator
+    app.kubernetes.io/version: "$VERSION"
     service: cassandra-operator
   name: cassandra-operator-http
   namespace: $TARGET_NAMESPACE

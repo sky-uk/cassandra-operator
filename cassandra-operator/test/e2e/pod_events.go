@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	coreV1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -26,7 +25,9 @@ type PodEventLog struct {
 
 func WatchPodEvents(namespace, clusterName string) (*PodEventLog, watch.Interface) {
 	eventLog := &PodEventLog{make(map[string][]simplifiedEvent)}
-	watcher, err := KubeClientset.CoreV1().Pods(namespace).Watch(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName)})
+	watcher, err := KubeClientset.CoreV1().Pods(namespace).Watch(metaV1.ListOptions{
+		LabelSelector: labelSelectorForCluster(namespace, clusterName),
+	})
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	go watchEvents(watcher, eventLog)
 	return eventLog, watcher

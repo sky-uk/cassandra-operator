@@ -365,7 +365,7 @@ func (m *haveDifferentRevision) pod(actual interface{}) *coreV1.Pod {
 }
 
 func (m *haveDifferentRevision) unexpectedRevisionForPod(pod *coreV1.Pod) string {
-	return m.rackRevisions[pod.Labels["rack"]]
+	return m.rackRevisions[pod.Labels["cassandra-operator/rack"]]
 }
 
 //

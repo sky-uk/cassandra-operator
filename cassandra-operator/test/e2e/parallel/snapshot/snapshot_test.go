@@ -69,7 +69,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 		It("should create the corresponding snapshot jobs", func() {
 			// when
 			registerResourcesUsed(1)
-			AClusterWithName(clusterName).
+			clusterDef := AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
 					Image:     CassandraSnapshotImageName,
@@ -95,7 +95,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					ContainerCommand: []string{
 						"/cassandra-snapshot", "create",
 						"-n", Namespace,
-						"-l", fmt.Sprintf("%s=%s,%s=%s", cluster.OperatorLabel, clusterName, "app", clusterName),
+						"-l", clusterDef.CassandraPodSelector(),
 						"-t", "10s",
 						"-k", "keyspace1,keyspace3",
 					}}),
@@ -106,7 +106,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					ContainerCommand: []string{
 						"/cassandra-snapshot", "cleanup",
 						"-n", Namespace,
-						"-l", fmt.Sprintf("%s=%s,%s=%s", cluster.OperatorLabel, clusterName, "app", clusterName),
+						"-l", clusterDef.CassandraPodSelector(),
 						"-r", "240h0m0s",
 						"-t", "5s",
 					}}),
@@ -134,7 +134,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 		It("should create the corresponding snapshot creation job", func() {
 			// given
 			registerResourcesUsed(1)
-			AClusterWithName(clusterName).
+			clusterDef := AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				Exists()
 
@@ -163,7 +163,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					ContainerCommand: []string{
 						"/cassandra-snapshot", "create",
 						"-n", Namespace,
-						"-l", fmt.Sprintf("%s=%s,%s=%s", cluster.OperatorLabel, clusterName, "app", clusterName),
+						"-l", clusterDef.CassandraPodSelector(),
 						"-t", "5s",
 						"-k", "k1,k2",
 					}}),
@@ -240,7 +240,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 		It("should create a kubernetes job with the new properties and delete the old one", func() {
 			// given
 			registerResourcesUsed(1)
-			AClusterWithName(clusterName).
+			clusterDef := AClusterWithName(clusterName).
 				AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 				AndScheduledSnapshot(&v1alpha1.Snapshot{
 					Image:     CassandraSnapshotImageName,
@@ -282,7 +282,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					ContainerCommand: []string{
 						"/cassandra-snapshot", "create",
 						"-n", Namespace,
-						"-l", fmt.Sprintf("%s=%s,%s=%s", cluster.OperatorLabel, clusterName, "app", clusterName),
+						"-l", clusterDef.CassandraPodSelector(),
 						"-t", "10s",
 						"-k", "k2",
 					}}),
@@ -293,7 +293,7 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					ContainerCommand: []string{
 						"/cassandra-snapshot", "cleanup",
 						"-n", Namespace,
-						"-l", fmt.Sprintf("%s=%s,%s=%s", cluster.OperatorLabel, clusterName, "app", clusterName),
+						"-l", clusterDef.CassandraPodSelector(),
 						"-r", "240h0m0s",
 						"-t", "5s",
 					}}),

@@ -59,8 +59,10 @@ var _ = Context("External cluster modifications", func() {
 			By("creating the deleted headless service for the cluster")
 			Eventually(HeadlessServiceForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(And(
 				Not(BeNil()),
-				HaveLabel("sky.uk/cassandra-operator", clusterName)),
-			)
+				HaveLabel("app.kubernetes.io/name", clusterName),
+				HaveLabel("app.kubernetes.io/instance", fmt.Sprintf("%s.%s", Namespace, clusterName)),
+				HaveLabel("app.kubernetes.io/managed-by", "cassandra-operator"),
+			))
 
 			By("re-creating the deleted rack")
 			Eventually(RacksForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(And(

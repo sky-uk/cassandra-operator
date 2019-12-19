@@ -3,9 +3,9 @@ package creation
 import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/imageversion"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -163,19 +163,25 @@ var _ = Context("When a cluster doesn't already exist", func() {
 		By("creating a StatefulSet for each rack")
 		Expect(StatefulSetsForCluster(Namespace, multipleRacksCluster.Name)()).Should(Each(And(
 			BeCreatedWithServiceName(multipleRacksCluster.Name),
-			HaveLabel("sky.uk/cassandra-operator", multipleRacksCluster.Name),
+			HaveLabel("app.kubernetes.io/name", multipleRacksCluster.Name),
+			HaveLabel("app.kubernetes.io/instance", fmt.Sprintf("%s.%s", Namespace, multipleRacksCluster.Name)),
+			HaveLabel("app.kubernetes.io/managed-by", "cassandra-operator"),
 		)))
 
 		By("creating a headless service for the cluster")
 		Expect(HeadlessServiceForCluster(Namespace, multipleRacksCluster.Name)()).Should(And(
 			Not(BeNil()),
-			HaveLabel("sky.uk/cassandra-operator", multipleRacksCluster.Name)),
-		)
+			HaveLabel("app.kubernetes.io/name", multipleRacksCluster.Name),
+			HaveLabel("app.kubernetes.io/instance", fmt.Sprintf("%s.%s", Namespace, multipleRacksCluster.Name)),
+			HaveLabel("app.kubernetes.io/managed-by", "cassandra-operator"),
+		))
 
 		By("creating a persistent volume claim for each StatefulSet with the requested storage capacity")
 		Expect(PersistentVolumeClaimsForCluster(Namespace, multipleRacksCluster.Name)()).Should(And(
 			HaveLen(3),
-			Each(HaveLabel("sky.uk/cassandra-operator", multipleRacksCluster.Name)),
+			//Each(HaveLabel("app.kubernetes.io/name", multipleRacksCluster.Name)),
+			Each(HaveLabel("app.kubernetes.io/instance", fmt.Sprintf("%s.%s", Namespace, multipleRacksCluster.Name))),
+			Each(HaveLabel("app.kubernetes.io/managed-by", "cassandra-operator")),
 			Each(HaveStorageCapacity("100Mi"))))
 
 		if !UseMockedImage {
@@ -295,37 +301,27 @@ var _ = Context("When a cluster definition does not specify custom images", func
 			IsDefined()
 
 		// then
-		operatorRegistry, operatorVersion := operatorImageRegistryAndVersion(Namespace)
+		operatorRepository, operatorVersion := operatorImageRepositoryAndVersion(Namespace)
 		Eventually(PodsForCluster(Namespace, clusterName), NodeStartDuration, CheckInterval).Should(Each(And(
 			HaveContainer("cassandra", &ContainerImageExpectation{
 				ImageName: *CassandraImageName,
 			}),
 			HaveContainer("cassandra-sidecar", &ContainerImageExpectation{
-				ImageName: fmt.Sprintf("%s/cassandra-sidecar:%s", operatorRegistry, operatorVersion),
+				ImageName: fmt.Sprintf("%s/cassandra-sidecar:%s", operatorRepository, operatorVersion),
 			}),
 			HaveInitContainer("cassandra-bootstrapper", &ContainerImageExpectation{
-				ImageName: fmt.Sprintf("%s/cassandra-bootstrapper:%s", operatorRegistry, operatorVersion),
+				ImageName: fmt.Sprintf("%s/cassandra-bootstrapper:%s", operatorRepository, operatorVersion),
 			}),
 		)))
 	})
 })
 
-func operatorImageRegistryAndVersion(namespace string) (operatorRegistry, operatorVersion string) {
-	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: "app=cassandra-operator"})
+func operatorImageRepositoryAndVersion(namespace string) (operatorRepository, operatorVersion string) {
+	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: "app.kubernetes.io/name=cassandra-operator"})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pods.Items).To(HaveLen(1))
 	operatorImage := pods.Items[0].Spec.Containers[0].Image
-	operatorRegistry = extractRegistry(operatorImage)
-	operatorVersion = extractImageVersion(operatorImage)
+	operatorRepository = imageversion.RepositoryPath(&operatorImage)
+	operatorVersion = imageversion.Version(&operatorImage)
 	return
-}
-
-func extractImageVersion(imageAndVersion string) string {
-	versionIndex := strings.LastIndex(imageAndVersion, ":")
-	return imageAndVersion[versionIndex+1:]
-}
-
-func extractRegistry(imageAndVersion string) string {
-	registryEndIndex := strings.LastIndex(imageAndVersion, "/")
-	return imageAndVersion[:registryEndIndex]
 }

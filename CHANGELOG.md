@@ -2,6 +2,7 @@
 
 ## 0.80.0-alpha
 
+- [FEATURE] [Use standard labels on generated resources](#221) (@alangibson01)
 - [ENHANCEMENT] [Remap jsonpath module to be firewall friendly](#222) (@sebbonnet)
 
 ## 0.79.0-alpha

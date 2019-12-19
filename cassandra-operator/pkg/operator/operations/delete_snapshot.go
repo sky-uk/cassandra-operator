@@ -18,7 +18,7 @@ type DeleteSnapshotOperation struct {
 // Execute performs the operation
 func (o *DeleteSnapshotOperation) Execute() (bool, error) {
 	qualifiedName := o.cassandra.QualifiedName()
-	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, fmt.Sprintf("app=%s", o.cassandra.SnapshotJobName()))
+	job, err := o.clusterAccessor.FindCronJobForCluster(o.cassandra, cluster.SnapshotCronJob)
 	if err != nil {
 		return false, fmt.Errorf("error while retrieving snapshot job list for cluster %s: %v", qualifiedName, err)
 	}

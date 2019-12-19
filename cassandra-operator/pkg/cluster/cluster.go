@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/imageversion"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"regexp"
 	"strings"
@@ -28,15 +29,36 @@ const (
 	// GroupID is the primary group of the user which runs the containers.
 	GroupID = UserID
 
-	// OperatorLabel is a label used on all kubernetes resources created by this Operator
-	OperatorLabel = "sky.uk/cassandra-operator"
+	// ApplicationNameLabel is a recommended Kubernetes label applied to all resources created by the operator.
+	ApplicationNameLabel = "app.kubernetes.io/name"
+
+	// ApplicationInstanceLabel is a recommended Kubernetes label applied to all resources created by the operator.
+	ApplicationInstanceLabel = "app.kubernetes.io/instance"
+
+	// ApplicationVersionLabel is a recommended Kubernetes label applied to all resources created by the operator.
+	ApplicationVersionLabel = "app.kubernetes.io/version"
+
+	// ApplicationComponentLabel is a recommended Kubernetes label applied to all resources created by the operator.
+	ApplicationComponentLabel = "app.kubernetes.io/component"
+
+	// ManagedByLabel is a recommended Kubernetes label applied to all resources created by the operator.
+	ManagedByLabel = "app.kubernetes.io/managed-by"
+
+	// ManagedByCassandraOperator is the fixed value for the app.kubernetes.io/managed-by label.
+	ManagedByCassandraOperator = "cassandra-operator"
 
 	// ConfigHashAnnotation gives the name of the annotation that the operator attaches to pods when they have
 	// an associated custom config map.
 	ConfigHashAnnotation = "clusterConfigHash"
 
+	// SnapshotCronJob is the value of app.kubernetes.io/component for snapshot cronjobs
+	SnapshotCronJob = "snapshot"
+
+	// SnapshotCleanupCronJob is the value of app.kubernetes.io/component for snapshot cleanup cronjobs
+	SnapshotCleanupCronJob = "snapshot-cleanup"
+
 	// RackLabel is a label used to identify the rack name in a cluster
-	RackLabel       = "rack"
+	RackLabel       = "cassandra-operator/rack"
 	customConfigDir = "/custom-config"
 
 	cassandraContainerName             = "cassandra"
@@ -115,6 +137,11 @@ func (c *Cluster) QualifiedName() string {
 	return c.definition.QualifiedName()
 }
 
+// ApplicationVersion returns the version part of the main Cassandra image name
+func (c *Cluster) ApplicationVersion() string {
+	return imageversion.Version(c.definition.Spec.Pod.Image)
+}
+
 // Racks returns the set of racks defined for the cluster
 func (c *Cluster) Racks() []v1alpha1.Rack {
 	return c.definition.Spec.Racks
@@ -127,9 +154,9 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					OperatorLabel: c.definition.Name,
-					RackLabel:     rack.Name,
-					"app":         c.definition.Name,
+					ApplicationInstanceLabel: c.QualifiedName(),
+					ManagedByLabel:           ManagedByCassandraOperator,
+					RackLabel:                rack.Name,
 				},
 			},
 			Replicas:    &rack.Replicas,
@@ -137,9 +164,11 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						OperatorLabel: c.definition.Name,
-						RackLabel:     rack.Name,
-						"app":         c.definition.Name,
+						ApplicationNameLabel:     c.Name(),
+						ApplicationInstanceLabel: c.QualifiedName(),
+						ApplicationVersionLabel:  imageversion.Version(c.definition.Spec.Pod.Image),
+						ManagedByLabel:           ManagedByCassandraOperator,
+						RackLabel:                rack.Name,
 					},
 				},
 				Spec: v1.PodSpec{
@@ -182,7 +211,8 @@ func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
 				{
 					LabelSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							OperatorLabel: c.definition.Name,
+							ApplicationInstanceLabel: c.QualifiedName(),
+							ManagedByLabel:           ManagedByCassandraOperator,
 						},
 					},
 					TopologyKey: "kubernetes.io/hostname",
@@ -211,10 +241,11 @@ func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
 // CreateService creates a headless service for the supplied cluster definition.
 func (c *Cluster) CreateService() *v1.Service {
 	return &v1.Service{
-		ObjectMeta: c.objectMetadataWithOwner(c.definition.Name, "app", c.definition.Name),
+		ObjectMeta: c.objectMetadataWithOwner(c.definition.Name),
 		Spec: v1.ServiceSpec{
 			Selector: map[string]string{
-				"app": c.definition.Name,
+				ApplicationInstanceLabel: c.QualifiedName(),
+				ManagedByLabel:           ManagedByCassandraOperator,
 			},
 			ClusterIP: v1.ClusterIPNone,
 			Ports: []v1.ServicePort{
@@ -241,6 +272,7 @@ func (c *Cluster) CreateSnapshotJob() *v1beta1.CronJob {
 
 	return c.createCronJob(
 		c.definition.SnapshotJobName(),
+		"snapshot",
 		v1alpha1.SnapshotServiceAccountName,
 		c.definition.Spec.Snapshot.Schedule,
 		c.CreateSnapshotContainer(c.definition.Spec.Snapshot),
@@ -262,7 +294,7 @@ func (c *Cluster) snapshotCommand() []string {
 	}
 	backupCommand := []string{"/cassandra-snapshot", "create",
 		"-n", c.definition.Namespace,
-		"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, c.definition.Name, "app", c.definition.Name),
+		"-l", c.CassandraPodSelector(),
 	}
 	timeoutDuration := durationSeconds(c.definition.Spec.Snapshot.TimeoutSeconds)
 	backupCommand = append(backupCommand, "-t", timeoutDuration.String())
@@ -271,6 +303,16 @@ func (c *Cluster) snapshotCommand() []string {
 		backupCommand = append(backupCommand, strings.Join(c.definition.Spec.Snapshot.Keyspaces, ","))
 	}
 	return backupCommand
+}
+
+// CassandraPodSelector generates a label selector expression which will include all Cassandra pods belonging to a
+// cluster, while excluding snapshot or snapshot-cleanup pods.
+func (c *Cluster) CassandraPodSelector() string {
+	return fmt.Sprintf("%s=%s,%s=%s,!%s",
+		ApplicationInstanceLabel, c.QualifiedName(),
+		ManagedByLabel, ManagedByCassandraOperator,
+		ApplicationComponentLabel,
+	)
 }
 
 // CreateSnapshotCleanupJob creates a cronjob to trigger the snapshot cleanup
@@ -282,6 +324,7 @@ func (c *Cluster) CreateSnapshotCleanupJob() *v1beta1.CronJob {
 
 	return c.createCronJob(
 		c.definition.SnapshotCleanupJobName(),
+		SnapshotCleanupCronJob,
 		v1alpha1.SnapshotServiceAccountName,
 		c.definition.Spec.Snapshot.RetentionPolicy.CleanupSchedule,
 		c.CreateSnapshotCleanupContainer(c.definition.Spec.Snapshot),
@@ -303,7 +346,7 @@ func (c *Cluster) snapshotCleanupCommand() []string {
 	}
 	cleanupCommand := []string{"/cassandra-snapshot", "cleanup",
 		"-n", c.Namespace(),
-		"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, c.Name(), "app", c.Name()),
+		"-l", c.CassandraPodSelector(),
 	}
 	retentionPeriodDuration := durationDays(c.definition.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays)
 	cleanupCommand = append(cleanupCommand, "-r", retentionPeriodDuration.String())
@@ -312,17 +355,17 @@ func (c *Cluster) snapshotCleanupCommand() []string {
 	return cleanupCommand
 }
 
-func (c *Cluster) createCronJob(objectName, serviceAccountName, schedule string, container *v1.Container) *v1beta1.CronJob {
+func (c *Cluster) createCronJob(objectName, componentName, serviceAccountName, schedule string, container *v1.Container) *v1beta1.CronJob {
 	return &v1beta1.CronJob{
-		ObjectMeta: c.objectMetadataWithOwner(objectName, "app", objectName),
+		ObjectMeta: c.objectMetadataWithOwner(objectName, ApplicationComponentLabel, componentName),
 		Spec: v1beta1.CronJobSpec{
 			Schedule:          schedule,
 			ConcurrencyPolicy: v1beta1.ForbidConcurrent,
 			JobTemplate: v1beta1.JobTemplateSpec{
-				ObjectMeta: c.objectMetadataWithOwner(objectName, "app", objectName),
+				ObjectMeta: c.objectMetadataWithOwner(objectName, ApplicationComponentLabel, componentName),
 				Spec: batchv1.JobSpec{
 					Template: v1.PodTemplateSpec{
-						ObjectMeta: c.objectMetadataWithOwner(objectName, "app", objectName),
+						ObjectMeta: c.objectMetadataWithOwner(objectName, ApplicationComponentLabel, componentName),
 						Spec: v1.PodSpec{
 							SecurityContext:    securityContext,
 							RestartPolicy:      v1.RestartPolicyOnFailure,
@@ -337,7 +380,18 @@ func (c *Cluster) createCronJob(objectName, serviceAccountName, schedule string,
 }
 
 func (c *Cluster) objectMetadata(name string, extraLabels ...string) metav1.ObjectMeta {
-	labels := map[string]string{OperatorLabel: c.Name()}
+	labels := map[string]string{
+		ApplicationNameLabel:     c.Name(),
+		ApplicationInstanceLabel: c.QualifiedName(),
+		ManagedByLabel:           ManagedByCassandraOperator,
+	}
+
+	imageName := c.definition.Spec.Pod.Image
+	if imageName != nil {
+		imageVersion := c.ApplicationVersion()
+		labels[ApplicationVersionLabel] = imageVersion
+	}
+
 	for i := 0; i < len(extraLabels)-1; i += 2 {
 		labels[extraLabels[i]] = extraLabels[i+1]
 	}
@@ -484,7 +538,7 @@ func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1
 		cassandraStorage := rack.Storage[i]
 		if cassandraStorage.PersistentVolumeClaim != nil {
 			persistentVolumeClaim = append(persistentVolumeClaim, v1.PersistentVolumeClaim{
-				ObjectMeta: c.objectMetadata(resourceNameFromPath(*cassandraStorage.Path), RackLabel, rack.Name, "app", c.definition.Name),
+				ObjectMeta: c.objectMetadata(resourceNameFromPath(*cassandraStorage.Path), RackLabel, rack.Name),
 				Spec:       *cassandraStorage.StorageSource.PersistentVolumeClaim,
 			})
 		}
@@ -631,7 +685,7 @@ func (c *Cluster) customConfigMapVolumeName() string {
 	return fmt.Sprintf("cassandra-custom-config-%s", c.definition.Name)
 }
 func (c *Cluster) createInitConfigContainer() v1.Container {
-    memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
+	memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
 
 	return v1.Container{
 		Name:    "init-config",
@@ -645,14 +699,14 @@ func (c *Cluster) createInitConfigContainer() v1.Container {
 				v1.ResourceMemory: memory,
 			},
 			Limits: v1.ResourceList{
-				v1.ResourceMemory:memory,
+				v1.ResourceMemory: memory,
 			},
 		},
 	}
 }
 
 func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.Container {
-    memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
+	memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
 
 	mounts := []v1.VolumeMount{
 		{Name: "configuration", MountPath: "/configuration"},
@@ -668,7 +722,7 @@ func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.C
 				v1.ResourceMemory: memory,
 			},
 			Limits: v1.ResourceList{
-				v1.ResourceMemory:memory,
+				v1.ResourceMemory: memory,
 			},
 		},
 		VolumeMounts: mounts,

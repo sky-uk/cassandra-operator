@@ -18,7 +18,7 @@ import (
 )
 
 func PersistentVolumeClaimsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
-	return persistentVolumeClaimsWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
+	return persistentVolumeClaimsWithLabel(namespace, labelSelectorForCluster(namespace, clusterName))
 }
 
 func persistentVolumeClaimsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
@@ -38,7 +38,7 @@ func persistentVolumeClaimsWithLabel(namespace, label string) func() ([]*kuberne
 }
 
 func StatefulSetsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
-	return statefulSetsWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
+	return statefulSetsWithLabel(namespace, labelSelectorForCluster(namespace, clusterName))
 }
 
 func statefulSetsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
@@ -75,7 +75,7 @@ func HeadlessServiceForCluster(namespace, clusterName string) func() (*kubernete
 }
 
 func PodsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
-	return podsWithLabel(namespace, fmt.Sprintf("app=%s", clusterName))
+	return podsWithLabel(namespace, labelSelectorForCluster(namespace, clusterName))
 }
 
 func podsWithLabel(namespace, label string) func() ([]*kubernetesResource, error) {
@@ -96,7 +96,9 @@ func podsWithLabel(namespace, label string) func() ([]*kubernetesResource, error
 
 func CronJobsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
 	return func() ([]*kubernetesResource, error) {
-		jobList, err := KubeClientset.BatchV1beta1().CronJobs(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName)})
+		jobList, err := KubeClientset.BatchV1beta1().CronJobs(namespace).List(metaV1.ListOptions{
+			LabelSelector: labelSelectorForCluster(namespace, clusterName),
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -222,7 +224,9 @@ func PodRestartForCluster(namespace, clusterName string) func() (int, error) {
 
 func PodReadyForCluster(namespace, clusterName string) func() (int, error) {
 	return func() (int, error) {
-		racks, err := KubeClientset.AppsV1beta1().StatefulSets(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName)})
+		racks, err := KubeClientset.AppsV1beta1().StatefulSets(namespace).List(metaV1.ListOptions{
+			LabelSelector: labelSelectorForCluster(namespace, clusterName),
+		})
 		if err != nil {
 			return 0, err
 		}
@@ -251,7 +255,9 @@ func podReady(pod *coreV1.Pod) bool {
 
 func RacksForCluster(namespace, clusterName string) func() (map[string][]string, error) {
 	return func() (map[string][]string, error) {
-		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", clusterName)})
+		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{
+			LabelSelector: labelSelectorForCluster(namespace, clusterName),
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -260,7 +266,7 @@ func RacksForCluster(namespace, clusterName string) func() (map[string][]string,
 		for _, pod := range pods.Items {
 			var podList []string
 			var ok bool
-			rackKey := pod.Labels["rack"]
+			rackKey := pod.Labels["cassandra-operator/rack"]
 			if podList, ok = podsByRack[rackKey]; !ok {
 				podList = []string{}
 			}
@@ -273,7 +279,9 @@ func RacksForCluster(namespace, clusterName string) func() (map[string][]string,
 
 func DataCenterForCluster(namespace, clusterName string) func() (string, error) {
 	return func() (string, error) {
-		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", clusterName)})
+		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{
+			LabelSelector: labelSelectorForCluster(namespace, clusterName),
+		})
 		if err != nil {
 			return "", err
 		}
@@ -296,7 +304,9 @@ func DataCenterForCluster(namespace, clusterName string) func() (string, error) 
 }
 
 func UniqueNodesUsed(namespace, clusterName string) ([]string, error) {
-	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", clusterName)})
+	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{
+		LabelSelector: labelSelectorForCluster(namespace, clusterName),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +337,9 @@ func FileExistsInConfigurationDirectory(namespace string, podName string, filena
 
 func SnapshotJobsFor(clusterName string) func() (int, error) {
 	return func() (int, error) {
-		result, err := KubeClientset.BatchV1().Jobs(Namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName)})
+		result, err := KubeClientset.BatchV1().Jobs(Namespace).List(metaV1.ListOptions{
+			LabelSelector: labelSelectorForCluster(Namespace, clusterName),
+		})
 		if err != nil {
 			return 0, err
 		}
@@ -403,4 +415,8 @@ func ClusterConfigHashForRack(namespace, clusterName, rack string) string {
 	rackHash, ok := statefulSet.Spec.Template.Annotations["clusterConfigHash"]
 	gomega.Expect(ok).To(gomega.BeTrue())
 	return rackHash
+}
+
+func labelSelectorForCluster(namespace, clusterName string) string {
+	return fmt.Sprintf("%s=%s,%s=%s", cluster.ApplicationInstanceLabel, fmt.Sprintf("%s.%s", namespace, clusterName), cluster.ManagedByLabel, cluster.ManagedByCassandraOperator)
 }

@@ -143,11 +143,50 @@ var _ = Describe("creation of stateful sets", func() {
 		})
 	})
 
-	It("should define environment variable for extra classpath in main container", func() {
-		cluster := ACluster(clusterDef)
+	Describe("Labelling", func() {
+		It("should have the set of recommended labels defined on the statefulset itself", func() {
+			// given
+			cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
-		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+			labels := statefulSet.ObjectMeta.Labels
+
+			// then
+			Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/name", cluster.Name()))
+			Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/instance", cluster.QualifiedName()))
+			Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/version", "3.11"))
+			Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "cassandra-operator"))
+		})
+
+		It("should have the set of recommended labels defined on the pod template", func() {
+			// given
+			cluster := ACluster(clusterDef)
+
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+			podLabels := statefulSet.Spec.Template.ObjectMeta.Labels
+
+			// then
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/name", cluster.Name()))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", cluster.QualifiedName()))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/version", "3.11"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "cassandra-operator"))
+		})
+
+		It("should use the managed-by, instance and rack labels in its selector", func() {
+			// given
+			cluster := ACluster(clusterDef)
+
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+			matchLabels := statefulSet.Spec.Selector.MatchLabels
+
+			// then
+			Expect(matchLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", cluster.QualifiedName()))
+			Expect(matchLabels).To(HaveKeyWithValue("cassandra-operator/rack", cluster.Racks()[0].Name))
+			Expect(matchLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "cassandra-operator"))
+		})
 	})
 
 	Describe("Storage", func() {
@@ -223,6 +262,25 @@ var _ = Describe("creation of stateful sets", func() {
 				mainContainerVolumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
 				Expect(mainContainerVolumeMounts).To(HaveLen(3))
 				Expect(mainContainerVolumeMounts).To(haveExactly(1, matchingVolumeMount("my-cassandra-home", "/my-cassandra-home")))
+			})
+
+			It("should attach the correct labels to the persistent volume claim", func() {
+				// given
+				cluster := ACluster(clusterDef)
+
+				// when
+				statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+				// then
+				volumeClaims := statefulSet.Spec.VolumeClaimTemplates
+				Expect(volumeClaims).To(HaveLen(1))
+				Expect(volumeClaims[0].Name).To(Equal("var-lib-cassandra"))
+				Expect(volumeClaims[0].Labels).To(And(
+					HaveKeyWithValue(ApplicationNameLabel, cluster.Name()),
+					HaveKeyWithValue(ApplicationInstanceLabel, cluster.QualifiedName()),
+					HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
+					HaveKeyWithValue("cassandra-operator/rack", "a"),
+				))
 			})
 		})
 
@@ -358,6 +416,23 @@ var _ = Describe("creation of stateful sets", func() {
 			matchExpr := nodeSelectorTerms[0].MatchExpressions[0]
 			Expect(matchExpr.Key).To(Equal("failure-domain.beta.kubernetes.io/zone"))
 			Expect(matchExpr.Values).To(ConsistOf([]string{cluster.Racks()[0].Zone}))
+		})
+
+		It("should define a pod anti-affinity rule preventing scheduling with another pod in the same cluster", func() {
+			// given
+			cluster := ACluster(clusterDef)
+
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+			podAntiAffinity := statefulSet.Spec.Template.Spec.Affinity.PodAntiAffinity
+
+			// then
+			Expect(podAntiAffinity).ToNot(BeNil())
+			Expect(podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution).To(HaveLen(1))
+
+			antiAffinityLabels := podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector.MatchLabels
+			Expect(antiAffinityLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "cassandra-operator"))
+			Expect(antiAffinityLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", cluster.QualifiedName()))
 		})
 	})
 
@@ -521,6 +596,30 @@ var _ = Describe("creation of stateful sets", func() {
 				Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
 			}
 		})
+	})
+
+	It("should define environment variable for extra classpath in main container", func() {
+		cluster := ACluster(clusterDef)
+
+		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+	})
+})
+
+var _ = Describe("headless service", func() {
+	It("should have a selector which selects based on labels attached to the pods", func() {
+		// given
+		clusterDef := apis.ACassandra().WithDefaults().WithName(CLUSTER).WithNamespace(NAMESPACE).Build()
+		cluster := ACluster(clusterDef)
+
+		// when
+		service := cluster.CreateService()
+
+		// then
+		Expect(service.Spec.Selector).To(And(
+			HaveKeyWithValue(ApplicationInstanceLabel, cluster.QualifiedName()),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
+		))
 	})
 })
 
@@ -698,8 +797,9 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(cronJob.Name).To(Equal(fmt.Sprintf("%s-snapshot", clusterDef.Name)))
 		Expect(cronJob.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(cronJob.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 		Expect(cronJob.Spec.Schedule).To(Equal("01 23 * * *"))
 		Expect(cronJob.Spec.ConcurrencyPolicy).To(Equal(v1beta1.ForbidConcurrent))
@@ -713,16 +813,18 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(backupJob.Name).To(Equal(fmt.Sprintf("%s-snapshot", clusterDef.Name)))
 		Expect(backupJob.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(backupJob.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 
 		backupPod := cronJob.Spec.JobTemplate.Spec.Template
 		Expect(backupPod.Name).To(Equal(fmt.Sprintf("%s-snapshot", clusterDef.Name)))
 		Expect(backupPod.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(backupPod.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 	})
 
@@ -739,7 +841,7 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(snapshotContainer.Command).To(Equal([]string{
 			"/cassandra-snapshot", "create",
 			"-n", cluster.Namespace(),
-			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, clusterDef.Name, "app", clusterDef.Name),
+			"-l", cluster.CassandraPodSelector(),
 			"-t", durationSeconds(&snapshotTimeout).String(),
 		}))
 		Expect(snapshotContainer.Image).To(ContainSubstring("skyuk/cassandra-snapshot:latest"))
@@ -758,7 +860,7 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(snapshotContainer.Command).To(Equal([]string{
 			"/cassandra-snapshot", "create",
 			"-n", cluster.Namespace(),
-			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, clusterDef.Name, "app", clusterDef.Name),
+			"-l", cluster.CassandraPodSelector(),
 			"-t", durationSeconds(&snapshotTimeout).String(),
 			"-k", "keyspace1,keyspace50",
 		}))
@@ -848,8 +950,10 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(cronJob.Name).To(Equal(fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)))
 		Expect(cronJob.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(cronJob.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationNameLabel, clusterDef.Name),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot-cleanup"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 		Expect(cronJob.Spec.Schedule).To(Equal("0 9 * * *"))
 	})
@@ -862,16 +966,20 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(cleanupJob.Name).To(Equal(fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)))
 		Expect(cleanupJob.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(cleanupJob.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationNameLabel, clusterDef.Name),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot-cleanup"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 
 		cleanupPod := cronJob.Spec.JobTemplate.Spec.Template
 		Expect(cleanupPod.Name).To(Equal(fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)))
 		Expect(cleanupPod.Namespace).To(Equal(clusterDef.Namespace))
 		Expect(cleanupPod.Labels).To(And(
-			HaveKeyWithValue(OperatorLabel, clusterDef.Name),
-			HaveKeyWithValue("app", fmt.Sprintf("%s-snapshot-cleanup", clusterDef.Name)),
+			HaveKeyWithValue(ApplicationNameLabel, clusterDef.Name),
+			HaveKeyWithValue(ApplicationInstanceLabel, clusterDef.QualifiedName()),
+			HaveKeyWithValue(ApplicationComponentLabel, "snapshot-cleanup"),
+			HaveKeyWithValue(ManagedByLabel, ManagedByCassandraOperator),
 		))
 	})
 
@@ -886,7 +994,7 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(cleanupContainer.Command).To(Equal([]string{
 			"/cassandra-snapshot", "cleanup",
 			"-n", cluster.Namespace(),
-			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, clusterDef.Name, "app", clusterDef.Name),
+			"-l", cluster.CassandraPodSelector(),
 			"-r", durationDays(&retentionPeriod).String(),
 			"-t", durationSeconds(&cleanupTimeout).String(),
 		}))

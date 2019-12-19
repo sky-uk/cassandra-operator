@@ -79,7 +79,7 @@ type Accessor interface {
 	FindCustomConfigMap(namespace, clusterName string) *v1.ConfigMap
 	UpdateCronJob(job *v1beta1.CronJob) error
 	DeleteCronJob(job *v1beta1.CronJob) error
-	FindCronJobForCluster(cassandra *v1alpha1.Cassandra, label string) (*v1beta1.CronJob, error)
+	FindCronJobForCluster(cassandra *v1alpha1.Cassandra, jobType string) (*v1beta1.CronJob, error)
 	CreateCronJobForCluster(c *Cluster, cronJob *v1beta1.CronJob) (*v1beta1.CronJob, error)
 	WaitUntilRackChangeApplied(cluster *Cluster, statefulSet *v1beta2.StatefulSet) error
 	UpdateStatefulSet(c *Cluster, statefulSet *v1beta2.StatefulSet) (*v1beta2.StatefulSet, error)
@@ -202,7 +202,8 @@ func (h *clientsetBasedAccessor) CreateCronJobForCluster(c *Cluster, cronJob *v1
 }
 
 // FindCronJobForCluster finds the snapshot job for the specified cluster
-func (h *clientsetBasedAccessor) FindCronJobForCluster(cassandra *v1alpha1.Cassandra, label string) (*v1beta1.CronJob, error) {
+func (h *clientsetBasedAccessor) FindCronJobForCluster(cassandra *v1alpha1.Cassandra, jobType string) (*v1beta1.CronJob, error) {
+	label := fmt.Sprintf("%s=%s,%s=%s,%s=%s", ApplicationInstanceLabel, cassandra.QualifiedName(), ManagedByLabel, ManagedByCassandraOperator, ApplicationComponentLabel, jobType)
 	cronJobList, err := h.kubeClientset.BatchV1beta1().CronJobs(cassandra.Namespace).List(metaV1.ListOptions{LabelSelector: label})
 	if err != nil {
 		return nil, err

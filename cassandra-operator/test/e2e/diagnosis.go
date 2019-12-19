@@ -49,9 +49,9 @@ func clusterDiagnosis(namespace, clusterName string) string {
 	diagnosis = append(diagnosis, fmt.Sprintf("\n==== Cassandra definition ====="))
 	diagnosis = append(diagnosis, fmt.Sprintf("%v", cassandraDefinition(namespace, clusterName)))
 	diagnosis = append(diagnosis, fmt.Sprintf("\n==== Describing statefulsets ====="))
-	diagnosis = append(diagnosis, fmt.Sprintf("%v", KubectlOutputAsString(namespace, "describe", "statefulset", "-l", fmt.Sprintf("sky.uk/cassandra-operator=%s", clusterName))))
+	diagnosis = append(diagnosis, fmt.Sprintf("%v", KubectlOutputAsString(namespace, "describe", "statefulset", "-l", labelSelectorForCluster(namespace, clusterName))))
 	diagnosis = append(diagnosis, fmt.Sprintf("\n==== Describing jobs ====="))
-	diagnosis = append(diagnosis, fmt.Sprintf("%v", KubectlOutputAsString(namespace, "describe", "job", "-l", fmt.Sprintf("sky.uk/cassandra-operator=%s", clusterName))))
+	diagnosis = append(diagnosis, fmt.Sprintf("%v", KubectlOutputAsString(namespace, "describe", "cronjob", "-l", labelSelectorForCluster(namespace, clusterName))))
 
 	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("sky.uk/cassandra-operator=%s", clusterName)})
 	if err != nil {

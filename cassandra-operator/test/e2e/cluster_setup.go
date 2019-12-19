@@ -95,7 +95,7 @@ func (c *ClusterBuilder) AndScheduledSnapshot(snapshot *v1alpha1.Snapshot) *Clus
 	return c
 }
 
-func (c *ClusterBuilder) IsDefined() {
+func (c *ClusterBuilder) IsDefined() *cluster.Cluster {
 	if c.clusterSpec == nil {
 		if c.podSpec == nil {
 			c.podSpec = PodSpec().Build()
@@ -112,14 +112,18 @@ func (c *ClusterBuilder) IsDefined() {
 		_, err := customCassandraConfigMap(Namespace, c.clusterName, false, c.extraConfigFile)
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	}
-	_, err := cassandraResource(Namespace, c.clusterName, c.clusterSpec)
+	cassandra, err := cassandraResource(Namespace, c.clusterName, c.clusterSpec)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	return cluster.New(cassandra)
 }
 
-func (c *ClusterBuilder) Exists() {
-	c.IsDefined()
+func (c *ClusterBuilder) Exists() *cluster.Cluster {
+	cassandra := c.IsDefined()
 	EventuallyClusterIsCreatedWithRacks(Namespace, c.clusterName, c.racks)
 	log.Infof("Created cluster %s", c.clusterName)
+
+	return cassandra
 }
 
 func AClusterName() string {
@@ -219,7 +223,8 @@ func customCassandraConfigMap(namespace, clusterName string, update bool, extraF
 			ObjectMeta: metaV1.ObjectMeta{
 				Name: fmt.Sprintf("%s-config", clusterName),
 				Labels: map[string]string{
-					cluster.OperatorLabel: clusterName,
+					cluster.ApplicationNameLabel: clusterName,
+					cluster.ManagedByLabel:       cluster.ManagedByCassandraOperator,
 				},
 			},
 			Data: configData,

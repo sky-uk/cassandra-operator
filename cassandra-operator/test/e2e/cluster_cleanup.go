@@ -22,7 +22,7 @@ func DeleteCassandraResourcesInNamespace(namespace string) {
 	for _, cassandra := range cassandras {
 		deleteClusterDefinitionsWatchedByOperator(namespace, cassandra.Name)
 	}
-	deleteCassandraResourcesWithLabel(namespace, cluster.OperatorLabel)
+	deleteCassandraResourcesWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.ManagedByLabel, cluster.ManagedByCassandraOperator))
 	gomega.Eventually(cassandraPodsInNamespace(namespace), 240*time.Second, time.Second).Should(gomega.BeZero())
 }
 
@@ -33,24 +33,24 @@ func DeleteCassandraResourcesForClusters(namespace string, clusterNames ...strin
 }
 
 func deleteCassandraCustomConfigurationConfigMap(namespace, clusterName string) {
-	deleteConfigMapsWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
+	deleteConfigMapsWithLabel(namespace, labelSelectorForCluster(namespace, clusterName))
 }
 
 func deleteCassandraResourcesForCluster(namespace, clusterName string) {
 	// delete cluster definitions first, to stop the operator from trying to reconcile the state
 	// and bring back the delete resources
 	deleteClusterDefinitionsWatchedByOperator(namespace, clusterName)
-	deleteCassandraResourcesWithLabel(namespace, fmt.Sprintf("%s=%s", cluster.OperatorLabel, clusterName))
+	deleteCassandraResourcesWithLabel(namespace, labelSelectorForCluster(namespace, clusterName))
 }
 
-func deleteCassandraResourcesWithLabel(namespace, label string) {
-	deleteStatefulSetsWithLabel(namespace, label)
-	deletePodsWithLabels(namespace, label)
-	deletePvcsWithLabel(namespace, label)
-	deleteServicesWithLabel(namespace, label)
-	deleteConfigMapsWithLabel(namespace, label)
-	deletePodsWithLabel(namespace, label)
-	deleteJobsWithLabel(namespace, label)
+func deleteCassandraResourcesWithLabel(namespace, labelSelector string) {
+	deleteStatefulSetsWithLabel(namespace, labelSelector)
+	deletePodsWithLabels(namespace, labelSelector)
+	deletePvcsWithLabel(namespace, labelSelector)
+	deleteServicesWithLabel(namespace, labelSelector)
+	deleteConfigMapsWithLabel(namespace, labelSelector)
+	deletePodsWithLabel(namespace, labelSelector)
+	deleteJobsWithLabel(namespace, labelSelector)
 }
 
 func deleteClusterDefinitionsWatchedByOperator(namespace, clusterName string) {
@@ -62,78 +62,78 @@ func deleteClusterDefinitionsWatchedByOperator(namespace, clusterName string) {
 	}
 }
 
-func deleteStatefulSetsWithLabel(namespace, label string) {
+func deleteStatefulSetsWithLabel(namespace, labelSelector string) {
 	ssClient := KubeClientset.AppsV1beta2().StatefulSets(namespace)
-	statefulSetList, err := ssClient.List(metaV1.ListOptions{LabelSelector: label})
+	statefulSetList, err := ssClient.List(metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Error while searching for stateful set in namespace %s, with label %s: %v", namespace, label, err)
+		log.Infof("Error while searching for stateful set in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
 	var ssToDelete []string
 	for _, ss := range statefulSetList.Items {
 		ssToDelete = append(ssToDelete, ss.Name)
 	}
 
-	log.Infof("Deleting statefulsets in namespace %s, with label %s: %v", namespace, label, ssToDelete)
+	log.Infof("Deleting statefulsets in namespace %s, with labelSelector %s: %v", namespace, labelSelector, ssToDelete)
 	deleteImmediately := int64(0)
 	cascadingDelete := metaV1.DeletePropagationBackground
 	if err := ssClient.DeleteCollection(
 		&metaV1.DeleteOptions{PropagationPolicy: &cascadingDelete, GracePeriodSeconds: &deleteImmediately},
-		metaV1.ListOptions{LabelSelector: label}); err != nil {
-		log.Infof("Unable to delete stateful set with cascading in namespace %s, with label %s: %v", namespace, label, err)
+		metaV1.ListOptions{LabelSelector: labelSelector}); err != nil {
+		log.Infof("Unable to delete stateful set with cascading in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
-	gomega.Eventually(statefulSetsWithLabel(namespace, label), durationSecondsPerItem(ssToDelete, 60), time.Second).
+	gomega.Eventually(statefulSetsWithLabel(namespace, labelSelector), durationSecondsPerItem(ssToDelete, 60), time.Second).
 		Should(gomega.HaveLen(0), fmt.Sprintf("When deleting statefulsets: %v", ssToDelete))
 }
 
-func deletePodsWithLabels(namespace, label string) {
+func deletePodsWithLabels(namespace, labelSelector string) {
 	client := KubeClientset.CoreV1().Pods(namespace)
-	podList, err := client.List(metaV1.ListOptions{LabelSelector: label})
+	podList, err := client.List(metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Error while searching for stateful set in namespace %s, with label %s: %v", namespace, label, err)
+		log.Infof("Error while searching for stateful set in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
 
 	deleteImmediately := int64(0)
 	if err := client.DeleteCollection(
 		&metaV1.DeleteOptions{GracePeriodSeconds: &deleteImmediately},
-		metaV1.ListOptions{LabelSelector: label}); err != nil {
-		log.Infof("Unable to delete pods in namespace %s, with label %s: %v", namespace, label, err)
+		metaV1.ListOptions{LabelSelector: labelSelector}); err != nil {
+		log.Infof("Unable to delete pods in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
-	gomega.Eventually(podsWithLabel(namespace, label), time.Duration(len(podList.Items)*60)*time.Second, time.Second).
+	gomega.Eventually(podsWithLabel(namespace, labelSelector), time.Duration(len(podList.Items)*60)*time.Second, time.Second).
 		Should(gomega.HaveLen(0), fmt.Sprintf("When deleting pods: %v", podList.Items))
 }
 
-func deletePvcsWithLabel(namespace, label string) {
+func deletePvcsWithLabel(namespace, labelSelector string) {
 	pvcClient := KubeClientset.CoreV1().PersistentVolumeClaims(namespace)
-	persistentVolumeClaimList, err := pvcClient.List(metaV1.ListOptions{LabelSelector: label})
+	persistentVolumeClaimList, err := pvcClient.List(metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Error while searching for pvc in namespace %s, with label %s: %v", namespace, label, err)
+		log.Infof("Error while searching for pvc in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
 	var pvcToDelete []string
 	for _, pvc := range persistentVolumeClaimList.Items {
 		pvcToDelete = append(pvcToDelete, pvc.Name)
 	}
 
-	log.Infof("Deleting pvcs in namespace %s, with label %s: %v", namespace, label, pvcToDelete)
+	log.Infof("Deleting pvcs in namespace %s, with labelSelector %s: %v", namespace, labelSelector, pvcToDelete)
 	if err := pvcClient.DeleteCollection(metaV1.NewDeleteOptions(0),
-		metaV1.ListOptions{LabelSelector: label}); err != nil {
-		log.Infof("Unable to delete persistent volume claims in namespace %s, with label %s: %v", namespace, label, err)
+		metaV1.ListOptions{LabelSelector: labelSelector}); err != nil {
+		log.Infof("Unable to delete persistent volume claims in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
-	gomega.Eventually(persistentVolumeClaimsWithLabel(namespace, label), durationSecondsPerItem(pvcToDelete, 30), time.Second).
+	gomega.Eventually(persistentVolumeClaimsWithLabel(namespace, labelSelector), durationSecondsPerItem(pvcToDelete, 30), time.Second).
 		Should(gomega.HaveLen(0), fmt.Sprintf("When deleting pvc: %v", pvcToDelete))
 }
 
-func deleteServicesWithLabel(namespace, label string) {
+func deleteServicesWithLabel(namespace, labelSelector string) {
 	svcClient := KubeClientset.CoreV1().Services(namespace)
-	list, err := svcClient.List(metaV1.ListOptions{LabelSelector: label})
+	list, err := svcClient.List(metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Error while searching for services in namespace %s, with label %s: %v", namespace, label, err)
+		log.Infof("Error while searching for services in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
 	var svcToDelete []string
 	for _, svc := range list.Items {
 		svcToDelete = append(svcToDelete, svc.Name)
 	}
 
-	log.Infof("Deleting services in namespace %s, with label %s: %v", namespace, label, svcToDelete)
+	log.Infof("Deleting services in namespace %s, with labelSelector %s: %v", namespace, labelSelector, svcToDelete)
 	for _, svc := range svcToDelete {
 		if err := svcClient.Delete(svc, metaV1.NewDeleteOptions(0)); err != nil {
 			log.Infof("Unable to delete service %s, in namespace %s: %v", svc, namespace, err)
@@ -141,18 +141,18 @@ func deleteServicesWithLabel(namespace, label string) {
 	}
 }
 
-func deleteConfigMapsWithLabel(namespace, label string) {
+func deleteConfigMapsWithLabel(namespace, labelSelector string) {
 	configMapClient := KubeClientset.CoreV1().ConfigMaps(namespace)
-	list, err := configMapClient.List(metaV1.ListOptions{LabelSelector: label})
+	list, err := configMapClient.List(metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Error while searching for configMaps in namespace %s, with label %s: %v", namespace, label, err)
+		log.Infof("Error while searching for configMaps in namespace %s, with labelSelector %s: %v", namespace, labelSelector, err)
 	}
 	var configMapToDelete []string
 	for _, svc := range list.Items {
 		configMapToDelete = append(configMapToDelete, svc.Name)
 	}
 
-	log.Infof("Deleting configMaps in namespace %s, with label %s: %v", namespace, label, configMapToDelete)
+	log.Infof("Deleting configMaps in namespace %s, with labelSelector %s: %v", namespace, labelSelector, configMapToDelete)
 	for _, configMap := range configMapToDelete {
 		if err := configMapClient.Delete(configMap, metaV1.NewDeleteOptions(0)); err != nil {
 			log.Infof("Unable to delete configMap %s, in namespace %s: %v", configMap, namespace, err)
@@ -160,27 +160,27 @@ func deleteConfigMapsWithLabel(namespace, label string) {
 	}
 }
 
-func deletePodsWithLabel(namespace, label string) {
+func deletePodsWithLabel(namespace, labelSelector string) {
 	podClient := KubeClientset.CoreV1().Pods(namespace)
-	err := podClient.DeleteCollection(&metaV1.DeleteOptions{}, metaV1.ListOptions{LabelSelector: label})
+	err := podClient.DeleteCollection(&metaV1.DeleteOptions{}, metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Unable to delete pods labelled %s in namespace %s: %v", label, namespace, err)
+		log.Infof("Unable to delete pods labelled %s in namespace %s: %v", labelSelector, namespace, err)
 	}
 }
 
-func deleteJobsWithLabel(namespace, label string) {
+func deleteJobsWithLabel(namespace, labelSelector string) {
 	deleteInForeground := metaV1.DeletePropagationForeground
 	jobClient := KubeClientset.BatchV1beta1().CronJobs(namespace)
-	err := jobClient.DeleteCollection(&metaV1.DeleteOptions{PropagationPolicy: &deleteInForeground}, metaV1.ListOptions{LabelSelector: label})
+	err := jobClient.DeleteCollection(&metaV1.DeleteOptions{PropagationPolicy: &deleteInForeground}, metaV1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		log.Infof("Unable to delete jobs labelled %s in namespace %s: %v", label, namespace, err)
+		log.Infof("Unable to delete jobs labelled %s in namespace %s: %v", labelSelector, namespace, err)
 	}
 }
 
 func cassandraPodsInNamespace(namespace string) func() int {
 	return func() int {
 		podClient := KubeClientset.CoreV1().Pods(namespace)
-		pods, err := podClient.List(metaV1.ListOptions{LabelSelector: cluster.OperatorLabel})
+		pods, err := podClient.List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.ManagedByLabel, cluster.ManagedByCassandraOperator)})
 		if err == nil {
 			return 0
 		}

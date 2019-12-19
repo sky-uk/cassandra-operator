@@ -168,7 +168,7 @@ func registerMetrics() *clusterMetrics {
 }
 
 func (m *PrometheusMetrics) podsInCluster(cluster *cluster.Cluster) (*podIPMapper, error) {
-	podList, err := m.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", cluster.Name())})
+	podList, err := m.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: cluster.CassandraPodSelector()})
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve pods for cluster %s, %v", cluster.QualifiedName(), err)
 	}

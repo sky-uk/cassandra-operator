@@ -70,7 +70,7 @@ func (cass *currentClusterStateFinder) findStatefulSetsFor(desiredCassandra *v1a
 	statefulSets := cass.objectFactory.newStatefulSetList()
 	options := []client.ListOption{
 		client.InNamespace(desiredCassandra.Namespace),
-		client.MatchingLabels(map[string]string{OperatorLabel: desiredCassandra.Name}),
+		client.MatchingLabels(map[string]string{ApplicationNameLabel: desiredCassandra.Name, ManagedByLabel: ManagedByCassandraOperator}),
 	}
 	err := cass.client.List(context.TODO(), statefulSets, options...)
 	if err != nil {

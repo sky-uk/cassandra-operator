@@ -39,6 +39,7 @@ function deployOperator() {
     local deployment=cassandra-operator
     local operatorArgs='["--log-level=debug"]'
     local tmpDir=$(mktemp -d)
+    local imageVersion=$(echo $operatorImage | grep -o 'v\(.*\)$' | sed s/v//g)
     trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 
     k8Resources="cassandra-operator-rbac.yml cassandra-node-rbac.yml cassandra-operator-deployment.yml cassandra-snapshot.yml cassandra-operator-crd.yml"
@@ -48,6 +49,7 @@ function deployOperator() {
             -e "s@\$OPERATOR_IMAGE@$operatorImage@g" \
             -e "s@\$OPERATOR_ARGS@$operatorArgs@g" \
             -e "s@\$INGRESS_HOST@$ingressHost@g" \
+            -e "s@\$VERSION@$imageVersion@g" \
             ${resourcesDir}/${k8Resource} > ${tmpDir}/${k8Resource}
         kubectl --context ${context} -n ${namespace} apply -f ${tmpDir}/${k8Resource}
     done
