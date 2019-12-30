@@ -20,3 +20,5 @@ replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190619194433-921a716ae8da
 replace k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190416092415-3370b4aef5d6
 
 replace gomodules.xyz/jsonpatch/v2 => github.com/gomodules/jsonpatch/v2 v2.0.1+incompatible
+
+replace gotest.tools => github.com/gotestyourself/gotest.tools v2.2.0+incompatible
