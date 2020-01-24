@@ -1,5 +1,9 @@
 # Changes
 
+## 0.81.0-alpha
+
+- [ENHANCEMENT] [Improve robustness of E2E tests](#224) (@alangibson01)
+
 ## 0.80.0-alpha
 
 - [FEATURE] [Use standard labels on generated resources](#221) (@alangibson01)

@@ -120,31 +120,31 @@ func aStuckClusterExists(clusterName string, withCustomConfig bool) {
 	}
 	cluster.IsDefined()
 
-	Eventually(initContainerState(Namespace, clusterName, fmt.Sprintf("%s-a-0", clusterName), "cassandra-bootstrapper"), 60*time.Second, 2*time.Second).
-		Should(Equal(v1.ContainerState{Waiting: &v1.ContainerStateWaiting{
-			Reason:  "ErrImagePull",
-			Message: "rpc error: code = Unknown desc = failed to resolve image \"docker.io/library/cassandra:invalid\": no available registry endpoint: docker.io/library/cassandra:invalid not found",
-		}}))
+	Eventually(initContainerWaitingReason(Namespace, clusterName, fmt.Sprintf("%s-a-0", clusterName), "cassandra-bootstrapper"), 60*time.Second, 2*time.Second).
+		Should(Or(Equal("ErrImagePull"), Equal("ImagePullBackoff")))
 }
 
-func initContainerState(namespace, clusterName, podName, initContainerName string) func() (v1.ContainerState, error) {
-	return func() (v1.ContainerState, error) {
+func initContainerWaitingReason(namespace, clusterName, podName, initContainerName string) func() (string, error) {
+	return func() (string, error) {
 		pods, err := PodsForCluster(namespace, clusterName)()
 		if err != nil {
-			return v1.ContainerState{}, err
+			return "", err
 		}
 
 		for _, pod := range pods {
 			if pod.Resource.(v1.Pod).Name == podName {
 				for _, initContainerStatus := range pod.Resource.(v1.Pod).Status.InitContainerStatuses {
 					if initContainerStatus.Name == initContainerName {
-						return initContainerStatus.State, nil
+						if initContainerStatus.State.Waiting != nil {
+							return initContainerStatus.State.Waiting.Reason, nil
+						}
+						return "", nil
 					}
 				}
 			}
 		}
 
-		return v1.ContainerState{}, fmt.Errorf("initContainer %s in pod %s not found", initContainerName, podName)
+		return "", fmt.Errorf("initContainer %s in pod %s not found", initContainerName, podName)
 	}
 }
 

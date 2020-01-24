@@ -100,7 +100,8 @@ Flag | Meaning | Default
 `DOCKER_PASSWORD`              | The password for the docker username allowed to push to the release registry | (provided as encrypted variable in `.travis.yml`)
 `GINKGO_COMPILERS`             | Ginkgo `-compilers` value to use when compiling multiple tests suite | `0`, equivalent to not setting the option at all
 `GINKGO_NODES`                 | Ginkgo `-nodes` value to use when running tests suite in parallel using the `-p` option. Use a value greater than `1` to specify the level of parallelism. Use `0` or `1` to disable paralellism. | (no default), equivalent to using as many nodes as cpus
-`E2E_TEST`                     | Name of the end-to-end test suite to run. Use this to run a specific test suite | ``, equivalent to running all test suites
+`E2E_TEST`                     | Name of the end-to-end test suite to run. Use this to run a specific test suite | empty, equivalent to running all test suites
+`SKIP_PACKAGES`                | Comma-separated list of relative package names of tests which should be skipped, e.g. `SKIP_PACKAGES=test/e2e/parallel/validation,test/e2e/parallel/modification` | empty, equivalent to running all test suites
 
 
 ## What to work on

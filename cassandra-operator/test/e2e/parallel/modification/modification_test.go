@@ -3,6 +3,7 @@ package modification
 import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 	"time"
 
@@ -193,6 +194,9 @@ var _ = Context("Allowable cluster modifications", func() {
 	})
 
 	It("should allow the cpu request and limits to be removed", func() {
+		cpuDefaultLimit := findDefaultForCPU(Namespace, "limit")
+		cpuDefaultRequest := findDefaultForCPU(Namespace, "request")
+
 		// given
 		registerResourcesUsed(1)
 		AClusterWithName(clusterName).
@@ -227,8 +231,8 @@ var _ = Context("Allowable cluster modifications", func() {
 				ContainerName: "cassandra",
 				MemoryRequest: ptr.String("999Mi"),
 				MemoryLimit:   ptr.String("999Mi"),
-				CPURequest:    nil,
-				CPULimit:      nil,
+				CPURequest:    cpuDefaultRequest,
+				CPULimit:      cpuDefaultLimit,
 			}),
 		)))
 	})
@@ -430,4 +434,28 @@ func statefulSetRevisions(clusterName string, racks []v1alpha1.Rack) map[string]
 		m[rack.Name] = revision
 	}
 	return m
+}
+
+func findDefaultForCPU(namespace, defaultType string) *string {
+	limitRanges, err := KubeClientset.CoreV1().LimitRanges(namespace).List(metaV1.ListOptions{})
+	Expect(err).ToNot(HaveOccurred())
+
+	for _, lr := range limitRanges.Items {
+		for _, lri := range lr.Spec.Limits {
+			if lri.Type == coreV1.LimitTypeContainer {
+				var resourceList coreV1.ResourceList
+				if defaultType == "limit" {
+					resourceList = lri.Default
+				} else {
+					resourceList = lri.DefaultRequest
+				}
+
+				if value, ok := resourceList[coreV1.ResourceCPU]; ok {
+					return ptr.String(value.String())
+				}
+			}
+		}
+	}
+
+	return nil
 }

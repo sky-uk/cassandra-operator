@@ -2,7 +2,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: policy-test
-  namespace: test-cassandra-operator
 spec:
   template:
     spec:
