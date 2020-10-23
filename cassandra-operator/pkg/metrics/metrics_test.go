@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	pkgcluster "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	metricstesting "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics/testing"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/stub"
 )
@@ -20,7 +21,7 @@ var _ = Describe("Cluster Metrics", func() {
 	var (
 		jolokiaURLProvider *metricstesting.StubbedJolokiaURLProvider
 		metricsGatherer    Gatherer
-		cluster            *cluster.Cluster
+		cluster            *pkgcluster.Cluster
 	)
 
 	BeforeEach(func() {
@@ -161,13 +162,12 @@ var _ = Describe("Cluster Metrics", func() {
 })
 
 var _ = Describe("Metrics URL randomisation", func() {
-	var cluster *cluster.Cluster
+	var cluster *pkgcluster.Cluster
 	var standardPodLabels map[string]string
 
 	BeforeEach(func() {
 		cluster = aCluster("testcluster", "test")
-		standardPodLabels = make(map[string]string)
-		standardPodLabels["app.kubernetes.io/instance"] = "testcluster"
+		standardPodLabels = map[string]string{pkgcluster.ApplicationInstanceLabel: "testcluster"}
 	})
 
 	It("should return a different pod URL each time it is invoked", func() {
@@ -405,7 +405,7 @@ func (jh *jolokiaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-func aCluster(clusterName, namespace string) *cluster.Cluster {
+func aCluster(clusterName, namespace string) *pkgcluster.Cluster {
 	clusterDef := apis.ACassandra().WithDefaults().WithName(clusterName).WithNamespace(namespace).Build()
 	return cluster.New(clusterDef)
 }
