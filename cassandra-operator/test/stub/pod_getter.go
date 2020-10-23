@@ -2,7 +2,9 @@ package stub
 
 import (
 	"fmt"
-	"k8s.io/api/core/v1"
+	"strings"
+
+	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -13,10 +15,16 @@ import (
 
 // NewStubbedPodsGetter creates a PodsGetter that returns a stubbed list of pods with the IP addresses supplied.
 // Most other properties of the pods are not set.
-func NewStubbedPodsGetter(podAddresses ...string) clientV1.PodsGetter {
+func NewStubbedPodsGetter(labels map[string]string, podAddresses ...string) clientV1.PodsGetter {
 	podList := make([]v1.Pod, len(podAddresses))
 	for i, podAddress := range podAddresses {
-		podList[i] = v1.Pod{Status: v1.PodStatus{PodIP: podAddress}}
+		podList[i] = v1.Pod{
+			ObjectMeta: metaV1.ObjectMeta{
+				Labels: labels,
+			},
+			Status: v1.PodStatus{
+				PodIP: podAddress,
+			}}
 	}
 
 	return &stubbedPodsGetter{&stubbedPodInterface{podList, nil}}
@@ -68,6 +76,19 @@ func (s *stubbedPodInterface) List(opts metaV1.ListOptions) (*v1.PodList, error)
 	if s.errorResult != nil {
 		return nil, s.errorResult
 	}
+
+	if len(opts.LabelSelector) > 0 {
+		selector := strings.Split(opts.LabelSelector, "=")
+		matchedPods := make([]v1.Pod, 0)
+
+		for _, pod := range s.podsResult {
+			if pod.Labels[selector[0]] == selector[1] {
+				matchedPods = append(matchedPods, pod)
+			}
+		}
+		return &v1.PodList{Items: matchedPods}, nil
+	}
+
 	return &v1.PodList{Items: s.podsResult}, nil
 }
 

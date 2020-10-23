@@ -12,7 +12,7 @@ import (
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	pkgcluster "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 )
 
 type clusterMetrics struct {
@@ -73,7 +73,7 @@ func NewMetrics(podsGetter coreV1.PodsGetter, config *Config) *PrometheusMetrics
 }
 
 // DeleteMetrics stops reporting metrics for the given cluster
-func (m *PrometheusMetrics) DeleteMetrics(cluster *cluster.Cluster) {
+func (m *PrometheusMetrics) DeleteMetrics(cluster *pkgcluster.Cluster) {
 	if !m.clustersMetrics.clusterSizeGauge.Delete(map[string]string{"cluster": cluster.Name(), "namespace": cluster.Namespace()}) {
 		log.Warnf("Unable to delete cluster_size metrics for cluster %s", cluster.QualifiedName())
 	}
@@ -91,7 +91,7 @@ func (m *PrometheusMetrics) DeleteMetrics(cluster *cluster.Cluster) {
 }
 
 // RemoveNodeFromMetrics stops reporting metrics for the given node
-func (m *PrometheusMetrics) RemoveNodeFromMetrics(cluster *cluster.Cluster, podName, rackName string) {
+func (m *PrometheusMetrics) RemoveNodeFromMetrics(cluster *pkgcluster.Cluster, podName, rackName string) {
 	log.Infof("Removing node cluster:%s, pod:%s, rack:%s from metrics", cluster.QualifiedName(), podName, rackName)
 	for _, labelPair := range allLabelPairs {
 		deleted := m.clustersMetrics.cassandraNodeStatusGauge.Delete(map[string]string{
@@ -109,7 +109,7 @@ func (m *PrometheusMetrics) RemoveNodeFromMetrics(cluster *cluster.Cluster, podN
 }
 
 // UpdateMetrics updates metrics for the given cluster
-func (m *PrometheusMetrics) UpdateMetrics(cluster *cluster.Cluster) {
+func (m *PrometheusMetrics) UpdateMetrics(cluster *pkgcluster.Cluster) {
 	podIPMapper, err := m.podsInCluster(cluster)
 	if err != nil {
 		log.Errorf("Unable to retrieve pod list for cluster %s: %v", cluster.QualifiedName(), err)
@@ -141,7 +141,7 @@ func (m *PrometheusMetrics) UpdateMetrics(cluster *cluster.Cluster) {
 	m.clustersMetrics.clusterSizeGauge.WithLabelValues(cluster.Name(), cluster.Namespace()).Set(clusterLastKnownTopology.nodeCount())
 }
 
-func (m *PrometheusMetrics) updateNodeStatus(cluster *cluster.Cluster, rack string, podName string, nodeStatus *nodeStatus) {
+func (m *PrometheusMetrics) updateNodeStatus(cluster *pkgcluster.Cluster, rack string, podName string, nodeStatus *nodeStatus) {
 	m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cluster.Name(), cluster.Namespace(), rack, podName, nodeStatus.livenessLabel(), nodeStatus.stateLabel()).Set(1)
 	for _, ul := range nodeStatus.unapplicableLabelPairs() {
 		m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cluster.Name(), cluster.Namespace(), rack, podName, ul.liveness, ul.state).Set(0)
@@ -167,7 +167,7 @@ func registerMetrics() *clusterMetrics {
 	return &clusterMetrics{cassandraNodeStatusGauge: cassandraNodeStatusGauge, clusterSizeGauge: clusterSizeGauge}
 }
 
-func (m *PrometheusMetrics) podsInCluster(cluster *cluster.Cluster) (*podIPMapper, error) {
+func (m *PrometheusMetrics) podsInCluster(cluster *pkgcluster.Cluster) (*podIPMapper, error) {
 	podList, err := m.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: cluster.CassandraPodSelector()})
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve pods for cluster %s, %v", cluster.QualifiedName(), err)
@@ -181,7 +181,7 @@ func (m *PrometheusMetrics) podsInCluster(cluster *cluster.Cluster) (*podIPMappe
 }
 
 type podIPMapper struct {
-	cluster     *cluster.Cluster
+	cluster     *pkgcluster.Cluster
 	podIPToName map[string]string
 }
 
@@ -194,7 +194,7 @@ func (p *podIPMapper) withPodNameDoOrError(podIP string, action func(string)) {
 	}
 }
 
-func (u *randomisingJolokiaURLProvider) URLFor(cluster *cluster.Cluster) string {
+func (u *randomisingJolokiaURLProvider) URLFor(cluster *pkgcluster.Cluster) string {
 	var jolokiaHostname string
 	podsWithIPAddresses, err := u.podsWithIPAddresses(cluster)
 
@@ -211,8 +211,8 @@ func (u *randomisingJolokiaURLProvider) URLFor(cluster *cluster.Cluster) string 
 	return fmt.Sprintf("http://%s:7777", jolokiaHostname)
 }
 
-func (u *randomisingJolokiaURLProvider) podsWithIPAddresses(cluster *cluster.Cluster) ([]v1.Pod, error) {
-	podList, err := u.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", cluster.Name())})
+func (u *randomisingJolokiaURLProvider) podsWithIPAddresses(cluster *pkgcluster.Cluster) ([]v1.Pod, error) {
+	podList, err := u.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", pkgcluster.ApplicationInstanceLabel, cluster.Name())})
 	if err != nil {
 		return nil, err
 	}

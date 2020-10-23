@@ -2,19 +2,20 @@ package e2e
 
 import (
 	"fmt"
+	"io/ioutil"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/onsi/gomega"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
-	"io/ioutil"
 	appsV1 "k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"regexp"
-	"strings"
-	"time"
 )
 
 func PersistentVolumeClaimsForCluster(namespace, clusterName string) func() ([]*kubernetesResource, error) {
@@ -208,7 +209,7 @@ func PodCreationTime(namespace, podName string) func() (time.Time, error) {
 
 func PodRestartForCluster(namespace, clusterName string) func() (int, error) {
 	return func() (int, error) {
-		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", clusterName)})
+		pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", cluster.ApplicationInstanceLabel, clusterName)})
 		if err != nil {
 			return 0, err
 		}

@@ -2,15 +2,17 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	pkgcluster "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	metricstesting "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics/testing"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/stub"
 )
@@ -19,7 +21,7 @@ var _ = Describe("Cluster Metrics", func() {
 	var (
 		jolokiaURLProvider *metricstesting.StubbedJolokiaURLProvider
 		metricsGatherer    Gatherer
-		cluster            *cluster.Cluster
+		cluster            *pkgcluster.Cluster
 	)
 
 	BeforeEach(func() {
@@ -160,15 +162,17 @@ var _ = Describe("Cluster Metrics", func() {
 })
 
 var _ = Describe("Metrics URL randomisation", func() {
-	var cluster *cluster.Cluster
+	var cluster *pkgcluster.Cluster
+	var standardPodLabels map[string]string
 
 	BeforeEach(func() {
 		cluster = aCluster("testcluster", "test")
+		standardPodLabels = map[string]string{pkgcluster.ApplicationInstanceLabel: "testcluster"}
 	})
 
 	It("should return a different pod URL each time it is invoked", func() {
 		// given
-		podsGetter := stub.NewStubbedPodsGetter("10.0.0.1", "10.0.0.2")
+		podsGetter := stub.NewStubbedPodsGetter(standardPodLabels, "10.0.0.1", "10.0.0.2")
 		urlProvider := &randomisingJolokiaURLProvider{podsGetter, rand.New(rand.NewSource(0))}
 
 		// when
@@ -198,7 +202,7 @@ var _ = Describe("Metrics URL randomisation", func() {
 
 	It("should return the service URL if no pod is found", func() {
 		// given
-		podsGetter := stub.NewStubbedPodsGetter()
+		podsGetter := stub.NewStubbedPodsGetter(nil)
 		urlProvider := &randomisingJolokiaURLProvider{podsGetter, rand.New(rand.NewSource(0))}
 
 		// when
@@ -211,7 +215,7 @@ var _ = Describe("Metrics URL randomisation", func() {
 	Context("when some pods do not have an IP address", func() {
 		It("should use only pods with an IP address", func() {
 			// given
-			podsGetter := stub.NewStubbedPodsGetter("10.0.0.1", "")
+			podsGetter := stub.NewStubbedPodsGetter(standardPodLabels, "10.0.0.1", "")
 			urlProvider := &randomisingJolokiaURLProvider{podsGetter, rand.New(rand.NewSource(0))}
 
 			for i := 0; i < 10; i++ {
@@ -225,7 +229,20 @@ var _ = Describe("Metrics URL randomisation", func() {
 
 		It("should return the service URL if no pods have an IP address", func() {
 			// given
-			podsGetter := stub.NewStubbedPodsGetter("", "")
+			podsGetter := stub.NewStubbedPodsGetter(standardPodLabels, "", "")
+			urlProvider := &randomisingJolokiaURLProvider{podsGetter, rand.New(rand.NewSource(0))}
+
+			// when
+			urlProvided := urlProvider.URLFor(cluster)
+
+			// then
+			Expect(urlProvided).To(Equal("http://testcluster.test:7777"))
+		})
+
+		It("should return the service URL if no pods have the instance label set to the clustername", func() {
+			// given
+			labels := make(map[string]string)
+			podsGetter := stub.NewStubbedPodsGetter(labels, "10.0.0.1", "10.0.0.2")
 			urlProvider := &randomisingJolokiaURLProvider{podsGetter, rand.New(rand.NewSource(0))}
 
 			// when
@@ -388,7 +405,7 @@ func (jh *jolokiaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-func aCluster(clusterName, namespace string) *cluster.Cluster {
+func aCluster(clusterName, namespace string) *pkgcluster.Cluster {
 	clusterDef := apis.ACassandra().WithDefaults().WithName(clusterName).WithNamespace(namespace).Build()
 	return cluster.New(clusterDef)
 }

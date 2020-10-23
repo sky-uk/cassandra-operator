@@ -1,5 +1,9 @@
 # Changes
 
+## 0.82.0-alpha
+
+- [BUGFIX] [Remove app label references](#230) (@chuckydev)
+
 ## 0.81.0-alpha
 
 - [ENHANCEMENT] [Improve robustness of E2E tests](#224) (@alangibson01)
