@@ -1,5 +1,9 @@
 # Changes
 
+## 0.82.1-alpha
+
+- [BUGFIX] [Used the Qualified Name for looking up jolokia metrics](#232) (@chuckydev)
+
 ## 0.82.0-alpha
 
 - [BUGFIX] [Remove app label references](#230) (@chuckydev)

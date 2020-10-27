@@ -167,7 +167,7 @@ var _ = Describe("Metrics URL randomisation", func() {
 
 	BeforeEach(func() {
 		cluster = aCluster("testcluster", "test")
-		standardPodLabels = map[string]string{pkgcluster.ApplicationInstanceLabel: "testcluster"}
+		standardPodLabels = map[string]string{pkgcluster.ApplicationInstanceLabel: cluster.QualifiedName()}
 	})
 
 	It("should return a different pod URL each time it is invoked", func() {

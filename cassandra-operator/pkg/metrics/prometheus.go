@@ -212,7 +212,7 @@ func (u *randomisingJolokiaURLProvider) URLFor(cluster *pkgcluster.Cluster) stri
 }
 
 func (u *randomisingJolokiaURLProvider) podsWithIPAddresses(cluster *pkgcluster.Cluster) ([]v1.Pod, error) {
-	podList, err := u.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", pkgcluster.ApplicationInstanceLabel, cluster.Name())})
+	podList, err := u.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", pkgcluster.ApplicationInstanceLabel, cluster.QualifiedName())})
 	if err != nil {
 		return nil, err
 	}
