@@ -75,6 +75,11 @@ var _ = Context("forbidden cluster modifications", func() {
 			LastTimestampCloseTo: &modificationTime,
 		}))
 
+		By("incrementing the failed validation metric for this cluster")
+		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
+		}))
+
 		By("not changing the number of pods in the rack")
 		Expect(RacksForCluster(Namespace, multipleNodeCluster.Name)()).Should(And(
 			HaveLen(2),
@@ -96,6 +101,10 @@ var _ = Context("forbidden cluster modifications", func() {
 			Message:              "spec.Pod.Image: Forbidden: This field can not be changed",
 			LastTimestampCloseTo: &modificationTime,
 		}))
+		By("incrementing the failed validation metric for this cluster")
+		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
+		}))
 		By("not restarting any pods")
 		Expect(podEvents.PodsStartedEventCount(PodName(multipleNodeCluster.Name, "a", 0))).To(Equal(1))
 	})
@@ -106,11 +115,16 @@ var _ = Context("forbidden cluster modifications", func() {
 		ARackIsRemovedFromCluster(Namespace, multipleNodeCluster.Name, "b")
 
 		// then
+		By("recording a warning event about the forbidden rack deletion")
 		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
 			Message:              "spec.Racks: Forbidden: Rack deletion is not supported",
 			LastTimestampCloseTo: &modificationTime,
+		}))
+		By("incrementing the failed validation metric for this cluster")
+		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
 		}))
 
 	})

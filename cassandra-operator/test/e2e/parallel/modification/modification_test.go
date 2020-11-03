@@ -188,6 +188,7 @@ var _ = Context("Allowable cluster modifications", func() {
 		By("reporting metrics for the existing and new racks")
 		Eventually(OperatorMetrics(Namespace), 3*time.Minute, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, clusterName, 2),
+			FailedValidationMetric(Namespace, clusterName, 0),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "b", 0), "b", 1),
 		}))

@@ -63,12 +63,12 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	scheme := registerScheme()
 	var activeReconciliations sync.Map
 
-	metricsPoller := metrics.NewMetrics(kubeClientset.CoreV1(), &metrics.Config{RequestTimeout: operatorConfig.MetricRequestDuration})
+	metricsReporter := metrics.NewMetrics(kubeClientset.CoreV1(), &metrics.Config{RequestTimeout: operatorConfig.MetricRequestDuration})
 	eventRecorder := cluster.NewEventRecorder(kubeClientset, scheme)
 	clusterAccessor := cluster.NewAccessor(kubeClientset, cassandraClientset, eventRecorder, &activeReconciliations)
 	eventReceiver := event.NewEventReceiver(
 		clusterAccessor,
-		metricsPoller,
+		metricsReporter,
 		eventRecorder,
 	)
 
@@ -78,7 +78,7 @@ func New(kubeClientset *kubernetes.Clientset, cassandraClientset *versioned.Clie
 	}
 
 	reconciler, err := controller.New("cassandra", mgr, controller.Options{
-		Reconciler:              NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventReceiver, operatorConfig),
+		Reconciler:              NewReconciler(clusters, mgr.GetClient(), eventRecorder, eventReceiver, operatorConfig, metricsReporter),
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	})
 	if err != nil {

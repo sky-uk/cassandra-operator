@@ -1,5 +1,9 @@
 # Changes
 
+## 0.83.0-alpha
+
+- [FEATURE] [Add a Failure Metric Increment Event based on failed CRD validation](#233) (@Bez625)
+
 ## 0.82.1-alpha
 
 - [BUGFIX] [Used the Qualified Name for looking up jolokia metrics](#232) (@chuckydev)

@@ -38,11 +38,11 @@ type OperatorEventReceiver struct {
 }
 
 // NewEventReceiver creates a new OperatorEventReceiver
-func NewEventReceiver(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder) Receiver {
+func NewEventReceiver(clusterAccessor cluster.Accessor, metricsReporter metrics.ClusterMetricsReporter, eventRecorder record.EventRecorder) Receiver {
 	return &OperatorEventReceiver{
 		clusterAccessor:   clusterAccessor,
 		operationComposer: operations.NewOperationComposer(),
-		operationFactory:  operations.NewOperationFactory(clusterAccessor, metricsPoller, eventRecorder, adjuster.New()),
+		operationFactory:  operations.NewOperationFactory(clusterAccessor, metricsReporter, eventRecorder, adjuster.New()),
 	}
 }
 

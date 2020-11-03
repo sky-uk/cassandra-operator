@@ -241,6 +241,7 @@ var _ = Context("When a cluster doesn't already exist", func() {
 		By("exposing node and rack information in metrics")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, multipleRacksCluster.Name, 3),
+			FailedValidationMetric(Namespace, multipleRacksCluster.Name, 0),
 			LiveAndNormalNodeMetric(Namespace, multipleRacksCluster.Name, PodName(multipleRacksCluster.Name, "a", 0), "a", 1),
 			LiveAndNormalNodeMetric(Namespace, multipleRacksCluster.Name, PodName(multipleRacksCluster.Name, "a", 1), "a", 1),
 			LiveAndNormalNodeMetric(Namespace, multipleRacksCluster.Name, PodName(multipleRacksCluster.Name, "b", 0), "b", 1),
@@ -249,6 +250,7 @@ var _ = Context("When a cluster doesn't already exist", func() {
 		By("exposing metrics for the other cluster")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, emptyDirCluster.Name, 1),
+			FailedValidationMetric(Namespace, multipleRacksCluster.Name, 0),
 			LiveAndNormalNodeMetric(Namespace, emptyDirCluster.Name, PodName(emptyDirCluster.Name, "a", 0), "a", 1),
 		}))
 	})

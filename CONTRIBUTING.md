@@ -19,6 +19,7 @@ The following must be installed on your development machine:
 - `kubectl`
 - `curl`
 - `rsync`
+- `goss`
 
 This project uses [Go Modules](https://github.com/golang/go/wiki/Modules).
 

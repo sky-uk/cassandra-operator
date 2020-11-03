@@ -45,6 +45,7 @@ var _ = Context("Cluster untriggered modifications", func() {
 		// then
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, clusterName, 2),
+			FailedValidationMetric(Namespace, clusterName, 0),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
 			DownAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "b", 0), "b", 1),
 		}))

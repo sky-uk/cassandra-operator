@@ -11,6 +11,7 @@ import (
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/validation"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	corev1 "k8s.io/api/core/v1"
@@ -42,28 +43,30 @@ type requestContext struct {
 
 // CassandraReconciler is a controller that reconciles Cassandra resources
 type CassandraReconciler struct {
-	clusters       map[types.NamespacedName]*v1alpha1.Cassandra
-	client         client.Client
-	eventRecorder  record.EventRecorder
-	eventReceiver  event.Receiver
-	objectFactory  objectReferenceFactory
-	stateFinder    cluster.StateFinder
-	operatorConfig *Config
+	clusters        map[types.NamespacedName]*v1alpha1.Cassandra
+	client          client.Client
+	eventRecorder   record.EventRecorder
+	eventReceiver   event.Receiver
+	objectFactory   objectReferenceFactory
+	stateFinder     cluster.StateFinder
+	operatorConfig  *Config
+	metricsReporter metrics.ClusterMetricsReporter
 }
 
 // Implement reconcile.Reconciler so the controller can reconcile objects
 var _ reconcile.Reconciler = &CassandraReconciler{}
 
 // NewReconciler creates a CassandraReconciler
-func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventReceiver event.Receiver, operatorConfig *Config) *CassandraReconciler {
+func NewReconciler(clusters map[types.NamespacedName]*v1alpha1.Cassandra, client client.Client, eventRecorder record.EventRecorder, eventReceiver event.Receiver, operatorConfig *Config, metricsReporter metrics.ClusterMetricsReporter) *CassandraReconciler {
 	return &CassandraReconciler{
-		clusters:       clusters,
-		client:         client,
-		eventRecorder:  eventRecorder,
-		eventReceiver:  eventReceiver,
-		objectFactory:  &defaultReferenceFactory{},
-		stateFinder:    cluster.NewStateFinder(client),
-		operatorConfig: operatorConfig,
+		clusters:        clusters,
+		client:          client,
+		eventRecorder:   eventRecorder,
+		eventReceiver:   eventReceiver,
+		objectFactory:   &defaultReferenceFactory{},
+		stateFinder:     cluster.NewStateFinder(client),
+		operatorConfig:  operatorConfig,
+		metricsReporter: metricsReporter,
 	}
 }
 
@@ -143,11 +146,15 @@ func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *reques
 	logger := ctx.logger
 	logger.Debug("Reconciling Cassandra")
 
+	// Initialise the failed validation metric prior to validation.
+	r.metricsReporter.InitialiseFailedValidationMetric(desiredCassandra)
+
 	v1alpha1helpers.SetDefaultsForCassandra(desiredCassandra, &v1alpha1helpers.TemplatedImageScheme{RepositoryPath: r.operatorConfig.RepositoryPath, ImageVersion: r.operatorConfig.Version})
 	validationError := validation.ValidateCassandra(desiredCassandra).ToAggregate()
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)
 		r.eventRecorder.Event(desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, validationError.Error())
+		r.metricsReporter.IncrementFailedValidationMetric(desiredCassandra)
 		return nil, nil
 	}
 
@@ -164,6 +171,7 @@ func (r *CassandraReconciler) determineChangesForCassandraDefinition(ctx *reques
 	if validationError != nil {
 		logger.Errorf("Cassandra validation failed. Skipping reconciliation: %v", validationError)
 		r.eventRecorder.Event(desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, validationError.Error())
+		r.metricsReporter.IncrementFailedValidationMetric(desiredCassandra)
 		return nil, nil
 	}
 

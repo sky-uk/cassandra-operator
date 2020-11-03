@@ -61,6 +61,7 @@ var _ = Context("When an operator is restarted", func() {
 		By("exposing metrics for the cluster")
 		Eventually(OperatorMetrics(Namespace), NodeStartDuration, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, clusterName, 1),
+			FailedValidationMetric(Namespace, clusterName, 0),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
 		}))
 	})
@@ -93,6 +94,7 @@ var _ = Context("When an operator is restarted", func() {
 		By("exposing metrics for the cluster")
 		Eventually(OperatorMetrics(Namespace), NodeStartDuration, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			ClusterSizeMetric(Namespace, clusterName, 2),
+			FailedValidationMetric(Namespace, clusterName, 0),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 0), "a", 1),
 			LiveAndNormalNodeMetric(Namespace, clusterName, PodName(clusterName, "a", 1), "a", 1),
 		}))

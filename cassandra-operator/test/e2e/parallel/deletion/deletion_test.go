@@ -122,6 +122,7 @@ var _ = Context("Cluster and node deletion", func() {
 				LiveAndNormalNodeMetric(Namespace, multipleNodeCluster.Name, PodName(multipleNodeCluster.Name, "a", 0), "a", 1),
 				LiveAndNormalNodeMetric(Namespace, multipleNodeCluster.Name, PodName(multipleNodeCluster.Name, "b", 0), "b", 1),
 				ClusterSizeMetric(Namespace, multipleNodeCluster.Name, 2),
+				FailedValidationMetric(Namespace, multipleNodeCluster.Name, 0),
 			}))
 
 		})

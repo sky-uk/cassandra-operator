@@ -80,17 +80,17 @@ type OperationFactory interface {
 type OperationFactoryImpl struct {
 	clusterAccessor     cluster.Accessor
 	statefulSetAccessor *statefulSetAccessor
-	metricsPoller       *metrics.PrometheusMetrics
+	metricsReporter     metrics.ClusterMetricsReporter
 	eventRecorder       record.EventRecorder
 	adjuster            *adjuster.Adjuster
 }
 
 // NewOperationFactory creates a new OperationFactory
-func NewOperationFactory(clusterAccessor cluster.Accessor, metricsPoller *metrics.PrometheusMetrics, eventRecorder record.EventRecorder, adjuster *adjuster.Adjuster) OperationFactory {
+func NewOperationFactory(clusterAccessor cluster.Accessor, metricsReporter metrics.ClusterMetricsReporter, eventRecorder record.EventRecorder, adjuster *adjuster.Adjuster) OperationFactory {
 	return &OperationFactoryImpl{
 		clusterAccessor:     clusterAccessor,
 		statefulSetAccessor: &statefulSetAccessor{clusterAccessor: clusterAccessor},
-		metricsPoller:       metricsPoller,
+		metricsReporter:     metricsReporter,
 		eventRecorder:       eventRecorder,
 		adjuster:            adjuster,
 	}
@@ -116,9 +116,8 @@ func (o *OperationFactoryImpl) NewAddService(cassandra *v1alpha1.Cassandra) Oper
 // NewDeleteCluster creates a DeleteCluster Operation
 func (o *OperationFactoryImpl) NewDeleteCluster(cassandra *v1alpha1.Cassandra) Operation {
 	return &DeleteClusterOperation{
-		clusterAccessor: o.clusterAccessor,
 		cassandra:       cassandra,
-		metricsPoller:   o.metricsPoller,
+		metricsReporter: o.metricsReporter,
 	}
 }
 
@@ -167,6 +166,7 @@ func (o *OperationFactoryImpl) NewUpdateCluster(oldCassandra, newCassandra *v1al
 		clusterAccessor:     o.clusterAccessor,
 		oldCassandra:        oldCassandra,
 		newCassandra:        newCassandra,
+		metricsReporter:     o.metricsReporter,
 	}
 }
 
@@ -190,7 +190,7 @@ func (o *OperationFactoryImpl) NewUpdateSnapshotCleanup(cassandra *v1alpha1.Cass
 
 // NewGatherMetrics creates a GatherMetrics Operation
 func (o *OperationFactoryImpl) NewGatherMetrics(cassandra *v1alpha1.Cassandra) Operation {
-	return &GatherMetricsOperation{metricsPoller: o.metricsPoller, cassandra: cassandra}
+	return &GatherMetricsOperation{metricsReporter: o.metricsReporter, cassandra: cassandra}
 }
 
 // NewUpdateCustomConfig creates a UpdateCustomConfig Operation

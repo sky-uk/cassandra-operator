@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"math/rand"
 	"sync"
 	"time"
@@ -16,8 +17,9 @@ import (
 )
 
 type clusterMetrics struct {
-	cassandraNodeStatusGauge *prometheus.GaugeVec
-	clusterSizeGauge         *prometheus.GaugeVec
+	cassandraNodeStatusGauge   *prometheus.GaugeVec
+	clusterSizeGauge           *prometheus.GaugeVec
+	clusterValidationFailures  *prometheus.CounterVec
 }
 
 type clusterTopology struct {
@@ -26,6 +28,15 @@ type clusterTopology struct {
 
 func (t *clusterTopology) nodeCount() float64 {
 	return float64(len(t.nodesToRack))
+}
+
+// ClusterMetricsReporter allows us to increment and initialise metrics via the PrometheusMetrics and Mocks
+type ClusterMetricsReporter interface {
+	IncrementFailedValidationMetric(cassandra *v1alpha1.Cassandra)
+	InitialiseFailedValidationMetric(cassandra *v1alpha1.Cassandra)
+	UpdateMetrics(cassandra *v1alpha1.Cassandra)
+	DeleteMetrics(cassandra *v1alpha1.Cassandra)
+	RemoveNodeFromMetrics(cassandra *v1alpha1.Cassandra, podName, rackName string)
 }
 
 // PrometheusMetrics reports on the status of cluster nodes and exposes the information to Prometheus
@@ -73,52 +84,56 @@ func NewMetrics(podsGetter coreV1.PodsGetter, config *Config) *PrometheusMetrics
 }
 
 // DeleteMetrics stops reporting metrics for the given cluster
-func (m *PrometheusMetrics) DeleteMetrics(cluster *pkgcluster.Cluster) {
-	if !m.clustersMetrics.clusterSizeGauge.Delete(map[string]string{"cluster": cluster.Name(), "namespace": cluster.Namespace()}) {
-		log.Warnf("Unable to delete cluster_size metrics for cluster %s", cluster.QualifiedName())
+func (m *PrometheusMetrics) DeleteMetrics(cassandra *v1alpha1.Cassandra) {
+	if !m.clustersMetrics.clusterSizeGauge.Delete(map[string]string{"cluster": cassandra.Name, "namespace": cassandra.Namespace}) {
+		log.Warnf("Unable to delete cluster_size metrics for cluster %s", cassandra.QualifiedName())
+	}
+
+	if !m.clustersMetrics.clusterValidationFailures.Delete(map[string]string{"cluster": cassandra.Name, "namespace": cassandra.Namespace}) {
+		log.Warnf("Unable to delete cassandra_failed_validation_count metrics for cluster %s", cassandra.QualifiedName())
 	}
 
 	var clusterTopology *clusterTopology
 	var ok bool
-	if clusterTopology, ok = m.lastKnownClustersTopology.Get(cluster.QualifiedName()); !ok {
-		log.Warnf("No last known cluster topology for cluster %s. Perhaps no metrics have ever been collected.", cluster.QualifiedName())
+	if clusterTopology, ok = m.lastKnownClustersTopology.Get(cassandra.QualifiedName()); !ok {
+		log.Warnf("No last known cluster topology for cluster %s. Perhaps no metrics have ever been collected.", cassandra.QualifiedName())
 		return
 	}
 	for podName, rackName := range clusterTopology.nodesToRack {
-		m.RemoveNodeFromMetrics(cluster, podName, rackName)
+		m.RemoveNodeFromMetrics(cassandra, podName, rackName)
 	}
-	m.lastKnownClustersTopology.Delete(cluster.QualifiedName())
+	m.lastKnownClustersTopology.Delete(cassandra.QualifiedName())
 }
 
 // RemoveNodeFromMetrics stops reporting metrics for the given node
-func (m *PrometheusMetrics) RemoveNodeFromMetrics(cluster *pkgcluster.Cluster, podName, rackName string) {
-	log.Infof("Removing node cluster:%s, pod:%s, rack:%s from metrics", cluster.QualifiedName(), podName, rackName)
+func (m *PrometheusMetrics) RemoveNodeFromMetrics(cassandra *v1alpha1.Cassandra, podName, rackName string) {
+	log.Infof("Removing node cluster:%s, pod:%s, rack:%s from metrics", cassandra.QualifiedName(), podName, rackName)
 	for _, labelPair := range allLabelPairs {
 		deleted := m.clustersMetrics.cassandraNodeStatusGauge.Delete(map[string]string{
-			"cluster":   cluster.Name(),
-			"namespace": cluster.Namespace(),
+			"cluster":   cassandra.Name,
+			"namespace": cassandra.Namespace,
 			"rack":      rackName,
 			"pod":       podName,
 			"liveness":  labelPair.liveness,
 			"state":     labelPair.state,
 		})
 		if !deleted {
-			log.Warnf("Unable to delete node status metrics for cluster %s, rack: %s, pod: %s, node status: %s", cluster.QualifiedName(), rackName, podName, labelPair)
+			log.Warnf("Unable to delete node status metrics for cluster %s, rack: %s, pod: %s, node status: %s", cassandra.QualifiedName(), rackName, podName, labelPair)
 		}
 	}
 }
 
 // UpdateMetrics updates metrics for the given cluster
-func (m *PrometheusMetrics) UpdateMetrics(cluster *pkgcluster.Cluster) {
-	podIPMapper, err := m.podsInCluster(cluster)
+func (m *PrometheusMetrics) UpdateMetrics(cassandra *v1alpha1.Cassandra) {
+	podIPMapper, err := m.podsInCluster(cassandra)
 	if err != nil {
-		log.Errorf("Unable to retrieve pod list for cluster %s: %v", cluster.QualifiedName(), err)
+		log.Errorf("Unable to retrieve pod list for cluster %s: %v", cassandra.QualifiedName(), err)
 		return
 	}
-
-	clusterStatus, err := m.gatherer.GatherMetricsFor(cluster)
+	clusterFromCassandra := pkgcluster.New(cassandra)
+	clusterStatus, err := m.gatherer.GatherMetricsFor(clusterFromCassandra)
 	if err != nil {
-		log.Errorf("Unable to gather metrics for cluster %s: %v", cluster.QualifiedName(), err)
+		log.Errorf("Unable to gather metrics for cluster %s: %v", cassandra.QualifiedName(), err)
 		return
 	}
 
@@ -133,18 +148,28 @@ func (m *PrometheusMetrics) UpdateMetrics(cluster *pkgcluster.Cluster) {
 				rack = "unknown"
 			}
 			clusterLastKnownTopology.nodesToRack[podName] = rack
-			m.updateNodeStatus(cluster, rack, podName, nodeStatus)
+			m.updateNodeStatus(cassandra, rack, podName, nodeStatus)
 		})
 	}
 
-	m.lastKnownClustersTopology.Set(cluster.QualifiedName(), clusterLastKnownTopology)
-	m.clustersMetrics.clusterSizeGauge.WithLabelValues(cluster.Name(), cluster.Namespace()).Set(clusterLastKnownTopology.nodeCount())
+	m.lastKnownClustersTopology.Set(cassandra.QualifiedName(), clusterLastKnownTopology)
+	m.clustersMetrics.clusterSizeGauge.WithLabelValues(cassandra.Name, cassandra.Namespace).Set(clusterLastKnownTopology.nodeCount())
 }
 
-func (m *PrometheusMetrics) updateNodeStatus(cluster *pkgcluster.Cluster, rack string, podName string, nodeStatus *nodeStatus) {
-	m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cluster.Name(), cluster.Namespace(), rack, podName, nodeStatus.livenessLabel(), nodeStatus.stateLabel()).Set(1)
+// IncrementFailedValidationMetric increment failed validation metrics metrics for the given cluster
+func (m *PrometheusMetrics) IncrementFailedValidationMetric(cassandra *v1alpha1.Cassandra) {
+	m.clustersMetrics.clusterValidationFailures.WithLabelValues(cassandra.Name, cassandra.Namespace).Inc()
+}
+
+// InitialiseFailedValidationMetric increment failed validation metrics metrics for the given cluster
+func (m *PrometheusMetrics) InitialiseFailedValidationMetric(cassandra *v1alpha1.Cassandra) {
+	m.clustersMetrics.clusterValidationFailures.WithLabelValues(cassandra.Name, cassandra.Namespace).Add(0)
+}
+
+func (m *PrometheusMetrics) updateNodeStatus(cassandra *v1alpha1.Cassandra, rack string, podName string, nodeStatus *nodeStatus) {
+	m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cassandra.Name, cassandra.Namespace, rack, podName, nodeStatus.livenessLabel(), nodeStatus.stateLabel()).Set(1)
 	for _, ul := range nodeStatus.unapplicableLabelPairs() {
-		m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cluster.Name(), cluster.Namespace(), rack, podName, ul.liveness, ul.state).Set(0)
+		m.clustersMetrics.cassandraNodeStatusGauge.WithLabelValues(cassandra.Name, cassandra.Namespace, rack, podName, ul.liveness, ul.state).Set(0)
 	}
 }
 
@@ -163,32 +188,40 @@ func registerMetrics() *clusterMetrics {
 		},
 		[]string{"cluster", "namespace"},
 	)
-	prometheus.MustRegister(cassandraNodeStatusGauge, clusterSizeGauge)
-	return &clusterMetrics{cassandraNodeStatusGauge: cassandraNodeStatusGauge, clusterSizeGauge: clusterSizeGauge}
+	clusterValidationFailures := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cassandra_failed_validation_total",
+			Help: "Total number of validation failures for a Cassandra cluster",
+		},
+		[]string{"cluster", "namespace"},
+	)
+	prometheus.MustRegister(cassandraNodeStatusGauge, clusterSizeGauge, clusterValidationFailures)
+	return &clusterMetrics{cassandraNodeStatusGauge: cassandraNodeStatusGauge, clusterSizeGauge: clusterSizeGauge, clusterValidationFailures: clusterValidationFailures}
 }
 
-func (m *PrometheusMetrics) podsInCluster(cluster *pkgcluster.Cluster) (*podIPMapper, error) {
-	podList, err := m.podsGetter.Pods(cluster.Namespace()).List(metaV1.ListOptions{LabelSelector: cluster.CassandraPodSelector()})
+func (m *PrometheusMetrics) podsInCluster(cassandra *v1alpha1.Cassandra) (*podIPMapper, error) {
+	clusterFromCassandra := pkgcluster.New(cassandra)
+	podList, err := m.podsGetter.Pods(cassandra.Namespace).List(metaV1.ListOptions{LabelSelector: clusterFromCassandra.CassandraPodSelector()})
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve pods for cluster %s, %v", cluster.QualifiedName(), err)
+		return nil, fmt.Errorf("unable to retrieve pods for cluster %s, %v", cassandra.QualifiedName(), err)
 	}
 
 	podIPToName := map[string]string{}
 	for _, pod := range podList.Items {
 		podIPToName[pod.Status.PodIP] = pod.Name
 	}
-	return &podIPMapper{cluster: cluster, podIPToName: podIPToName}, nil
+	return &podIPMapper{cassandra: cassandra, podIPToName: podIPToName}, nil
 }
 
 type podIPMapper struct {
-	cluster     *pkgcluster.Cluster
+	cassandra   *v1alpha1.Cassandra
 	podIPToName map[string]string
 }
 
 func (p *podIPMapper) withPodNameDoOrError(podIP string, action func(string)) {
 	podName, ok := p.podIPToName[podIP]
 	if !ok {
-		log.Warnf("Unable to find corresponding pod name for pod ip: %s for cluster %s", podIP, p.cluster.QualifiedName())
+		log.Warnf("Unable to find corresponding pod name for pod ip: %s for cluster %s", podIP, p.cassandra.QualifiedName())
 	} else {
 		action(podName)
 	}

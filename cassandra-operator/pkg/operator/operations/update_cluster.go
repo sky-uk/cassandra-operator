@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -18,6 +19,7 @@ type UpdateClusterOperation struct {
 	clusterAccessor     cluster.Accessor
 	oldCassandra        *v1alpha1.Cassandra
 	newCassandra        *v1alpha1.Cassandra
+	metricsReporter     metrics.ClusterMetricsReporter
 }
 
 // Execute performs the operation
@@ -59,6 +61,7 @@ func (o *UpdateClusterOperation) Execute() (bool, error) {
 		default:
 			message := fmt.Sprintf("Change type '%s' isn't supported for cluster %s", clusterChange.ChangeType, o.newCassandra.QualifiedName())
 			o.eventRecorder.Event(o.oldCassandra, v1.EventTypeWarning, cluster.InvalidChangeEvent, message)
+			o.metricsReporter.IncrementFailedValidationMetric(o.newCassandra)
 			return false, fmt.Errorf(message)
 		}
 	}

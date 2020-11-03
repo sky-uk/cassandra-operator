@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/metrics"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/event"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
@@ -53,6 +54,7 @@ var _ = Describe("reconciler", func() {
 			stateFinder:      &mockStateFinder{},
 			objectFactory:    &mockObjectFactory{},
 			dispatchedEvents: &[]event.Event{},
+			metricsReporter:  &mockMetricsReporter{},
 		}
 		desiredCassandra = aClusterDefinition()
 		desiredCassandra.Namespace = clusterNamespaceName.Namespace
@@ -60,13 +62,14 @@ var _ = Describe("reconciler", func() {
 		clusters = make(map[types.NamespacedName]*v1alpha1.Cassandra)
 
 		reconciler = CassandraReconciler{
-			clusters:       clusters,
-			client:         fakes.client,
-			eventReceiver:  fakes.receiver,
-			eventRecorder:  fakes.eventRecorder,
-			objectFactory:  fakes.objectFactory,
-			stateFinder:    fakes.stateFinder,
-			operatorConfig: &Config{Version: "latest", RepositoryPath: "skyuk"},
+			clusters:        clusters,
+			client:          fakes.client,
+			eventReceiver:   fakes.receiver,
+			eventRecorder:   fakes.eventRecorder,
+			objectFactory:   fakes.objectFactory,
+			stateFinder:     fakes.stateFinder,
+			operatorConfig:  &Config{Version: "latest", RepositoryPath: "skyuk"},
+			metricsReporter: fakes.metricsReporter,
 		}
 	})
 
@@ -120,6 +123,7 @@ var _ = Describe("reconciler", func() {
 			BeforeEach(func() {
 				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
 				fakes.noConfigMapToReconcile(configMapNamespaceName, desiredCassandra)
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
 			})
 
 			It("should dispatch an AddCluster event when no corresponding cluster found", func() {
@@ -199,6 +203,7 @@ var _ = Describe("reconciler", func() {
 				}
 				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
 				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
 			})
 
 			It("should dispatch an AddCustomConfig when a configMap exists, but no custom config was actually associated with the Cassandra cluster", func() {
@@ -336,6 +341,7 @@ var _ = Describe("reconciler", func() {
 				desiredCassandra.Spec.Racks = []v1alpha1.Rack{rackSpec("a"), rackSpec("b")}
 				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
 				fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
 			})
 
 			It("should dispatch an UpdateCustomConfig event when a configMap exists and multiple config hash values were found", func() {
@@ -377,6 +383,7 @@ var _ = Describe("reconciler", func() {
 			BeforeEach(func() {
 				fakes.noConfigMapToReconcile(configMapNamespaceName, desiredCassandra)
 				fakes.cassandraDefinitionHasntChanged(clusterNamespaceName, desiredCassandra)
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
 			})
 
 			It("should dispatch an AddService event when the Service does not exists", func() {
@@ -427,6 +434,7 @@ var _ = Describe("reconciler", func() {
 						ResourceVersion: initialResourceVersion,
 					},
 				}
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
 			})
 
 			It("should dispatch configMap Events before Cassandra ones", func() {
@@ -478,6 +486,10 @@ var _ = Describe("reconciler", func() {
 		})
 
 		Context("errors", func() {
+
+			BeforeEach(func() {
+				fakes.reconcilerInitialisesMetric(desiredCassandra)
+			})
 
 			It("should not dispatch an event but re-enqueue a reconciliation when unable to fetch the Cassandra definition", func() {
 				unknownError := fakes.anErrorIsReturnWhenFindingCassandraIn(clusterNamespaceName)
@@ -539,6 +551,7 @@ var _ = Describe("reconciler", func() {
 				fakes.noConfigMapToReconcile(configMapNamespaceName, desiredCassandra)
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.invalidChangeEventIsRecordedWithError(desiredCassandra, validationError)
+				fakes.invalidChangeEventIncrementsMetric(desiredCassandra)
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
@@ -555,6 +568,7 @@ var _ = Describe("reconciler", func() {
 				fakes.currentCassandraStateIsFoundFor(desiredCassandra, currentCassandra)
 				fakes.cassandraIsFoundIn(clusterNamespaceName, desiredCassandra)
 				fakes.invalidChangeEventIsRecordedWithError(desiredCassandra, validationError)
+				fakes.invalidChangeEventIncrementsMetric(desiredCassandra)
 
 				result, err := reconciler.Reconcile(reconcile.Request{NamespacedName: clusterNamespaceName})
 				Expect(err).NotTo(HaveOccurred())
@@ -566,6 +580,10 @@ var _ = Describe("reconciler", func() {
 	})
 
 	Describe("map of clusters", func() {
+
+		BeforeEach(func() {
+			fakes.reconcilerInitialisesMetric(desiredCassandra)
+		})
 
 		It("should contain the fully qualified name of the cluster being reconciled even when nothing has changed", func() {
 			fakes.cassandraServiceIsFoundIn(clusterNamespaceName)
@@ -704,6 +722,7 @@ type mocks struct {
 	stateFinder      *mockStateFinder
 	objectFactory    *mockObjectFactory
 	dispatchedEvents *[]event.Event
+	metricsReporter  *mockMetricsReporter
 }
 
 func (m mocks) assertAll(t GinkgoTInterface) {
@@ -827,6 +846,14 @@ func (m mocks) errorWhenLookingForCustomConfigStateFor(cassandra *v1alpha1.Cassa
 
 func (m mocks) invalidChangeEventIsRecordedWithError(desiredCassandra *v1alpha1.Cassandra, errorStr string) {
 	m.eventRecorder.On("Event", desiredCassandra, corev1.EventTypeWarning, cluster.InvalidChangeEvent, errorStr).Return()
+}
+
+func (m mocks) invalidChangeEventIncrementsMetric(desiredCassandra *v1alpha1.Cassandra) {
+	m.metricsReporter.On("IncrementFailedValidationMetric", desiredCassandra).Return()
+}
+
+func (m mocks) reconcilerInitialisesMetric(desiredCassandra *v1alpha1.Cassandra) {
+	m.metricsReporter.On("InitialiseFailedValidationMetric", desiredCassandra).Return()
 }
 
 func (m mocks) eventIsProcessedSuccessfully(event *event.Event) {
@@ -1000,4 +1027,33 @@ func (e *mockEventRecorder) PastEventf(object runtime.Object, timestamp metav1.T
 }
 func (e *mockEventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 	e.Called(object, annotations, eventtype, reason, messageFmt, args)
+}
+
+// mockMetricsReporter
+
+type mockMetricsReporter struct {
+	mock.Mock
+}
+
+// force implementation of metrics.ClusterMetricsReporter at compilation time
+var _ metrics.ClusterMetricsReporter = &mockMetricsReporter{}
+
+func (m *mockMetricsReporter) IncrementFailedValidationMetric(desiredCassandra *v1alpha1.Cassandra) {
+	m.Called(desiredCassandra)
+}
+
+func (m *mockMetricsReporter) InitialiseFailedValidationMetric(desiredCassandra *v1alpha1.Cassandra) {
+	m.Called(desiredCassandra)
+}
+
+func (m *mockMetricsReporter) DeleteMetrics(desiredCassandra *v1alpha1.Cassandra) {
+	m.Called(desiredCassandra)
+}
+
+func (m *mockMetricsReporter) UpdateMetrics(desiredCassandra *v1alpha1.Cassandra) {
+	m.Called(desiredCassandra)
+}
+
+func (m *mockMetricsReporter) RemoveNodeFromMetrics(desiredCassandra *v1alpha1.Cassandra, podName, rackName string) {
+	m.Called(desiredCassandra, podName, rackName)
 }
