@@ -183,10 +183,9 @@ func OperatorMetrics(namespace string) func() (string, error) {
 }
 
 func GetMetric(metricGetterFunc func() (string, error), metricToFind string) (int, error) {
-	// TODO: This should probably work on a timeout similarly to Eventually.
 	metrics, err := metricGetterFunc()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get metrics with %s", err)
+		return 0, fmt.Errorf("failed to get metrics with %v", err)
 	}
 
 	if !(strings.Contains(metrics, metricToFind)){
@@ -195,7 +194,7 @@ func GetMetric(metricGetterFunc func() (string, error), metricToFind string) (in
 
 	metricValue, err := parseMetricForValue(metrics, metricToFind)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse metrics with %s", err)
+		return 0, fmt.Errorf("failed to parse metrics with %v", err)
 	}
 
 	return metricValue, nil
@@ -211,7 +210,7 @@ func parseMetricForValue(metrics string, metricToFind string) (int, error) {
 			}
 			conv, err := strconv.Atoi(lineSplit[1])
 			if err != nil {
-				return 0, fmt.Errorf("failed to parse metric %s with err %s", metricToFind, err)
+				return 0, fmt.Errorf("failed to parse metric %s with err %v", metricToFind, err)
 			}
 			return conv, nil
 		}
