@@ -1,5 +1,9 @@
 # Changes
 
+## 0.83.1-alpha
+
+- [BUGFIX] [Add metric getter for e2e-test](#234) (@Bez625)
+
 ## 0.83.0-alpha
 
 - [FEATURE] [Add a Failure Metric Increment Event based on failed CRD validation](#233) (@Bez625)

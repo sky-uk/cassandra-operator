@@ -571,7 +571,7 @@ func ClusterSizeMetric(namespace, clusterName string, value uint) MetricAssertio
 	return presentMetrics(fmt.Sprintf("cassandra_cluster_size{cluster=\"%s\",namespace=\"%s\"} %d", clusterName, namespace, value))
 }
 
-func FailedValidationMetric(namespace, clusterName string, value uint) MetricAssertion {
+func FailedValidationMetric(namespace, clusterName string, value int) MetricAssertion {
 	return presentMetrics(fmt.Sprintf("cassandra_failed_validation_total{cluster=\"%s\",namespace=\"%s\"} %d", clusterName, namespace, value))
 }
 

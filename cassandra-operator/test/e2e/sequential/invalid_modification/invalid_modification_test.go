@@ -43,12 +43,17 @@ var _ = SequentialTestBeforeSuite(func() {
 
 var _ = Context("forbidden cluster modifications", func() {
 
-	var podEvents *PodEventLog
-	var podWatcher watch.Interface
+	var podEvents                 *PodEventLog
+	var podWatcher                watch.Interface
+	var expectedFailedValidations int
 
 	BeforeEach(func() {
 		testStartTime = time.Now()
 		podEvents, podWatcher = WatchPodEvents(Namespace, multipleNodeCluster.Name)
+		currentFailedValidations, err := GetMetric(OperatorMetrics(Namespace), "cassandra_failed_validation_total")
+		Expect(err).Should(BeNil())
+		expectedFailedValidations = 1 + currentFailedValidations
+
 	})
 
 	JustAfterEach(func() {
@@ -77,7 +82,7 @@ var _ = Context("forbidden cluster modifications", func() {
 
 		By("incrementing the failed validation metric for this cluster")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
-			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, expectedFailedValidations),
 		}))
 
 		By("not changing the number of pods in the rack")
@@ -103,7 +108,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		}))
 		By("incrementing the failed validation metric for this cluster")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
-			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, expectedFailedValidations),
 		}))
 		By("not restarting any pods")
 		Expect(podEvents.PodsStartedEventCount(PodName(multipleNodeCluster.Name, "a", 0))).To(Equal(1))
@@ -124,7 +129,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		}))
 		By("incrementing the failed validation metric for this cluster")
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
-			FailedValidationMetric(Namespace, multipleNodeCluster.Name, 1),
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, expectedFailedValidations),
 		}))
 
 	})

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,6 +180,43 @@ func OperatorMetrics(namespace string) func() (string, error) {
 		}
 		return string(body), nil
 	}
+}
+
+func GetMetric(metricGetterFunc func() (string, error), metricToFind string) (int, error) {
+	// TODO: This should probably work on a timeout similarly to Eventually.
+	metrics, err := metricGetterFunc()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get metrics with %s", err)
+	}
+
+	if !(strings.Contains(metrics, metricToFind)){
+		return 0, fmt.Errorf("could not find metric %s", metricToFind)
+	}
+
+	metricValue, err := parseMetricForValue(metrics, metricToFind)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse metrics with %s", err)
+	}
+
+	return metricValue, nil
+}
+
+func parseMetricForValue(metrics string, metricToFind string) (int, error) {
+	lines := strings.Split(metrics, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, metricToFind) {
+			lineSplit := strings.Split(line, " ")
+			if len(lineSplit) < 2 {
+				return 0, fmt.Errorf("failed to parse metric %s as got more values than expected in %s", metricToFind, line)
+			}
+			conv, err := strconv.Atoi(lineSplit[1])
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse metric %s with err %s", metricToFind, err)
+			}
+			return conv, nil
+		}
+	}
+	return 0, fmt.Errorf("could not find metric %s", metricToFind)
 }
 
 func PodReadinessStatus(namespace, podName string) func() (bool, error) {
