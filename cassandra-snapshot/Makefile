@@ -2,7 +2,7 @@
 .PHONY: all clean install check build fmt vet lint validate-licences test e2e-te setup go-build go-install docker-image push-image prepare-deployment release check-style
 
 # Default context is running locally against a kind cluster
-KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBECONFIG ?= $(HOME)/.kube/config
 KUBE_CONTEXT ?= kind
 USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)

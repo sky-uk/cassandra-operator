@@ -21,5 +21,5 @@ curl --silent \
      --output dgoss \
      https://github.com/aelsabbahy/goss/releases/download/v0.3.7/dgoss \
      --output kind \
-     https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
+     https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-linux-amd64 # 1.12 nodes not supported after this version
 chmod +x kubectl goss dgoss kind

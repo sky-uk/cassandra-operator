@@ -3,7 +3,7 @@
 
 TEST_REGISTRY ?= localhost:5000
 POD_START_TIMEOUT ?= 150s
-KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBECONFIG ?= $(HOME)/.kube/config
 KUBE_CONTEXT ?= kind
 USE_MOCK ?= true
 FAKE_CASSANDRA_IMAGE ?= $(TEST_REGISTRY)/fake-cassandra:v$(gitRev)
