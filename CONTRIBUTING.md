@@ -63,9 +63,20 @@ An end-to-end testing approach is used wherever possible.
 The end-to-end tests are run in parallel in order to the reduce build time as much as possible.
 End-to-end tests are by default run against a local [Kind](https://kind.sigs.k8s.io/) cluster using a [fake-cassandra-docker](fake-cassandra-docker/README.md) image to speed up testing.
 
+To prepare your test environment you must run the setup and install from the Building and Testing section:
+```
+make setup install
+``` 
+These commands start the kind registry and push the test images needed in to that registry.
+
 To create a [Kind](https://kind.sigs.k8s.io/) Kubernetes cluster:
 ```
 make kind
+```
+
+The tests require the cassandra-operator to be deployed in to the kind cluster:
+```
+make -C cassandra-operator deploy-operator
 ```
 
 To run all end-to-end tests for the cassandra-operator sub-project:
@@ -95,7 +106,7 @@ Flag | Meaning | Default
 `POD_START_TIMEOUT`            | The max duration allowed for a Cassandra pod to start. The time varies depending on whether a real or fake cassandra image is used and whether PVC or empty dir is used for the cassandra volumes. As a starting point use 150s for fake cassandra otherwise 5m | `150s`
 `DOMAIN`                       | Domain name used to create the test operator ingress host | `localhost`
 `KUBE_CONTEXT`                 | The Kubernetes context where the test operator will be deployed | `kind`
-`KUBECONFIG`                   | The Kubernetes config location where the target `KUBE_CONTEXT` is defined | `$(HOME)/.kube/kind-config-kind`
+`KUBECONFIG`                   | The Kubernetes config location where the target `KUBE_CONTEXT` is defined | `$(HOME)/.kube/config`
 `TEST_REGISTRY`                | The name of the docker registry where test images created via the build will be pushed| `localhost:5000`
 `DOCKER_USERNAME`              | The docker username allowed to push to the release registry | (provided as encrypted variable in `.travis.yml`)
 `DOCKER_PASSWORD`              | The password for the docker username allowed to push to the release registry | (provided as encrypted variable in `.travis.yml`)

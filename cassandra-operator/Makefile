@@ -3,7 +3,7 @@
 	validate-crds generate-crds validate-codegen generate-codegen generate-all
 
 # Default context is running locally against a kind cluster
-KUBECONFIG ?= $(HOME)/.kube/kind-config-kind
+KUBECONFIG ?= $(HOME)/.kube/config
 KUBE_CONTEXT ?= kind
 POD_START_TIMEOUT ?= 150s
 USE_MOCK ?= true
@@ -14,7 +14,7 @@ CASSANDRA_SNAPSHOT_IMAGE ?= $(TEST_REGISTRY)/cassandra-snapshot:v$(gitRev)
 DOMAIN ?= localhost
 IMAGE_TO_DEPLOY ?= $(dockerTestImage)
 NAMESPACE ?= test-cassandra-operator
-GINKGO_PARALLEL_OPTIONS ?= $(if $(GINKGO_NODES),-p -nodes=$(GINKGO_NODES),-p)
+GINKGO_PARALLEL_OPTIONS ?= $(if $(GINKGO_NODES),-p -nodes=$(GINKGO_NODES),)
 GINKGO_COMPILERS ?= 0
 E2E_TEST ?=
 SKIP_PACKAGES ?=

@@ -42,7 +42,7 @@ func init() {
 
 	kubeconfigLocation = os.Getenv("KUBECONFIG")
 	if kubeconfigLocation == "" {
-		kubeconfigLocation = fmt.Sprintf("%s/.kube/kind-config-kind", os.Getenv("HOME"))
+		kubeconfigLocation = fmt.Sprintf("%s/.kube/config", os.Getenv("HOME"))
 	}
 
 	var err error

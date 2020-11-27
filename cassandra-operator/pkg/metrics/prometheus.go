@@ -17,9 +17,9 @@ import (
 )
 
 type clusterMetrics struct {
-	cassandraNodeStatusGauge   *prometheus.GaugeVec
-	clusterSizeGauge           *prometheus.GaugeVec
-	clusterValidationFailures  *prometheus.CounterVec
+	cassandraNodeStatusGauge  *prometheus.GaugeVec
+	clusterSizeGauge          *prometheus.GaugeVec
+	clusterValidationFailures *prometheus.CounterVec
 }
 
 type clusterTopology struct {

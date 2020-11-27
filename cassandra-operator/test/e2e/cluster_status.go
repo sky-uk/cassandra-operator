@@ -188,7 +188,7 @@ func GetMetric(metricGetterFunc func() (string, error), metricToFind string) (in
 		return 0, fmt.Errorf("failed to get metrics with %v", err)
 	}
 
-	if !(strings.Contains(metrics, metricToFind)){
+	if !strings.Contains(metrics, metricToFind) {
 		return 0, fmt.Errorf("could not find metric %s", metricToFind)
 	}
 

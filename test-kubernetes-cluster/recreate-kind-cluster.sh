@@ -2,6 +2,8 @@
 set -e
 
 scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+reg_name="kind-registry"
+reg_port=5000
 
 function setup_volume_on_node() {
     local node=$1
@@ -100,13 +102,16 @@ EOF
 
 function run_local_registry() {
     # local registry so we can build images locally
-    runningRegistry=$(docker ps --filter=name="kind-registry" --format="{{.Names}}")
+    runningRegistry=$(docker ps --filter=name="${reg_name}" --format="{{.Names}}")
     if [[ "$runningRegistry" == "" ]]; then
-        echo "Running local registry on port 5000"
-        docker run -d --name=kind-registry --restart=always -p 5000:5000 registry:2
+        echo "Running local registry on port ${reg_port}"
+        docker run -d --name=${reg_name} --restart=always -p ${reg_port}:${reg_port} registry:2
+        echo "Started registry: ${reg_name}"
     fi
 
-    kubectl --context kind apply -f ${scriptDir}/registry-proxy.yml
+    # connect the registry to the cluster network
+    # (the network may already be connected)
+    docker network connect "kind" "${reg_name}" || true
 }
 
 function verify_pod_security_policy_restrictions {
@@ -147,13 +152,18 @@ fi
 
 # clean previous cluster if present
 kind delete cluster || true
+kubectl config delete-context kind || true
 
 # create a cluster
 tmpDir=$(mktemp -d)
 trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 cat << EOF > ${tmpDir}/kind-cluster.yml
 kind: Cluster
-apiVersion: kind.sigs.k8s.io/v1alpha3
+apiVersion: kind.x-k8s.io/v1alpha4
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${reg_port}"]
+    endpoint = ["http://${reg_name}:${reg_port}"]
 nodes:
   - role: control-plane
   - role: worker
@@ -162,11 +172,10 @@ nodes:
   - role: worker
 EOF
 
-# node image officially supported for v0.5.1 - see https://github.com/kubernetes-sigs/kind/releases/tag/v0.5.1
-KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.12.10@sha256:e43003c6714cc5a9ba7cf1137df3a3b52ada5c3f2c77f8c94a4d73c82b64f6f3"}
-kind create cluster --loglevel=info --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
-export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-kubectl config rename-context "kubernetes-admin@kind" "kind"
+# node image officially supported for v0.8.1 - see https://github.com/kubernetes-sigs/kind/releases/tag/v0.8.0 for list of supported
+KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-"kindest/node:v1.12.10@sha256:faeb82453af2f9373447bb63f50bae02b8020968e0889c7fa308e19b348916cb"}
+kind create cluster -v=1 --config ${tmpDir}/kind-cluster.yml --image ${KIND_NODE_IMAGE}
+kubectl config rename-context "kind-kind" "kind"
 
 verify_apiserver_accessible
 
