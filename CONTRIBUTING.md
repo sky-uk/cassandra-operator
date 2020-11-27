@@ -63,9 +63,20 @@ An end-to-end testing approach is used wherever possible.
 The end-to-end tests are run in parallel in order to the reduce build time as much as possible.
 End-to-end tests are by default run against a local [Kind](https://kind.sigs.k8s.io/) cluster using a [fake-cassandra-docker](fake-cassandra-docker/README.md) image to speed up testing.
 
+To prepare your test environment you must run the setup and install from the Building and Testing section:
+```
+make setup install
+``` 
+These commands start the kind registry and push the test images needed in to that registry.
+
 To create a [Kind](https://kind.sigs.k8s.io/) Kubernetes cluster:
 ```
 make kind
+```
+
+The tests require the cassandra-operator to be deployed in to the kind cluster:
+```
+make -C cassandra-operator deploy-operator
 ```
 
 To run all end-to-end tests for the cassandra-operator sub-project:

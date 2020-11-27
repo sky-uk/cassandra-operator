@@ -43,8 +43,8 @@ var _ = SequentialTestBeforeSuite(func() {
 
 var _ = Context("forbidden cluster modifications", func() {
 
-	var podEvents                 *PodEventLog
-	var podWatcher                watch.Interface
+	var podEvents *PodEventLog
+	var podWatcher watch.Interface
 	var expectedFailedValidations int
 
 	BeforeEach(func() {
