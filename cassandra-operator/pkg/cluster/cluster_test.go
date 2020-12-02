@@ -512,7 +512,7 @@ var _ = Describe("creation of stateful sets", func() {
 			))
 		})
 
-		It("should have memory and cpu limits", func() {
+		It("should have memory limit and no cpu limit", func() {
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
@@ -521,7 +521,7 @@ var _ = Describe("creation of stateful sets", func() {
 
 			// then
 			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
-			Expect(*sidecarContainer.Resources.Limits.Cpu()).To(Equal(resource.MustParse("100m")))
+			Expect(sidecarContainer.Resources.Limits).To(HaveLen(1))
 			Expect(*sidecarContainer.Resources.Limits.Memory()).To(Equal(resource.MustParse("50Mi")))
 		})
 

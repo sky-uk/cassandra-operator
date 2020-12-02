@@ -1,5 +1,9 @@
 # Changes
 
+## 0.83.2-alpha
+
+- [BUGFIX] [Remove CPU resource limit from cassandra-sidecar](#237) (@Bez625)
+
 ## 0.83.1-alpha
 
 - [BUGFIX] [Add metric getter for e2e-test](#234) (@Bez625)

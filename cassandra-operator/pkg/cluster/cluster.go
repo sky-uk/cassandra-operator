@@ -75,7 +75,6 @@ var (
 	maxSidecarMemoryRequest    resource.Quantity
 	sidecarMemoryLimit         resource.Quantity
 	maxSidecarCPURequest       resource.Quantity
-	sidecarCPULimit            resource.Quantity
 	initContainerMemoryRequest resource.Quantity
 	operatorManagedVolumes     map[string]bool
 	alphanumericChars          *regexp.Regexp
@@ -87,7 +86,6 @@ func init() {
 	maxSidecarMemoryRequest = resource.MustParse("50Mi")
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
-	sidecarCPULimit = resource.MustParse("100m")
 	operatorManagedVolumes = make(map[string]bool)
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
@@ -485,7 +483,6 @@ func (c *Cluster) createCassandraSidecarContainer(rack *v1alpha1.Rack) v1.Contai
 				),
 			},
 			Limits: v1.ResourceList{
-				v1.ResourceCPU:    sidecarCPULimit,
 				v1.ResourceMemory: sidecarMemoryLimit,
 			},
 		},
