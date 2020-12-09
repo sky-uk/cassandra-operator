@@ -872,12 +872,21 @@ type ResourceRequirementsAssertion struct {
 }
 
 type haveResourcesRequirements struct {
-	expected *ResourceRequirementsAssertion
+	expected   *ResourceRequirementsAssertion
+}
+
+func extractPodSpec(outerResource interface{}) coreV1.PodSpec {
+	switch outerResource.(type) {
+	case batch.CronJob:
+		return outerResource.(batch.CronJob).Spec.JobTemplate.Spec.Template.Spec
+	default:
+		return outerResource.(coreV1.Pod).Spec
+	}
 }
 
 func (h haveResourcesRequirements) Match(actual interface{}) (success bool, err error) {
-	lr := actual.(*kubernetesResource)
-	container := h.findContainer(lr.Resource.(coreV1.Pod), h.expected.ContainerName)
+	podSpec := extractPodSpec(actual.(*kubernetesResource).Resource)
+	container := h.findContainer(podSpec, h.expected.ContainerName)
 
 	if container == nil {
 		return false, fmt.Errorf("expected a container with name %s", h.expected.ContainerName)
@@ -914,8 +923,8 @@ func (h haveResourcesRequirements) areQuantityEqual(expected *string, resourceLi
 	return true, nil
 }
 
-func (h haveResourcesRequirements) findContainer(pod coreV1.Pod, containerName string) *coreV1.Container {
-	for _, c := range pod.Spec.Containers {
+func (h haveResourcesRequirements) findContainer(podSpec coreV1.PodSpec, containerName string) *coreV1.Container {
+	for _, c := range podSpec.Containers {
 		if c.Name == containerName {
 			return &c
 		}

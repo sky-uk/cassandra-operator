@@ -127,48 +127,54 @@ func validateRacks(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
-	var allErrs field.ErrorList
-	if c.Spec.Pod.Resources.Requests.Memory().IsZero() {
+func validateResources(allErrs field.ErrorList, fldPath *field.Path, resources coreV1.ResourceRequirements) field.ErrorList {
+	resourcePath := fldPath.String() + ".Resources"
+	if resources.Requests.Memory().IsZero() {
 		allErrs = append(
 			allErrs,
 			field.Invalid(
 				fldPath.Child("Resources.Requests.Memory"),
-				c.Spec.Pod.Resources.Requests.Memory().String(),
+				resources.Requests.Memory().String(),
 				"must be > 0",
 			),
 		)
 	}
-	if c.Spec.Pod.Resources.Limits.Memory().IsZero() {
+	if resources.Limits.Memory().IsZero() {
 		allErrs = append(
 			allErrs,
 			field.Invalid(
 				fldPath.Child("Resources.Limits.Memory"),
-				c.Spec.Pod.Resources.Limits.Memory().String(),
+				resources.Limits.Memory().String(),
 				"must be > 0",
 			),
 		)
 	}
-	if isRequestGreaterThanLimit(c.Spec.Pod.Resources, coreV1.ResourceMemory) {
+	if isRequestGreaterThanLimit(resources, coreV1.ResourceMemory) {
 		allErrs = append(
 			allErrs,
 			field.Invalid(
 				fldPath.Child("Resources.Requests.Memory"),
-				c.Spec.Pod.Resources.Requests.Memory().String(),
-				fmt.Sprintf("must not be greater than spec.Pod.Resources.Limits.Memory (%s)", c.Spec.Pod.Resources.Limits.Memory().String()),
+				resources.Requests.Memory().String(),
+				fmt.Sprintf("must not be greater than %s.Limits.Memory (%s)", resourcePath, resources.Limits.Memory().String()),
 			),
 		)
 	}
-	if isRequestGreaterThanLimit(c.Spec.Pod.Resources, coreV1.ResourceCPU) {
+	if isRequestGreaterThanLimit(resources, coreV1.ResourceCPU) {
 		allErrs = append(
 			allErrs,
 			field.Invalid(
 				fldPath.Child("Resources.Requests.Cpu"),
-				c.Spec.Pod.Resources.Requests.Cpu().String(),
-				fmt.Sprintf("must not be greater than spec.Pod.Resources.Limits.Cpu (%s)", c.Spec.Pod.Resources.Limits.Cpu().String()),
+				resources.Requests.Cpu().String(),
+				fmt.Sprintf("must not be greater than %s.Limits.Cpu (%s)", resourcePath, resources.Limits.Cpu().String()),
 			),
 		)
 	}
+	return allErrs
+}
+
+func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	allErrs = validateResources(allErrs, fldPath, c.Spec.Pod.Resources)
 
 	allErrs = append(
 		allErrs,

@@ -76,6 +76,8 @@ var (
 	sidecarMemoryLimit         resource.Quantity
 	maxSidecarCPURequest       resource.Quantity
 	initContainerMemoryRequest resource.Quantity
+	defaultSnapshotMemoryLimit resource.Quantity
+	defaultSnapshotCPURequest  resource.Quantity
 	operatorManagedVolumes     map[string]bool
 	alphanumericChars          *regexp.Regexp
 	securityContext            *v1.PodSecurityContext
@@ -86,6 +88,8 @@ func init() {
 	maxSidecarMemoryRequest = resource.MustParse("50Mi")
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
+	defaultSnapshotMemoryLimit = resource.MustParse("50Mi")
+	defaultSnapshotCPURequest = resource.MustParse("100m")
 	operatorManagedVolumes = make(map[string]bool)
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
@@ -283,6 +287,15 @@ func (c *Cluster) CreateSnapshotContainer(snapshot *v1alpha1.Snapshot) *v1.Conta
 		Name:    c.definition.SnapshotJobName(),
 		Image:   *c.definition.Spec.Snapshot.Image,
 		Command: c.snapshotCommand(),
+		Resources: v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: defaultSnapshotMemoryLimit,
+				v1.ResourceCPU:    defaultSnapshotCPURequest,
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: defaultSnapshotMemoryLimit,
+			},
+		},
 	}
 }
 
@@ -335,6 +348,15 @@ func (c *Cluster) CreateSnapshotCleanupContainer(snapshot *v1alpha1.Snapshot) *v
 		Name:    c.definition.SnapshotCleanupJobName(),
 		Image:   *c.definition.Spec.Snapshot.Image,
 		Command: c.snapshotCleanupCommand(),
+		Resources: v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: defaultSnapshotMemoryLimit,
+				v1.ResourceCPU:    defaultSnapshotCPURequest,
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: defaultSnapshotMemoryLimit,
+			},
+		},
 	}
 }
 

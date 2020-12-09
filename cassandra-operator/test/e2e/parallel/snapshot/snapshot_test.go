@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"testing"
 	"time"
 
@@ -111,6 +112,22 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						"-t", "5s",
 					}}),
 				),
+				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
+					ContainerName: clusterName + "-snapshot",
+					MemoryRequest: ptr.String("50Mi"),
+					MemoryLimit:   ptr.String("50Mi"),
+					CPURequest:    ptr.String("100m"),
+					CPULimit:      nil,
+				}),
+				),
+				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
+					ContainerName: clusterName + "-snapshot-cleanup",
+					MemoryRequest: ptr.String("50Mi"),
+					MemoryLimit:   ptr.String("50Mi"),
+					CPURequest:    ptr.String("100m"),
+					CPULimit:      nil,
+				}),
+				),
 			))
 
 			By("registering an event for the snapshot job creation")
@@ -166,7 +183,14 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						"-l", clusterDef.CassandraPodSelector(),
 						"-t", "5s",
 						"-k", "k1,k2",
-					}}),
+					}})),
+				Each(HaveResourcesRequirements(&ResourceRequirementsAssertion{
+					ContainerName: clusterName + "-snapshot",
+					MemoryRequest: ptr.String("50Mi"),
+					MemoryLimit:   ptr.String("50Mi"),
+					CPURequest:    ptr.String("100m"),
+					CPULimit:      nil,
+				}),
 				),
 			))
 
@@ -297,6 +321,22 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 						"-r", "240h0m0s",
 						"-t", "5s",
 					}}),
+				),
+				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
+					ContainerName: clusterName + "-snapshot",
+					MemoryRequest: ptr.String("50Mi"),
+					MemoryLimit:   ptr.String("50Mi"),
+					CPURequest:    ptr.String("100m"),
+					CPULimit:      nil,
+				}),
+				),
+				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
+					ContainerName: clusterName + "-snapshot-cleanup",
+					MemoryRequest: ptr.String("50Mi"),
+					MemoryLimit:   ptr.String("50Mi"),
+					CPURequest:    ptr.String("100m"),
+					CPULimit:      nil,
+				}),
 				),
 			))
 
