@@ -111,7 +111,7 @@ function run_local_registry() {
 
     # connect the registry to the cluster network
     # (the network may already be connected)
-    docker network connect "kind" "${reg_name}" || true
+    docker network connect "kind" "${reg_name}" >/dev/null 2>&1 || true
 }
 
 function verify_pod_security_policy_restrictions {
