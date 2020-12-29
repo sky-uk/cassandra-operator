@@ -909,6 +909,32 @@ var _ = Describe("creation of snapshot job", func() {
 		Expect(*securityContext.FSGroup).To(Equal(GroupID))
 		Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
 	})
+	It("should create a cronjob with the specified memory and cpu resources", func() {
+		clusterDef.Spec.Snapshot.Resources = coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("66Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("175m"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("66Mi"),
+			},
+		}
+		cluster := ACluster(clusterDef)
+
+		cronJob := cluster.CreateSnapshotJob()
+		Expect(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		snapshotContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		Expect(snapshotContainer.Resources).To(Equal(coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("66Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("175m"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("66Mi"),
+			},
+		}))
+	})
 })
 
 var _ = Describe("creation of snapshot cleanup job", func() {
@@ -1024,6 +1050,33 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 		Expect(*securityContext.RunAsUser).To(Equal(UserID))
 		Expect(*securityContext.FSGroup).To(Equal(GroupID))
 		Expect(*securityContext.RunAsGroup).To(Equal(GroupID))
+	})
+
+	It("should create a cleanup cronjob with the specified memory and cpu resources", func() {
+		clusterDef.Spec.Snapshot.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("68Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("185m"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("68Mi"),
+			},
+		}
+		cluster := ACluster(clusterDef)
+
+		cronJob := cluster.CreateSnapshotCleanupJob()
+		Expect(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		snapshotCleanupContainer := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+		Expect(snapshotCleanupContainer.Resources).To(Equal(coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("68Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("185m"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("68Mi"),
+			},
+		}))
 	})
 })
 

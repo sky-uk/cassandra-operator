@@ -139,6 +139,40 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one snapshot has a different cleanup timeout", func(snapshot *Snapshot) { snapshot.RetentionPolicy.CleanupTimeoutSeconds = nil }),
 			Entry("when one snapshot has no retention period", func(snapshot *Snapshot) { snapshot.RetentionPolicy.RetentionPeriodDays = ptr.Int32(1) }),
 			Entry("when one snapshot has a different retention period", func(snapshot *Snapshot) { snapshot.RetentionPolicy.RetentionPeriodDays = nil }),
+			// Resources
+			Entry("when one snapshot has a different cpu limit", func(snapshot *Snapshot) {
+				snapshot.Resources.Limits = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("10m"),
+					coreV1.ResourceMemory: resource.MustParse("50Mi")}
+			}),
+			Entry("when one snapshot has a different cpu request", func(snapshot *Snapshot) {
+				snapshot.Resources.Requests = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("10m"),
+					coreV1.ResourceMemory: resource.MustParse("50Mi")}
+			}),
+			Entry("when one snapshot has a different memory limit", func(snapshot *Snapshot) {
+				snapshot.Resources.Limits = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("100m"),
+					coreV1.ResourceMemory: resource.MustParse("5Mi")}
+			}),
+			Entry("when one snapshot has a different memory request", func(snapshot *Snapshot) {
+				snapshot.Resources.Requests = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("100m"),
+					coreV1.ResourceMemory: resource.MustParse("5Mi")}
+			}),
+			// RP Resources
+			Entry("when one snapshot retention policy has a different cpu limit", func(snapshot *Snapshot) {
+				snapshot.RetentionPolicy.Resources.Limits = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("10m"),
+					coreV1.ResourceMemory: resource.MustParse("100Mi")}
+			}),
+			Entry("when one snapshot retention policy has a different cpu request", func(snapshot *Snapshot) {
+				snapshot.RetentionPolicy.Resources.Requests = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("10m"),
+					coreV1.ResourceMemory: resource.MustParse("100Mi")}
+			}),
+			Entry("when one snapshot retention policy has a different memory limit", func(snapshot *Snapshot) {
+				snapshot.RetentionPolicy.Resources.Limits = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("50m"),
+					coreV1.ResourceMemory: resource.MustParse("5Mi")}
+			}),
+			Entry("when one snapshot retention policy has a different memory request", func(snapshot *Snapshot) {
+				snapshot.RetentionPolicy.Resources.Requests = coreV1.ResourceList{coreV1.ResourceCPU: resource.MustParse("50m"),
+					coreV1.ResourceMemory: resource.MustParse("5Mi")}
+			}),
 		)
 	})
 
@@ -414,10 +448,30 @@ func snapshotSpec() *Snapshot {
 		Schedule:       "* * * * *",
 		Keyspaces:      []string{"k1", "k2"},
 		TimeoutSeconds: ptr.Int32(62),
+		Resources: coreV1.ResourceRequirements{
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceCPU:    resource.MustParse("100m"),
+				coreV1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("50Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("100m"),
+			},
+		},
 		RetentionPolicy: &RetentionPolicy{
 			RetentionPeriodDays:   ptr.Int32(30),
 			CleanupTimeoutSeconds: ptr.Int32(30),
 			CleanupSchedule:       "* * * * *",
+			Resources: coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("50m"),
+					coreV1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("100Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("50m"),
+				},
+			},
 		},
 	}
 }

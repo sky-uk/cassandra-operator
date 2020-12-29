@@ -45,12 +45,14 @@ type SnapshotSpecBuilder struct {
 	keyspaces       []string
 	schedule        string
 	image           *string
+	resources       coreV1.ResourceRequirements
 }
 
 type RetentionPolicySpecBuilder struct {
 	timeoutSeconds      *int32
 	cleanupSchedule     string
 	retentionPeriodDays *int32
+	resources           coreV1.ResourceRequirements
 }
 
 type RackSpecBuilder struct {
@@ -185,7 +187,22 @@ func (rp *RetentionPolicySpecBuilder) WithDefaults() *RetentionPolicySpecBuilder
 	return rp.
 		WithRetentionPeriodDays(1).
 		WithTimeoutSeconds(0).
-		WithCleanupScheduled("1 23 * * *")
+		WithCleanupScheduled("1 23 * * *").
+		WithResources(coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("0"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("55Mi"),
+			},
+		})
+
+}
+
+func (rp *RetentionPolicySpecBuilder) WithResources(resources coreV1.ResourceRequirements) *RetentionPolicySpecBuilder {
+	rp.resources = resources
+	return rp
 }
 
 func (rp *RetentionPolicySpecBuilder) WithRetentionPeriodDays(days int32) *RetentionPolicySpecBuilder {
@@ -208,6 +225,7 @@ func (rp *RetentionPolicySpecBuilder) Build() *v1alpha1.RetentionPolicy {
 		RetentionPeriodDays:   rp.retentionPeriodDays,
 		CleanupTimeoutSeconds: rp.timeoutSeconds,
 		CleanupSchedule:       rp.cleanupSchedule,
+		Resources:             rp.resources,
 	}
 }
 
@@ -224,7 +242,21 @@ func (snap *SnapshotSpecBuilder) WithDefaults() *SnapshotSpecBuilder {
 		WithImage("skyuk/cassandra-snapshot:latest").
 		WithSchedule("1 23 * * *").
 		WithKeyspaces([]string{"keyspace1", "keyspace2"}).
-		WithTimeoutSeconds(1)
+		WithTimeoutSeconds(1).
+		WithResources(coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("50Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("0"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+		})
+}
+
+func (snap *SnapshotSpecBuilder) WithResources(resources coreV1.ResourceRequirements) *SnapshotSpecBuilder {
+	snap.resources = resources
+	return snap
 }
 
 func (snap *SnapshotSpecBuilder) WithRetentionPolicy(policy *RetentionPolicySpecBuilder) *SnapshotSpecBuilder {
@@ -263,6 +295,7 @@ func (snap *SnapshotSpecBuilder) Build() *v1alpha1.Snapshot {
 		Keyspaces:       snap.keyspaces,
 		TimeoutSeconds:  snap.timeoutSeconds,
 		RetentionPolicy: retentionPolicy,
+		Resources:       snap.resources,
 	}
 }
 

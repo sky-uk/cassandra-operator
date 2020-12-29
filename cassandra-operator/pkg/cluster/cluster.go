@@ -76,8 +76,6 @@ var (
 	sidecarMemoryLimit         resource.Quantity
 	maxSidecarCPURequest       resource.Quantity
 	initContainerMemoryRequest resource.Quantity
-	defaultSnapshotMemoryLimit resource.Quantity
-	defaultSnapshotCPURequest  resource.Quantity
 	operatorManagedVolumes     map[string]bool
 	alphanumericChars          *regexp.Regexp
 	securityContext            *v1.PodSecurityContext
@@ -88,8 +86,6 @@ func init() {
 	maxSidecarMemoryRequest = resource.MustParse("50Mi")
 	sidecarMemoryLimit = resource.MustParse("50Mi")
 	maxSidecarCPURequest = resource.MustParse("100m")
-	defaultSnapshotMemoryLimit = resource.MustParse("50Mi")
-	defaultSnapshotCPURequest = resource.MustParse("100m")
 	operatorManagedVolumes = make(map[string]bool)
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
@@ -266,6 +262,11 @@ func (c *Cluster) CreateService() *v1.Service {
 	}
 }
 
+// SetDefaults uses the helper to set defaults on the cluster
+func (c *Cluster) SetDefaults() {
+	v1alpha1helpers.SetDefaultsForCassandra(c.definition, nil)
+}
+
 // CreateSnapshotJob creates a cronjob to trigger the creation of a snapshot
 func (c *Cluster) CreateSnapshotJob() *v1beta1.CronJob {
 	if c.definition.Spec.Snapshot == nil {
@@ -277,25 +278,17 @@ func (c *Cluster) CreateSnapshotJob() *v1beta1.CronJob {
 		"snapshot",
 		v1alpha1.SnapshotServiceAccountName,
 		c.definition.Spec.Snapshot.Schedule,
-		c.CreateSnapshotContainer(c.definition.Spec.Snapshot),
+		c.CreateSnapshotContainer(),
 	)
 }
 
 // CreateSnapshotContainer creates the container used to trigger the snapshot creation
-func (c *Cluster) CreateSnapshotContainer(snapshot *v1alpha1.Snapshot) *v1.Container {
+func (c *Cluster) CreateSnapshotContainer() *v1.Container {
 	return &v1.Container{
-		Name:    c.definition.SnapshotJobName(),
-		Image:   *c.definition.Spec.Snapshot.Image,
-		Command: c.snapshotCommand(),
-		Resources: v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceMemory: defaultSnapshotMemoryLimit,
-				v1.ResourceCPU:    defaultSnapshotCPURequest,
-			},
-			Limits: v1.ResourceList{
-				v1.ResourceMemory: defaultSnapshotMemoryLimit,
-			},
-		},
+		Name:      c.definition.SnapshotJobName(),
+		Image:     *c.definition.Spec.Snapshot.Image,
+		Command:   c.snapshotCommand(),
+		Resources: c.definition.Spec.Snapshot.Resources,
 	}
 }
 
@@ -338,25 +331,17 @@ func (c *Cluster) CreateSnapshotCleanupJob() *v1beta1.CronJob {
 		SnapshotCleanupCronJob,
 		v1alpha1.SnapshotServiceAccountName,
 		c.definition.Spec.Snapshot.RetentionPolicy.CleanupSchedule,
-		c.CreateSnapshotCleanupContainer(c.definition.Spec.Snapshot),
+		c.CreateSnapshotCleanupContainer(),
 	)
 }
 
 // CreateSnapshotCleanupContainer creates the container that will execute the snapshot cleanup command
-func (c *Cluster) CreateSnapshotCleanupContainer(snapshot *v1alpha1.Snapshot) *v1.Container {
+func (c *Cluster) CreateSnapshotCleanupContainer() *v1.Container {
 	return &v1.Container{
-		Name:    c.definition.SnapshotCleanupJobName(),
-		Image:   *c.definition.Spec.Snapshot.Image,
-		Command: c.snapshotCleanupCommand(),
-		Resources: v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceMemory: defaultSnapshotMemoryLimit,
-				v1.ResourceCPU:    defaultSnapshotCPURequest,
-			},
-			Limits: v1.ResourceList{
-				v1.ResourceMemory: defaultSnapshotMemoryLimit,
-			},
-		},
+		Name:      c.definition.SnapshotCleanupJobName(),
+		Image:     *c.definition.Spec.Snapshot.Image,
+		Command:   c.snapshotCleanupCommand(),
+		Resources: c.definition.Spec.Snapshot.RetentionPolicy.Resources,
 	}
 }
 

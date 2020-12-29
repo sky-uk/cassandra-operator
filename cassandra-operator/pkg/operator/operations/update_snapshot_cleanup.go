@@ -32,7 +32,7 @@ func (o *UpdateSnapshotCleanupOperation) Execute() (bool, error) {
 func (o *UpdateSnapshotCleanupOperation) updateSnapshotCleanupJob(job *v1beta1.CronJob) error {
 	c := cluster.New(o.cassandra)
 	job.Spec.Schedule = o.cassandra.Spec.Snapshot.RetentionPolicy.CleanupSchedule
-	job.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotCleanupContainer(o.cassandra.Spec.Snapshot)
+	job.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotCleanupContainer()
 	err := o.clusterAccessor.UpdateCronJob(job)
 	if err != nil {
 		return fmt.Errorf("error while updating snapshot cleanup job %s for cluster %s: %v", job.Name, o.cassandra.QualifiedName(), err)

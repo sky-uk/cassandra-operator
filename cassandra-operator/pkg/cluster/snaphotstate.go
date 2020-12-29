@@ -54,13 +54,15 @@ func (snap *currentSnapshotStateFinder) buildSnapshotFrom(job *v1beta1.CronJob, 
 			Schedule:       job.Spec.Schedule,
 			TimeoutSeconds: desiredCassandra.Spec.Snapshot.TimeoutSeconds,
 			Keyspaces:      desiredCassandra.Spec.Snapshot.Keyspaces,
+			Resources:      jobContainer.Resources,
 		}
 	}
 
 	// not attempting to guess other properties from the job command line
 	return &v1alpha1.Snapshot{
-		Image:    ptr.String(jobContainer.Image),
-		Schedule: job.Spec.Schedule,
+		Image:     ptr.String(jobContainer.Image),
+		Schedule:  job.Spec.Schedule,
+		Resources: jobContainer.Resources,
 	}
 }
 
@@ -86,11 +88,13 @@ func (cleanup *currentSnapshotCleanupStateFinder) buildSnapshotCleanupFrom(job *
 			CleanupSchedule:       job.Spec.Schedule,
 			CleanupTimeoutSeconds: desiredCassandra.Spec.Snapshot.RetentionPolicy.CleanupTimeoutSeconds,
 			RetentionPeriodDays:   desiredCassandra.Spec.Snapshot.RetentionPolicy.RetentionPeriodDays,
+			Resources:             jobContainer.Resources,
 		}
 	}
 
 	// not attempting to guess other properties from the job command line
 	return &v1alpha1.RetentionPolicy{
 		CleanupSchedule: job.Spec.Schedule,
+		Resources:       jobContainer.Resources,
 	}
 }

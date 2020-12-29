@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -338,11 +339,31 @@ var _ = Describe("Cassandra Helpers", func() {
 				Schedule:       "01 23 * * *",
 				TimeoutSeconds: &snapshotTimeout,
 				Keyspaces:      []string{"keyspace1", "keyspace2"},
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceCPU:    resource.MustParse("100m"),
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("100m"),
+					},
+				},
 			}
 			snapshot2 = &v1alpha1.Snapshot{
 				Schedule:       "01 23 * * *",
 				TimeoutSeconds: &snapshotTimeout,
 				Keyspaces:      []string{"keyspace1", "keyspace2"},
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceCPU:    resource.MustParse("100m"),
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("100m"),
+					},
+				},
 			}
 		})
 
@@ -398,6 +419,76 @@ var _ = Describe("Cassandra Helpers", func() {
 			snapshot2.Keyspaces = nil
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeFalse())
 			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeFalse())
+		})
+
+		It("should be found different when a snapshot has Empty Resources", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot has no Resources.Requests", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					coreV1.ResourceCPU: resource.MustParse("100m"),
+				},
+			}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+		It("should be found different when a snapshot has no Resources.Limits", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					coreV1.ResourceCPU: resource.MustParse("100m"),
+				},
+			}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+		It("should be found different when a snapshot has missing CPU", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("100m"),
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+				},
+			}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot has different CPU", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("102m"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("102m"),
+					coreV1.ResourceMemory: resource.MustParse("50Mi"),
+				},
+			}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot has different Memory", func() {
+			snapshot1.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("53Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("100m"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("100m"),
+					coreV1.ResourceMemory: resource.MustParse("53Mi"),
+				},
+			}
+			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})
 	})
 
@@ -459,6 +550,72 @@ var _ = Describe("Cassandra Helpers", func() {
 		It("should be found different when cleanup timeout have different values", func() {
 			snapshot1.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(30)
 			snapshot2.RetentionPolicy.CleanupTimeoutSeconds = ptr.Int32(31)
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot RetentionPolicy has Empty Resources", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{}
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot RetentionPolicy has no Resources.Requests", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+					coreV1.ResourceCPU: resource.MustParse("0"),
+				},
+			}
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+		It("should be found different when a snapshot RetentionPolicy has no Resources.Limits", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				},
+			}
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+		It("should be found different when a snapshot RetentionPolicy has missing CPU", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				},
+			}
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot RetentionPolicy has different CPU", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("102m"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				},
+			}
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
+			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
+		})
+
+		It("should be found different when a snapshot RetentionPolicy has different Memory", func() {
+			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("53Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("0"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("53Mi"),
+				},
+			}
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot2, snapshot1)).To(BeTrue())
 		})

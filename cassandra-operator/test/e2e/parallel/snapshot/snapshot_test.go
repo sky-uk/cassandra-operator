@@ -3,6 +3,7 @@ package snapshot
 import (
 	"fmt"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
 	"time"
 
@@ -76,10 +77,28 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("55Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("100m"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("55Mi"),
+						},
+					},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
 						RetentionPeriodDays:   &retentionPeriod,
 						CleanupSchedule:       "11 22 1 * *",
 						CleanupTimeoutSeconds: &timeout,
+						Resources: coreV1.ResourceRequirements{
+							Limits: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("50Mi"),
+								coreV1.ResourceCPU:    resource.MustParse("120m"),
+							},
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("50Mi"),
+							},
+						},
 					},
 				}).
 				Exists()
@@ -114,18 +133,18 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 				),
 				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
 					ContainerName: clusterName + "-snapshot",
-					MemoryRequest: ptr.String("50Mi"),
-					MemoryLimit:   ptr.String("50Mi"),
-					CPURequest:    ptr.String("100m"),
-					CPULimit:      nil,
+					MemoryRequest: ptr.String("55Mi"),
+					MemoryLimit:   ptr.String("55Mi"),
+					CPURequest:    nil,
+					CPULimit:      ptr.String("100m"),
 				}),
 				),
 				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
 					ContainerName: clusterName + "-snapshot-cleanup",
 					MemoryRequest: ptr.String("50Mi"),
 					MemoryLimit:   ptr.String("50Mi"),
-					CPURequest:    ptr.String("100m"),
-					CPULimit:      nil,
+					CPURequest:    nil,
+					CPULimit:      ptr.String("120m"),
 				}),
 				),
 			))
@@ -168,6 +187,15 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 				Schedule:       "1 23 * * *",
 				TimeoutSeconds: &snapshotTimeout,
 				Keyspaces:      []string{"k1", "k2"},
+				Resources: coreV1.ResourceRequirements{
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("85Mi"),
+					},
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("75Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("0"),
+					},
+				},
 			})
 
 			// then
@@ -186,9 +214,9 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					}})),
 				Each(HaveResourcesRequirements(&ResourceRequirementsAssertion{
 					ContainerName: clusterName + "-snapshot",
-					MemoryRequest: ptr.String("50Mi"),
-					MemoryLimit:   ptr.String("50Mi"),
-					CPURequest:    ptr.String("100m"),
+					MemoryRequest: ptr.String("75Mi"),
+					MemoryLimit:   ptr.String("85Mi"),
+					CPURequest:    ptr.String("0"),
 					CPULimit:      nil,
 				}),
 				),
@@ -218,10 +246,30 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("65Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("0"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("65Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("0"),
+						},
+					},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
 						RetentionPeriodDays:   &retentionPeriod,
 						CleanupSchedule:       "11 22 1 * *",
 						CleanupTimeoutSeconds: &timeout,
+						Resources: coreV1.ResourceRequirements{
+							Limits: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("99Mi"),
+								coreV1.ResourceCPU:    resource.MustParse("95m"),
+							},
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("99Mi"),
+								coreV1.ResourceCPU:    resource.MustParse("95m"),
+							},
+						},
 					},
 				}).
 				Exists()
@@ -270,10 +318,28 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 					Image:     CassandraSnapshotImageName,
 					Schedule:  "59 23 * * *",
 					Keyspaces: []string{"keyspace1", "keyspace3"},
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("100Mi"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("100Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("200m"),
+						},
+					},
 					RetentionPolicy: &v1alpha1.RetentionPolicy{
 						RetentionPeriodDays:   &retentionPeriod,
 						CleanupSchedule:       "11 22 1 * *",
 						CleanupTimeoutSeconds: &timeout,
+						Resources: coreV1.ResourceRequirements{
+							Limits: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("150Mi"),
+							},
+							Requests: coreV1.ResourceList{
+								coreV1.ResourceMemory: resource.MustParse("150Mi"),
+								coreV1.ResourceCPU:    resource.MustParse("225m"),
+							},
+						},
 					},
 				}).
 				Exists()
@@ -289,10 +355,28 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 				Image:     CassandraSnapshotImageName,
 				Schedule:  "15 9 * * *",
 				Keyspaces: []string{"k2"},
+				Resources: coreV1.ResourceRequirements{
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("100Mi"),
+					},
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("100Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("200m"),
+					},
+				},
 				RetentionPolicy: &v1alpha1.RetentionPolicy{
 					RetentionPeriodDays:   &retentionPeriod,
 					CleanupSchedule:       "2 5 1 * *",
 					CleanupTimeoutSeconds: &timeout,
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("150Mi"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("150Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("225m"),
+						},
+					},
 				},
 			})
 
@@ -324,17 +408,17 @@ var _ = Describe("Cassandra snapshot scheduling", func() {
 				),
 				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
 					ContainerName: clusterName + "-snapshot",
-					MemoryRequest: ptr.String("50Mi"),
-					MemoryLimit:   ptr.String("50Mi"),
-					CPURequest:    ptr.String("100m"),
+					MemoryRequest: ptr.String("100Mi"),
+					MemoryLimit:   ptr.String("100Mi"),
+					CPURequest:    ptr.String("200m"),
 					CPULimit:      nil,
 				}),
 				),
 				ContainElement(HaveResourcesRequirements(&ResourceRequirementsAssertion{
 					ContainerName: clusterName + "-snapshot-cleanup",
-					MemoryRequest: ptr.String("50Mi"),
-					MemoryLimit:   ptr.String("50Mi"),
-					CPURequest:    ptr.String("100m"),
+					MemoryRequest: ptr.String("150Mi"),
+					MemoryLimit:   ptr.String("150Mi"),
+					CPURequest:    ptr.String("225m"),
 					CPULimit:      nil,
 				}),
 				),

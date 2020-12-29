@@ -325,6 +325,24 @@ spec:
                   items:
                     type: string
                   type: array
+                resources:
+                  description: Resource requirements for the Snapshot job
+                  properties:
+                    limits:
+                      additionalProperties:
+                        type: string
+                      description: 'Limits describes the maximum amount of compute
+                        resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                      type: object
+                    requests:
+                      additionalProperties:
+                        type: string
+                      description: 'Requests describes the minimum amount of compute
+                        resources required. If Requests is omitted for a container,
+                        it defaults to Limits if that is explicitly specified, otherwise
+                        to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                      type: object
+                  type: object
                 retentionPolicy:
                   description: RetentionPolicy defines how long the snapshots should
                     be kept for and how often the cleanup task should run
@@ -337,6 +355,26 @@ spec:
                       description: Time limit for the cleanup command to run.
                       format: int32
                       type: integer
+                    resources:
+                      description: Resource requirements for the Snapshot Cleanup
+                        Job
+                      properties:
+                        limits:
+                          additionalProperties:
+                            type: string
+                          description: 'Limits describes the maximum amount of compute
+                            resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                        requests:
+                          additionalProperties:
+                            type: string
+                          description: 'Requests describes the minimum amount of compute
+                            resources required. If Requests is omitted for a container,
+                            it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. More info:
+                            https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                      type: object
                     retentionPeriodDays:
                       description: The period of time for which snapshots will be
                         retained. Snapshots older than this period will be deleted.
@@ -344,6 +382,7 @@ spec:
                       type: integer
                   required:
                   - cleanupSchedule
+                  - resources
                   type: object
                 schedule:
                   description: Crontab expression specifying when snapshots will be
@@ -354,6 +393,7 @@ spec:
                   format: int32
                   type: integer
               required:
+              - resources
               - schedule
               type: object
           required:

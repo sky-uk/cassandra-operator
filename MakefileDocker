@@ -6,8 +6,11 @@ RELEASE_REGISTRY ?= skyuk
 gitRev := $(shell git rev-parse --short HEAD)
 gitTag := $(shell git tag --points-at=$(gitRev))
 
+# Have the option to override the test image with latest for local development testing
+GIT_REV_OR_OVERRIDE ?= v$(gitRev)
+
 # Variables recursively expanded, so $(image) can be set before/after including this file
-dockerTestImage = $(TEST_REGISTRY)/$(image):v$(gitRev)
+dockerTestImage = $(TEST_REGISTRY)/$(image):$(GIT_REV_OR_OVERRIDE)
 dockerReleaseCandidateImage = $(RELEASE_REGISTRY)/$(image):v$(gitRev)
 dockerReleaseImage = $(RELEASE_REGISTRY)/$(image):$(gitTag)
 dockerReleaseLatestImage = $(RELEASE_REGISTRY)/$(image):latest
@@ -24,7 +27,7 @@ common-docker-push:
 
 common-docker-clean:
 	@echo "== common-docker-clean"
-	docker rm $(dockerTestImage) || true
+	docker rmi $(dockerTestImage) || true
 
 common-docker-release:
 	@echo "== common-docker-release"

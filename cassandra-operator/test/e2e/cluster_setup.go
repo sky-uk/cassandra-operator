@@ -176,10 +176,19 @@ func PodSpec() *apis.PodSpecBuilder {
 		WithCassandraReadinessTimeout(CassandraReadinessTimeout)
 }
 
-func SnapshotSchedule(cron string) *v1alpha1.Snapshot {
+func SnapshotConfigFromSchedule(cron string) *v1alpha1.Snapshot {
 	return &v1alpha1.Snapshot{
 		Image:    CassandraSnapshotImageName,
 		Schedule: cron,
+		Resources: coreV1.ResourceRequirements{
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("1Mi"),
+			},
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("1Mi"),
+				coreV1.ResourceCPU:    resource.MustParse("1m"),
+			},
+		},
 	}
 }
 

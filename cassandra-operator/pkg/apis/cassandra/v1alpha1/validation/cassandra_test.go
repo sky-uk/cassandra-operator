@@ -79,6 +79,48 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.StorageClassName = ptr.String("")
 			},
 		),
+		Entry(
+			"Snapshot cpu request can be provided without cpu limit",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Snapshot.Resources.Limits, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Snapshot cpu limit can be provided without cpu request",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Snapshot.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Both Snapshot cpu request and limit can be omitted",
+			func(c *v1alpha1.Cassandra) {
+				delete(c.Spec.Snapshot.Resources.Limits, coreV1.ResourceCPU)
+				delete(c.Spec.Snapshot.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy cpu request can be provided without cpu limit",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Snapshot.RetentionPolicy.Resources.Limits, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy cpu limit can be provided without cpu request",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Snapshot.RetentionPolicy.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Both Snapshot.RetentionPolicy cpu request and limit can be omitted",
+			func(c *v1alpha1.Cassandra) {
+				delete(c.Spec.Snapshot.RetentionPolicy.Resources.Limits, coreV1.ResourceCPU)
+				delete(c.Spec.Snapshot.RetentionPolicy.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
 	)
 
 	DescribeTable(
@@ -196,7 +238,7 @@ var _ = Describe("ValidateCassandra", func() {
 			},
 		),
 		Entry(
-			"Pod memory request > cpu limit",
+			"Pod memory request > memory limit",
 			"spec.Pod.Resources.Requests.Memory: Invalid value: \"151Mi\": must not be greater than spec.Pod.Resources.Limits.Memory (150Mi)",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("151Mi")
@@ -385,6 +427,71 @@ var _ = Describe("ValidateCassandra", func() {
 				c.Spec.Snapshot.RetentionPolicy.CleanupSchedule = "x y z"
 			},
 		),
+		Entry(
+			"Snapshot.Resources must not be nil",
+			"spec.Snapshot.Resources.Requests.Memory: Invalid value: \"0\": must be > 0",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests = coreV1.ResourceList{coreV1.ResourceMemory: resource.Quantity{}}
+			},
+		),
+		Entry(
+			"Snapshot.Resources.Requests.Memory must be > 0",
+			"spec.Snapshot.Resources.Requests.Memory: Invalid value: \"0\": must be > 0",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests = coreV1.ResourceList{coreV1.ResourceMemory: resource.Quantity{}}
+			},
+		),
+		Entry(
+			"Snapshot.Resources cpu request > cpu limit",
+			"spec.Snapshot.Resources.Requests.Cpu: Invalid value: \"71m\": must not be greater than spec.Snapshot.Resources.Limits.Cpu (70m)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests = coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("71m"),
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				}
+				c.Spec.Snapshot.Resources.Limits = coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("70m"),
+					coreV1.ResourceMemory: resource.MustParse("55Mi"),
+				}
+			},
+		),
+		Entry(
+			"Snapshot.Resources.Requests memory request > memory limit",
+			"spec.Snapshot.Resources.Requests.Memory: Invalid value: \"71Mi\": must not be greater than spec.Snapshot.Resources.Limits.Memory (70Mi)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests = coreV1.ResourceList{coreV1.ResourceMemory: resource.MustParse("71Mi")}
+				c.Spec.Snapshot.Resources.Limits = coreV1.ResourceList{coreV1.ResourceMemory: resource.MustParse("70Mi")}
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy.Resources.Requests.Memory must be > 0",
+			"spec.Snapshot.RetentionPolicy.Resources.Requests.Memory: Invalid value: \"0\": must be > 0",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests = coreV1.ResourceList{coreV1.ResourceMemory: resource.Quantity{}}
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy.Resources cpu request > cpu limit",
+			"spec.Snapshot.RetentionPolicy.Resources.Requests.Cpu: Invalid value: \"61m\": must not be greater than spec.Snapshot.RetentionPolicy.Resources.Limits.Cpu (60m)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests = coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("61m"),
+					coreV1.ResourceMemory: resource.MustParse("54Mi"),
+				}
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits = coreV1.ResourceList{
+					coreV1.ResourceCPU:    resource.MustParse("60m"),
+					coreV1.ResourceMemory: resource.MustParse("54Mi"),
+				}
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy.Resources memory request > memory limit",
+			"spec.Snapshot.RetentionPolicy.Resources.Requests.Memory: Invalid value: \"61Mi\": must not be greater than spec.Snapshot.RetentionPolicy.Resources.Limits.Memory (60Mi)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests = coreV1.ResourceList{coreV1.ResourceMemory: resource.MustParse("61Mi")}
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits = coreV1.ResourceList{coreV1.ResourceMemory: resource.MustParse("60Mi")}
+			},
+		),
 	)
 })
 
@@ -553,6 +660,94 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			"Storage path may be changed for an EmptyDir rack Storage",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[1].Path = ptr.String("/var/another-emptydir")
+			},
+		),
+		Entry(
+			"Snapshot Requests Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.Resources.Requests[coreV1.ResourceMemory]
+				quantity.Sub(resource.MustParse("1Mi"))
+				c.Spec.Snapshot.Resources.Requests[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Snapshot Limit Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.Resources.Limits[coreV1.ResourceMemory]
+				quantity.Add(resource.MustParse("1Mi"))
+				c.Spec.Snapshot.Resources.Limits[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Snapshot Request CPU changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.Resources.Requests[coreV1.ResourceCPU]
+				quantity.Sub(resource.MustParse("2000"))
+				c.Spec.Snapshot.Resources.Requests[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Snapshot Limit Cpu changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.Resources.Limits[coreV1.ResourceCPU]
+				quantity.Add(resource.MustParse("150"))
+				c.Spec.Snapshot.Resources.Limits[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Snapshot Request Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Snapshot Limit Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Requests Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceMemory]
+				quantity.Sub(resource.MustParse("1Mi"))
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Limit Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceMemory]
+				quantity.Add(resource.MustParse("1Mi"))
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Request CPU changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceCPU]
+				quantity.Sub(resource.MustParse("2000"))
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Limit Cpu changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceCPU]
+				quantity.Add(resource.MustParse("150"))
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Request Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Snapshot.RetentionPolicy Limit Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Snapshot.RetentionPolicy.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
 			},
 		),
 	)

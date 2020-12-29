@@ -8,7 +8,9 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"k8s.io/api/batch/v1beta1"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
 )
 
@@ -89,6 +91,15 @@ var _ = Describe("current snapshot state", func() {
 				expectedSnapshot = &v1alpha1.Snapshot{
 					Image:    ptr.String("some image"),
 					Schedule: "* * * * 1",
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("50Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("0"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("50Mi"),
+						},
+					},
 				}
 			})
 
@@ -170,6 +181,15 @@ var _ = Describe("current snapshot state", func() {
 			It("should contain the only properties that can be safely extracted from the cronjob", func() {
 				expectedSnapshotCleanup = &v1alpha1.RetentionPolicy{
 					CleanupSchedule: "* * * * 1",
+					Resources: coreV1.ResourceRequirements{
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("55Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("0"),
+						},
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("55Mi"),
+						},
+					},
 				}
 			})
 

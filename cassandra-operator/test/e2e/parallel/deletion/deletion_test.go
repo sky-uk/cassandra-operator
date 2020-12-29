@@ -34,7 +34,7 @@ func defineClusters(multipleNodeClusterName, singleNodeClusterName string) (mult
 	singleNodeCluster = &TestCluster{
 		Name:           singleNodeClusterName,
 		Racks:          []v1alpha1.Rack{Rack("a", 1)},
-		SnapshotConfig: SnapshotSchedule("0/1 * * * *"),
+		SnapshotConfig: SnapshotConfigFromSchedule("0/1 * * * *"),
 	}
 	return
 }

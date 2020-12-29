@@ -32,7 +32,7 @@ func (o *UpdateSnapshotOperation) Execute() (bool, error) {
 func (o *UpdateSnapshotOperation) updateSnapshotJob(snapshotJob *v1beta1.CronJob) error {
 	c := cluster.New(o.cassandra)
 	snapshotJob.Spec.Schedule = o.cassandra.Spec.Snapshot.Schedule
-	snapshotJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotContainer(o.cassandra.Spec.Snapshot)
+	snapshotJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0] = *c.CreateSnapshotContainer()
 	err := o.clusterAccessor.UpdateCronJob(snapshotJob)
 	if err != nil {
 		return fmt.Errorf("error while updating snapshot snapshotJob %s for cluster %s: %v", snapshotJob.Name, o.cassandra.QualifiedName(), err)

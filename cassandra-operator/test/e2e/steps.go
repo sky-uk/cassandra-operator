@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"k8s.io/api/batch/v1beta1"
 	coreV1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -239,6 +240,27 @@ func TheCronJobIsDeleted(namespace, jobName string) {
 
 	gomega.Eventually(CronJobIsDeletedSince(namespace, jobName, job.CreationTimestamp.Time), 30*time.Second, CheckInterval).Should(gomega.BeTrue())
 	log.Infof("Cronjob %s has been deleted since it was initially created at %s", jobName, job.CreationTimestamp)
+}
+
+func TheCronjobResourcesAreChangedTo(namespace, jobName string, editedResources coreV1.ResourceRequirements) {
+	mutateCronjobSpec(namespace, jobName, func(cronJob *v1beta1.CronJob) {
+		cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Resources = editedResources
+	})
+	log.Infof("Updated resources for cronjob %s", jobName)
+}
+
+func mutateCronjobSpec(namespace, jobName string, mutator func(*v1beta1.CronJob)) {
+	cronJob, getErr := KubeClientset.BatchV1beta1().CronJobs(namespace).Get(jobName, metaV1.GetOptions{})
+	gomega.Expect(getErr).ToNot(gomega.HaveOccurred())
+	cronBeforeMutation := cronJob.DeepCopy()
+
+	mutator(cronJob)
+
+	var cronAfterMutation *v1beta1.CronJob
+	cronAfterMutation, err := KubeClientset.BatchV1beta1().CronJobs(namespace).Update(cronJob)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	log.Info(spew.Sprintf("Updated cronjob spec for job %s, before: %+v, \nafter: %+v", jobName, cronBeforeMutation, cronAfterMutation))
 }
 
 func TheCustomConfigHashIsChangedForRack(namespace, clusterName, rackName string) {

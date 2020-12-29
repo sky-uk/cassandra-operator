@@ -178,6 +178,8 @@ type Snapshot struct {
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 	// +optional
 	RetentionPolicy *RetentionPolicy `json:"retentionPolicy,omitempty"`
+	// Resource requirements for the Snapshot job
+	Resources coreV1.ResourceRequirements `json:"resources"`
 }
 
 // RetentionPolicy defines how long the snapshots should be kept for and how often the cleanup task should run
@@ -191,6 +193,8 @@ type RetentionPolicy struct {
 	// Time limit for the cleanup command to run.
 	// +optional
 	CleanupTimeoutSeconds *int32 `json:"cleanupTimeoutSeconds,omitempty"`
+	// Resource requirements for the Snapshot Cleanup Job
+	Resources coreV1.ResourceRequirements `json:"resources"`
 }
 
 // QualifiedName is the cluster fully qualified name which follows the format <namespace>.<name>
@@ -242,14 +246,16 @@ func (s Snapshot) Equal(other Snapshot) bool {
 		reflect.DeepEqual(s.TimeoutSeconds, other.TimeoutSeconds) &&
 		reflect.DeepEqual(sortedStrings(s.Keyspaces), sortedStrings(other.Keyspaces)) &&
 		s.Schedule == other.Schedule &&
-		cmp.Equal(s.RetentionPolicy, other.RetentionPolicy)
+		cmp.Equal(s.RetentionPolicy, other.RetentionPolicy) &&
+		allResourcesAreEqual(s.Resources, other.Resources)
 }
 
 // Equal checks equality of two RetentionPolicy. This is useful for checking equality with cmp.Equal
 func (rp RetentionPolicy) Equal(other RetentionPolicy) bool {
 	return reflect.DeepEqual(rp.CleanupTimeoutSeconds, other.CleanupTimeoutSeconds) &&
 		reflect.DeepEqual(rp.CleanupSchedule, other.CleanupSchedule) &&
-		reflect.DeepEqual(rp.RetentionPeriodDays, other.RetentionPeriodDays)
+		reflect.DeepEqual(rp.RetentionPeriodDays, other.RetentionPeriodDays) &&
+		allResourcesAreEqual(rp.Resources, other.Resources)
 }
 
 // Equal checks equality of two Racks. This is useful for testing checking equality cmp.Equal
@@ -273,10 +279,14 @@ func (p Pod) Equal(other Pod) bool {
 		reflect.DeepEqual(p.Image, other.Image) &&
 		reflect.DeepEqual(p.LivenessProbe, other.LivenessProbe) &&
 		reflect.DeepEqual(p.ReadinessProbe, other.ReadinessProbe) &&
-		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceMemory) &&
-		resourcesAreEqual(p.Resources.Limits, other.Resources.Limits, coreV1.ResourceMemory) &&
-		resourcesAreEqual(p.Resources.Requests, other.Resources.Requests, coreV1.ResourceCPU) &&
-		resourcesAreEqual(p.Resources.Limits, other.Resources.Limits, coreV1.ResourceCPU)
+		allResourcesAreEqual(p.Resources, other.Resources)
+}
+
+func allResourcesAreEqual(aResource coreV1.ResourceRequirements, anotherResource coreV1.ResourceRequirements) bool {
+	return resourcesAreEqual(aResource.Requests, anotherResource.Requests, coreV1.ResourceMemory) &&
+		resourcesAreEqual(aResource.Limits, anotherResource.Limits, coreV1.ResourceMemory) &&
+		resourcesAreEqual(aResource.Requests, anotherResource.Requests, coreV1.ResourceCPU) &&
+		resourcesAreEqual(aResource.Limits, anotherResource.Limits, coreV1.ResourceCPU)
 }
 
 func resourcesAreEqual(resources coreV1.ResourceList, otherResources coreV1.ResourceList, resourceName coreV1.ResourceName) bool {

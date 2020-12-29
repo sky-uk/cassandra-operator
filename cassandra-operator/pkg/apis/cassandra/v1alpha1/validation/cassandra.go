@@ -272,6 +272,8 @@ func validateSnapshot(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorLis
 		)
 	}
 	allErrs = validateUnsignedInt(allErrs, fldPath.Child("TimeoutSeconds"), *c.Spec.Snapshot.TimeoutSeconds, 1)
+	allErrs = validateResources(allErrs, fldPath, c.Spec.Snapshot.Resources)
+
 	if c.Spec.Snapshot.RetentionPolicy != nil {
 		allErrs = append(
 			allErrs,
@@ -298,6 +300,8 @@ func validateSnapshotRetentionPolicy(c *v1alpha1.Cassandra, fldPath *field.Path)
 			),
 		)
 	}
+	allErrs = validateResources(allErrs, fldPath, c.Spec.Snapshot.RetentionPolicy.Resources)
+
 	return allErrs
 }
 

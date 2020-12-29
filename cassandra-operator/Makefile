@@ -34,7 +34,14 @@ all: clean install check
 
 build: go-build check-style validate-licences validate-crds validate-codegen docker-image
 
+clean-test-namespace:
+	@echo "== delete all in test-cassandra-operator"
+	kubectl --context ${KUBE_CONTEXT} -n test-cassandra-operator delete all --all
+	kubectl --context ${KUBE_CONTEXT} -n test-cassandra-operator delete cassandras --all
+
 install: build go-install push-image
+
+clean-redeploy-test: clean-test-namespace deploy-operator
 
 check-style: fmt vet lint
 

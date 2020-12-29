@@ -872,7 +872,7 @@ type ResourceRequirementsAssertion struct {
 }
 
 type haveResourcesRequirements struct {
-	expected   *ResourceRequirementsAssertion
+	expected *ResourceRequirementsAssertion
 }
 
 func extractPodSpec(outerResource interface{}) coreV1.PodSpec {

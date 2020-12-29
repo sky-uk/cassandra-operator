@@ -1,5 +1,12 @@
 # Changes
 
+## 0.84.0-alpha
+
+- [FEATURE] [Provide configuration in cassandra resource for snapshot job](#238) (@Bez625)
+- [BREAKING CHANGE] The above introduces a requirement to specify snapshot resource definitions. 
+  We are only incrementing the minor version for this as the project is in alpha state.
+  For details please see the project wiki or the describing issue.
+
 ## 0.83.2-alpha
 
 - [BUGFIX] [Remove CPU resource limit from cassandra-sidecar](#237) (@Bez625)

@@ -56,7 +56,8 @@ func IsAReservedVolumePath(path string) bool {
 func SnapshotPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v1alpha1.Snapshot) bool {
 	return snapshot1.Schedule != snapshot2.Schedule ||
 		!reflect.DeepEqual(snapshot1.TimeoutSeconds, snapshot2.TimeoutSeconds) ||
-		!reflect.DeepEqual(snapshot1.Keyspaces, snapshot2.Keyspaces)
+		!reflect.DeepEqual(snapshot1.Keyspaces, snapshot2.Keyspaces) ||
+		!reflect.DeepEqual(snapshot1.Resources, snapshot2.Resources)
 }
 
 // SnapshotCleanupPropertiesUpdated returns false snapshot1 and snapshot2 have the same retention policy
@@ -64,7 +65,8 @@ func SnapshotCleanupPropertiesUpdated(snapshot1 *v1alpha1.Snapshot, snapshot2 *v
 	return snapshot1.RetentionPolicy != nil && snapshot2.RetentionPolicy != nil &&
 		(snapshot1.RetentionPolicy.CleanupSchedule != snapshot2.RetentionPolicy.CleanupSchedule ||
 			!reflect.DeepEqual(snapshot1.RetentionPolicy.CleanupTimeoutSeconds, snapshot2.RetentionPolicy.CleanupTimeoutSeconds) ||
-			!reflect.DeepEqual(snapshot1.RetentionPolicy.RetentionPeriodDays, snapshot2.RetentionPolicy.RetentionPeriodDays))
+			!reflect.DeepEqual(snapshot1.RetentionPolicy.RetentionPeriodDays, snapshot2.RetentionPolicy.RetentionPeriodDays) ||
+			!reflect.DeepEqual(snapshot1.RetentionPolicy.Resources, snapshot2.RetentionPolicy.Resources))
 }
 
 func SetDefaultsForCassandra(clusterDefinition *v1alpha1.Cassandra, imageDefaultScheme ImageScheme) {
