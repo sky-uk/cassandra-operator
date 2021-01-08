@@ -48,7 +48,17 @@ jobs:
     - stage: test
       name: cassandra-operator
       before_script: make setup install kind
-      script: make -C cassandra-operator check
+      script: SKIP_PACKAGES=modification make -C cassandra-operator deploy-operator e2e-test
+
+    - stage: test
+      name: cassandra-operator-modification
+      before_script: make setup install kind
+      script: E2E_TEST=modification make -C cassandra-operator deploy-operator e2e-test-parallel
+
+    - stage: test
+      name: cassandra-operator-integration
+      before_script: make setup install kind
+      script: make -C cassandra-operator test deploy-operator integration-test
 
     - stage: test
       name: cassandra-bootstrapper

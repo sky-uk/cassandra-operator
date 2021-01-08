@@ -91,7 +91,7 @@ ensure-test-report-dir-exists: ensure-build-dir-exists
 
 test: ensure-test-report-dir-exists
 	@echo "== test"
-	ginkgo $(GINKGO_PARALLEL_OPTIONS) -r -skipPackage=$(SKIP_PACKAGES) -compilers=$(GINKGO_COMPILERS) --v --progress pkg cmd -- -junit-report-dir $(junitReportDir)
+	ginkgo -r -skipPackage=$(SKIP_PACKAGES) -compilers=$(GINKGO_COMPILERS) --v --progress pkg cmd -- -junit-report-dir $(junitReportDir)
 
 integration-test: ensure-test-report-dir-exists
 	@echo "== integration-test"
