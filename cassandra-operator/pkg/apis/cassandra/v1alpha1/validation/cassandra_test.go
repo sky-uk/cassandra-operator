@@ -533,7 +533,7 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 		Entry(
 			"Pod SidecarImage changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.SidecarImage = ptr.String("foo/bar:baz")
+				c.Spec.Pod.Sidecar.Image = ptr.String("foo/bar:baz")
 			},
 		),
 		Entry(

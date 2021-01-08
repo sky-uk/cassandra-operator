@@ -408,9 +408,11 @@ func (p *PodSpecBuilder) WithCassandraReadinessProbeSuccessThreshold(threshold i
 func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
 	return &v1alpha1.Pod{
 		BootstrapperImage: p.bootstrapperImage,
-		SidecarImage:      p.sidecarImage,
-		Image:             p.image,
-		Resources:         *p.resources,
+		Sidecar: v1alpha1.Sidecar{
+			Image: p.sidecarImage,
+		},
+		Image:     p.image,
+		Resources: *p.resources,
 		LivenessProbe: &v1alpha1.Probe{
 			SuccessThreshold:    p.cassandraLivenessProbeSuccessThreshold,
 			FailureThreshold:    p.cassandraLivenessProbeFailureThreshold,

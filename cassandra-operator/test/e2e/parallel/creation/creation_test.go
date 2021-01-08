@@ -82,8 +82,10 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 			Racks:      multipleRacksCluster.Racks,
 			Pod: v1alpha1.Pod{
 				BootstrapperImage: CassandraBootstrapperImageName,
-				SidecarImage:      CassandraSidecarImageName,
-				Image:             CassandraImageName,
+				Sidecar: v1alpha1.Sidecar{
+					Image: CassandraSidecarImageName,
+				},
+				Image: CassandraImageName,
 				Resources: coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
 						coreV1.ResourceMemory: resource.MustParse("987Mi"),

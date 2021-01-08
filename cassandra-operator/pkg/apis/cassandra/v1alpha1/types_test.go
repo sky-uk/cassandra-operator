@@ -36,8 +36,8 @@ var _ = Describe("Cassandra Types", func() {
 			podInequalityCheck,
 			Entry("when one pod has a nil bootstrap image", func(pod, _ *Pod) { pod.BootstrapperImage = nil }),
 			Entry("when pods have different bootstrap images", func(pod, _ *Pod) { pod.BootstrapperImage = ptr.String("another image") }),
-			Entry("when one pod has a nil sidecar image", func(pod, _ *Pod) { pod.SidecarImage = nil }),
-			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.SidecarImage = ptr.String("another image") }),
+			Entry("when one pod has a nil sidecar image", func(pod, _ *Pod) { pod.Sidecar.Image = nil }),
+			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.Sidecar.Image = ptr.String("another image") }),
 			Entry("when one pod has a nil cassandra image", func(pod, _ *Pod) { pod.Image = nil }),
 			Entry("when pods have different cassandra images", func(pod, _ *Pod) { pod.Image = ptr.String("another image") }),
 			Entry("when one pod has no cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
@@ -391,8 +391,10 @@ func podComparisonCheck(mutate func(pod, otherPod *Pod), expectCheck func(pod, o
 func podSpec() *Pod {
 	return &Pod{
 		BootstrapperImage: ptr.String("BootstrapperImage"),
-		SidecarImage:      ptr.String("SidecarImage"),
-		Image:             ptr.String("Image"),
+		Sidecar: Sidecar{
+			Image: ptr.String("SidecarImage"),
+		},
+		Image: ptr.String("Image"),
 		Resources: coreV1.ResourceRequirements{
 			Limits: coreV1.ResourceList{
 				coreV1.ResourceMemory: resource.MustParse("2Gi"),

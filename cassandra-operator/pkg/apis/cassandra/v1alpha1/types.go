@@ -75,6 +75,7 @@ type CassandraSpec struct {
 	Snapshot *Snapshot `json:"snapshot,omitempty"`
 }
 
+// Probe represents a scheme for monitoring cassandra nodes status.
 type Probe struct {
 	// Minimum consecutive failures for the probe to be considered failed after having succeeded. Minimum value is 1.
 	// +optional
@@ -98,9 +99,7 @@ type Pod struct {
 	// The name of the Docker image used to prepare the configuration for the Cassandra node before it can be started.
 	// +optional
 	BootstrapperImage *string `json:"bootstrapperImage,omitempty"`
-	// The Docker image for the sidecar container running on each Cassandra node to expose node status.
-	// +optional
-	SidecarImage *string `json:"sidecarImage,omitempty"`
+
 	// The Docker image to run on each Cassandra node in the cluster. It is recommended to use one of the official Cassandra images, version 3
 	// +optional
 	Image     *string                     `json:"image,omitempty"`
@@ -111,6 +110,15 @@ type Pod struct {
 	// Readiness probe for the cassandra container
 	// +optional
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
+	// Sidecar container specification
+	Sidecar Sidecar `json:"sidecar"`
+}
+
+// Sidecar is the specification of a sidecar attached to a Cassandra node
+type Sidecar struct {
+	// The Docker image for the sidecar container running on each Cassandra node to expose node status.
+	// +optional
+	Image *string `json:"image,omitempty"`
 }
 
 // CassandraStatus is the status for the Cassandra resource
@@ -275,11 +283,15 @@ func (ss Storage) Equal(other Storage) bool {
 // Equal checks equality of two Pods. This is useful for checking equality with cmp.Equal
 func (p Pod) Equal(other Pod) bool {
 	return reflect.DeepEqual(p.BootstrapperImage, other.BootstrapperImage) &&
-		reflect.DeepEqual(p.SidecarImage, other.SidecarImage) &&
-		reflect.DeepEqual(p.Image, other.Image) &&
+		cmp.Equal(p.Sidecar, other.Sidecar) &&
 		reflect.DeepEqual(p.LivenessProbe, other.LivenessProbe) &&
 		reflect.DeepEqual(p.ReadinessProbe, other.ReadinessProbe) &&
 		allResourcesAreEqual(p.Resources, other.Resources)
+}
+
+// Equal checks equality of two Sidecars. This is useful for checking equality with cmp.Equal
+func (s Sidecar) Equal(other Sidecar) bool {
+	return reflect.DeepEqual(s.Image, other.Image)
 }
 
 func allResourcesAreEqual(aResource coreV1.ResourceRequirements, anotherResource coreV1.ResourceRequirements) bool {

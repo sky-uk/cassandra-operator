@@ -246,7 +246,7 @@ func SnapshotListForPod(pod *v1.Pod) ([]Snapshot, error) {
 
 func BackdateSnapshotsForPods(pods []*v1.Pod, backdatePeriod time.Duration) {
 	newSnapshotName := time.Now().Unix() - int64(backdatePeriod.Seconds())
-	renameSnapshot(pods, string(newSnapshotName))
+	renameSnapshot(pods, fmt.Sprintf("%d", newSnapshotName))
 }
 
 func RenameSnapshotsForPod(pod *v1.Pod, snapshotName string) {

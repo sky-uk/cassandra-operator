@@ -465,7 +465,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 func (c *Cluster) createCassandraSidecarContainer(rack *v1alpha1.Rack) v1.Container {
 	return v1.Container{
 		Name:  cassandraSidecarContainerName,
-		Image: *c.definition.Spec.Pod.SidecarImage,
+		Image: *c.definition.Spec.Pod.Sidecar.Image,
 		Ports: []v1.ContainerPort{
 			{
 				Name:          "api",

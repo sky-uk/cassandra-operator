@@ -126,12 +126,17 @@ spec:
                         to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                       type: object
                   type: object
-                sidecarImage:
-                  description: The Docker image for the sidecar container running
-                    on each Cassandra node to expose node status.
-                  type: string
+                sidecar:
+                  description: Sidecar container specification
+                  properties:
+                    image:
+                      description: The Docker image for the sidecar container running
+                        on each Cassandra node to expose node status.
+                      type: string
+                  type: object
               required:
               - resources
+              - sidecar
               type: object
             racks:
               items:

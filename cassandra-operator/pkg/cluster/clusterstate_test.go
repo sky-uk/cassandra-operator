@@ -81,7 +81,7 @@ var _ = Describe("the cluster state reconstruction", func() {
 
 		It("should have the custom images when specified", func() {
 			expectedCassandra.Spec.Pod.Image = ptr.String("my-cassandra-image")
-			expectedCassandra.Spec.Pod.SidecarImage = ptr.String("my-cassandra-sidecar-image")
+			expectedCassandra.Spec.Pod.Sidecar.Image = ptr.String("my-cassandra-sidecar-image")
 			expectedCassandra.Spec.Pod.BootstrapperImage = ptr.String("my-cassandra-bootstrapper-image")
 			fakes.statefulsetsAreFoundIn(clusterNamespaceName, createStatefulSetsFor(expectedCassandra))
 		})

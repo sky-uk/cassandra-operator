@@ -129,8 +129,8 @@ func setDefaultsForImages(clusterDefinition *v1alpha1.Cassandra, imageScheme Ima
 	if clusterDefinition.Spec.Pod.BootstrapperImage == nil {
 		clusterDefinition.Spec.Pod.BootstrapperImage = imageScheme.defaultName(v1alpha1.DefaultCassandraBootstrapperImageName)
 	}
-	if clusterDefinition.Spec.Pod.SidecarImage == nil {
-		clusterDefinition.Spec.Pod.SidecarImage = imageScheme.defaultName(v1alpha1.DefaultCassandraSidecarImageName)
+	if clusterDefinition.Spec.Pod.Sidecar.Image == nil {
+		clusterDefinition.Spec.Pod.Sidecar.Image = imageScheme.defaultName(v1alpha1.DefaultCassandraSidecarImageName)
 	}
 	if clusterDefinition.Spec.Snapshot != nil && clusterDefinition.Spec.Snapshot.Image == nil {
 		clusterDefinition.Spec.Snapshot.Image = imageScheme.defaultName(v1alpha1.DefaultCassandraSnapshotImageName)
