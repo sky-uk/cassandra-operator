@@ -5,6 +5,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,8 +21,6 @@ import (
 const (
 	CheckInterval           = 5 * time.Second
 	EventPublicationTimeout = time.Minute
-	// max number of 1Gi mem nodes that can fit within the namespace resource quota
-	MaxCassandraNodesPerNamespace = 6
 )
 
 var (
@@ -45,6 +44,7 @@ var (
 	NodeRestartDuration                     time.Duration
 	NodeTerminationDuration                 time.Duration
 	Namespace                               string
+	MaxCassandraNodesPerNamespace			int
 )
 
 func init() {
@@ -122,8 +122,14 @@ func init() {
 		Namespace = "test-cassandra-operator"
 	}
 
+	// max number of 1Gi mem nodes that can fit within the namespace resource quota
+	MaxCassandraNodesPerNamespace, err = getEnvInt("MAX_CASSANDRA_NODES_PER_NS")
+	if err != nil {
+		MaxCassandraNodesPerNamespace = 6
+	}
+
 	log.Infof(
-		"Running tests with Kubernetes context: %s, namespace: %s, Cassandra image: %s, bootstrapper image: %s, snapshot image: %s, sidecar image: %s, node start duration: %s",
+		"Running tests with Kubernetes context: %s, namespace: %s, Cassandra image: %s, bootstrapper image: %s, snapshot image: %s, sidecar image: %s, node start duration: %s, max nodes per NS: %d",
 		kubeContext,
 		Namespace,
 		ptr.StringValueOrNil(CassandraImageName),
@@ -131,6 +137,7 @@ func init() {
 		ptr.StringValueOrNil(CassandraSnapshotImageName),
 		ptr.StringValueOrNil(CassandraSidecarImageName),
 		NodeStartDuration,
+		MaxCassandraNodesPerNamespace,
 	)
 }
 
@@ -164,4 +171,13 @@ func getEnvOrNil(envKey string) *string {
 		return ptr.String(envValue)
 	}
 	return nil
+}
+
+func getEnvInt(envKey string) (int, error) {
+	envValue := os.Getenv(envKey)
+	intVal, err := strconv.Atoi(envValue)
+	if err != nil {
+		return 0, err
+	}
+	return intVal, nil
 }
