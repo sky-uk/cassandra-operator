@@ -122,7 +122,8 @@ Flag | Meaning | Default
 `GINKGO_NODES`                 | Ginkgo `-nodes` value to use when running tests suite in parallel using the `-p` option. Use a value greater than `1` to specify the level of parallelism. Use `0` or `1` to disable paralellism. | (no default), equivalent to using as many nodes as cpus
 `E2E_TEST`                     | Name of the end-to-end test suite to run. Use this to run a specific test suite | empty, equivalent to running all test suites
 `SKIP_PACKAGES`                | Comma-separated list of relative package names of tests which should be skipped, e.g. `SKIP_PACKAGES=test/e2e/parallel/validation,test/e2e/parallel/modification` | empty, equivalent to running all test suites
-`GIT_REV_OR_OVERRIDE`          | Whether the build / push / deploy logic should use an override version for `dockerTestImage`. If not set it will use a version referencing the current git commit | `v$(gitRev)` 
+`GIT_REV_OR_OVERRIDE`          | Whether the build / push / deploy logic should use an override version for `dockerTestImage`. If not set it will use a version referencing the current git commit | `v$(gitRev)`
+`MAX_CASSANDRA_NODES_PER_NS`   | How many cassandra nodes the e2e-test will attempt to start in parallel. Only increase this if the target namespace has resource capacity | `6` 
 
 
 ## What to work on
