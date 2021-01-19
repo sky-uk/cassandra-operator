@@ -5,6 +5,7 @@ apply plugin: 'application'
 mainClassName = 'com.sky.core.operators.cassandra.seedprovider.KubernetesSeedProvider'
 
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.github.jk1.dependency-license-report'
 
 dependencies {
     // expect seed provider to be loaded from within a cassandra jar, so exclude cassandra dependencies
@@ -25,5 +26,11 @@ targetCompatibility = 1.8
 shadowJar {
     archiveFileName = 'cassandra-seed-provider.jar'
 }
+
+licenseReport {
+    allowedLicensesFile = new File("$projectDir/config/allowed-licenses.json")
+}
+
+check.dependsOn checkLicense
 
 shadowJar.dependsOn check

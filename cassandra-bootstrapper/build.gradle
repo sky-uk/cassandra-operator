@@ -1,4 +1,5 @@
 apply plugin: 'java'
+apply plugin: 'com.github.jk1.dependency-license-report'
 
 configurations {
     // extraLib is used to acquire the dependencies for inclusion into the extra library directory. The dependencies
@@ -21,3 +22,9 @@ task exportStagedLib(type: Copy) {
         rename '(.*)-\\d+.\\d+.\\d+(-.*)?.jar', '$1$2.jar'
     }
 }
+
+licenseReport {
+    allowedLicensesFile = new File("$projectDir/config/allowed-licenses.json")
+}
+
+check.dependsOn checkLicense

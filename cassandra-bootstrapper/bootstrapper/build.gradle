@@ -5,6 +5,7 @@ apply plugin: 'application'
 mainClassName = 'com.sky.core.operators.cassandra.bootstrapper.CassandraBootstrapper'
 
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.github.jk1.dependency-license-report'
 
 dependencies {
     compile 'org.yaml:snakeyaml:1.20'
@@ -22,5 +23,11 @@ dependencies {
 shadowJar {
     archiveFileName = 'cassandra-bootstrapper.jar'
 }
+
+licenseReport {
+    allowedLicensesFile = new File("$projectDir/config/allowed-licenses.json")
+}
+
+check.dependsOn checkLicense
 
 shadowJar.dependsOn check

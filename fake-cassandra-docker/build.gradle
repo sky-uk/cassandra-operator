@@ -3,6 +3,7 @@ apply plugin: 'java'
 apply plugin: 'groovy'
 apply plugin: 'application'
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.github.jk1.dependency-license-report'
 
 // Needs to be before the application of the shadow plugin - see https://github.com/johnrengelman/shadow/issues/336
 mainClassName = 'com.sky.core.operators.fake.FakeCassandra'
@@ -25,3 +26,9 @@ shadowJar {
 }
 
 task doShadowJar(dependsOn: ['shadowJar', 'check'])
+
+licenseReport {
+    allowedLicensesFile = new File("$projectDir/config/allowed-licenses.json")
+}
+
+check.dependsOn checkLicense
