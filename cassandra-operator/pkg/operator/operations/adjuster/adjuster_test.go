@@ -178,7 +178,7 @@ var _ = Describe("cluster events", func() {
 		})
 
 		It("should produce an UpdateRack change when the sidecar image has been updated", func() {
-			newCluster.Spec.Pod.SidecarImage = ptr.String("anotherImage")
+			newCluster.Spec.Pod.Sidecar.Image = ptr.String("anotherImage")
 			changes := adjuster.ChangesForCluster(oldCluster, newCluster)
 			Expect(changes).To(HaveLen(1))
 			Expect(changes).To(HaveClusterChange(newCluster.Spec.Racks[0], UpdateRack))

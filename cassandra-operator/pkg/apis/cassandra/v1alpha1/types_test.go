@@ -36,8 +36,8 @@ var _ = Describe("Cassandra Types", func() {
 			podInequalityCheck,
 			Entry("when one pod has a nil bootstrap image", func(pod, _ *Pod) { pod.BootstrapperImage = nil }),
 			Entry("when pods have different bootstrap images", func(pod, _ *Pod) { pod.BootstrapperImage = ptr.String("another image") }),
-			Entry("when one pod has a nil sidecar image", func(pod, _ *Pod) { pod.SidecarImage = nil }),
-			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.SidecarImage = ptr.String("another image") }),
+			Entry("when one pod has a nil sidecar image", func(pod, _ *Pod) { pod.Sidecar.Image = nil }),
+			Entry("when pods have different sidecar images", func(pod, _ *Pod) { pod.Sidecar.Image = ptr.String("another image") }),
 			Entry("when one pod has a nil cassandra image", func(pod, _ *Pod) { pod.Image = nil }),
 			Entry("when pods have different cassandra images", func(pod, _ *Pod) { pod.Image = ptr.String("another image") }),
 			Entry("when one pod has no cpu request", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
@@ -83,6 +83,54 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one readiness probe has a nil failure threshold", func(pod, _ *Pod) { pod.ReadinessProbe.FailureThreshold = nil }),
 			Entry("when one readiness probe has a nil delay", func(pod, _ *Pod) { pod.ReadinessProbe.InitialDelaySeconds = nil }),
 			Entry("when one readiness probe has a nil period", func(pod, _ *Pod) { pod.ReadinessProbe.PeriodSeconds = nil }),
+		)
+	})
+
+	Context("Sidecar", func() {
+
+		DescribeTable("equality",
+			sidecarEqualityCheck,
+			Entry("if all fields are equal", func(sidecar, _ *Sidecar) {}),
+			Entry("when cpu request value is the same but using a different amount", func(sidecar, _ *Sidecar) { sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("0.1") }),
+			Entry("when cpu limit value is the same but using a different amount", func(sidecar, _ *Sidecar) { sidecar.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("0.1") }),
+			Entry("when memory request value is the same but using a different amount", func(sidecar, _ *Sidecar) {
+				sidecar.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1024Mi")
+			}),
+			Entry("when memory limit value is the same but using a different amount", func(sidecar, _ *Sidecar) {
+				sidecar.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("1024Mi")
+			}),
+		)
+
+		DescribeTable("inequality",
+			sidecarInequalityCheck,
+			Entry("when one sidecar has a nil image", func(sidecar, _ *Sidecar) { sidecar.Image = nil }),
+			Entry("when sidecars have different images", func(sidecar, _ *Sidecar) { sidecar.Image = ptr.String("another image") }),
+			Entry("when one sidecar has no cpu request", func(sidecar, _ *Sidecar) { sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
+			Entry("when one sidecar has no cpu limit", func(sidecar, _ *Sidecar) { sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{} }),
+			Entry("when sidecars have different number of cpu request", func(sidecar, _ *Sidecar) { sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("10") }),
+			Entry("when sidecars have different number of cpu limit", func(sidecar, _ *Sidecar) { sidecar.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("120") }),
+			Entry("when one sidecar has no cpu request and the other has 0 requests", func(sidecar, otherSidecar *Sidecar) {
+				delete(sidecar.Resources.Requests, coreV1.ResourceCPU)
+				otherSidecar.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			}),
+			Entry("when one sidecar has no cpu limit and the other has 0 limits", func(sidecar, otherSidecar *Sidecar) {
+				delete(sidecar.Resources.Limits, coreV1.ResourceCPU)
+				otherSidecar.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
+			}),
+			Entry("when one sidecar has no memory request", func(sidecar, _ *Sidecar) { sidecar.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{} }),
+			Entry("when one sidecar has no memory limit", func(sidecar, _ *Sidecar) { sidecar.Resources.Limits[coreV1.ResourceMemory] = resource.Quantity{} }),
+			Entry("when sidecars have different memory request sizes", func(sidecar, _ *Sidecar) {
+				sidecar.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1000Mi")
+			}),
+			Entry("when sidecars have different memory limit sizes", func(sidecar, _ *Sidecar) { sidecar.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("2Gi") }),
+			Entry("when one sidecar has no memory request and the other has 0 requests", func(sidecar, otherSidecar *Sidecar) {
+				delete(sidecar.Resources.Requests, coreV1.ResourceMemory)
+				otherSidecar.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{}
+			}),
+			Entry("when one sidecar has no memory limit and the other has 0 limits", func(sidecar, otherSidecar *Sidecar) {
+				delete(sidecar.Resources.Limits, coreV1.ResourceMemory)
+				otherSidecar.Resources.Limits[coreV1.ResourceMemory] = resource.Quantity{}
+			}),
 		)
 	})
 
@@ -191,6 +239,9 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one cassandra has a no snapshot", func(cass *CassandraSpec) { cass.Snapshot = nil }),
 			Entry("when one cassandra has a different schedule", func(cass *CassandraSpec) { cass.Snapshot.Schedule = "1 2 3 4" }),
 			Entry("when one cassandra has a different pod spec", func(cass *CassandraSpec) { cass.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("30") }),
+			Entry("when one cassandra has a different sidecar spec", func(cass *CassandraSpec) {
+				cass.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("30")
+			}),
 		)
 	})
 
@@ -391,7 +442,7 @@ func podComparisonCheck(mutate func(pod, otherPod *Pod), expectCheck func(pod, o
 func podSpec() *Pod {
 	return &Pod{
 		BootstrapperImage: ptr.String("BootstrapperImage"),
-		SidecarImage:      ptr.String("SidecarImage"),
+		Sidecar:           sidecarSpec(),
 		Image:             ptr.String("Image"),
 		Resources: coreV1.ResourceRequirements{
 			Limits: coreV1.ResourceList{
@@ -416,6 +467,45 @@ func podSpec() *Pod {
 			InitialDelaySeconds: ptr.Int32(3),
 			FailureThreshold:    ptr.Int32(4),
 			TimeoutSeconds:      ptr.Int32(5),
+		},
+	}
+}
+
+func sidecarEqualityCheck(mutate func(sidecar, othersidecar *Sidecar)) {
+	sidecarsEqual := func(sidecar, otherSidecar *Sidecar) bool {
+		return sidecar.Equal(*otherSidecar) && otherSidecar.Equal(*sidecar)
+	}
+	sidecarComparisonCheck(mutate, sidecarsEqual)
+}
+
+func sidecarInequalityCheck(mutate func(sidecar, otherSidecar *Sidecar)) {
+	sidecarsNotEqual := func(sidecar, otherSidecar *Sidecar) bool {
+		return !sidecar.Equal(*otherSidecar) && !otherSidecar.Equal(*sidecar)
+	}
+	sidecarComparisonCheck(mutate, sidecarsNotEqual)
+}
+
+func sidecarComparisonCheck(mutate func(sidecar, otherSidecar *Sidecar), expectCheck func(sidecar, otherSidecar *Sidecar) bool) {
+	sidecar1 := sidecarSpec()
+	sidecar2 := sidecar1.DeepCopy()
+
+	mutate(sidecar1, sidecar2)
+
+	Expect(expectCheck(sidecar1, sidecar2)).To(BeTrue())
+}
+
+func sidecarSpec() *Sidecar {
+	return &Sidecar{
+		Image: ptr.String("sidecarImage"),
+		Resources: coreV1.ResourceRequirements{
+			Requests: coreV1.ResourceList{
+				coreV1.ResourceCPU:    resource.MustParse("100m"),
+				coreV1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+			Limits: coreV1.ResourceList{
+				coreV1.ResourceMemory: resource.MustParse("1Gi"),
+				coreV1.ResourceCPU:    resource.MustParse("100m"),
+			},
 		},
 	}
 }

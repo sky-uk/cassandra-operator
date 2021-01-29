@@ -512,36 +512,36 @@ var _ = Describe("creation of stateful sets", func() {
 			))
 		})
 
-		It("should have memory limit and no cpu limit", func() {
+		It("should have specified memory and cpu resources", func() {
+			clusterDef.Spec.Pod.Sidecar.Resources = coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("68Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("185m"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("68Mi"),
+				},
+			}
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
 			// when
 			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
 
-			// then
-			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
-			Expect(sidecarContainer.Resources.Limits).To(HaveLen(1))
-			Expect(*sidecarContainer.Resources.Limits.Memory()).To(Equal(resource.MustParse("50Mi")))
-		})
-
-		It("should use the maxSidecarCPURequest if that is lower than Cassandra.Spec.Pod.CPU", func() {
-			// given
-			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("2")
-			cluster := ACluster(clusterDef)
-			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
-
-			// when
-			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
-
-			// then
-			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
-			Expect(*sidecarContainer.Resources.Requests.Cpu()).To(Equal(resource.MustParse("100m")))
+			Expect(sidecarContainer.Resources).To(Equal(coreV1.ResourceRequirements{
+				Limits: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("68Mi"),
+					coreV1.ResourceCPU:    resource.MustParse("185m"),
+				},
+				Requests: coreV1.ResourceList{
+					coreV1.ResourceMemory: resource.MustParse("68Mi"),
+				},
+			}))
 		})
 
 		It("should allow CPU bursting configurations", func() {
 			// given
-			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("0")
+			clusterDef.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("0")
 			cluster := ACluster(clusterDef)
 			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
 
@@ -551,34 +551,6 @@ var _ = Describe("creation of stateful sets", func() {
 			// then
 			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
 			Expect(*sidecarContainer.Resources.Requests.Cpu()).To(Equal(resource.MustParse("0")))
-		})
-
-		It("should use the maxSidecarMemoryRequest if that is lower than the memory request in the Cassandra definition", func() {
-			// given
-			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1Ti")
-			cluster := ACluster(clusterDef)
-			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
-
-			// when
-			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
-
-			// then
-			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
-			Expect(*sidecarContainer.Resources.Requests.Memory()).To(Equal(resource.MustParse("50Mi")))
-		})
-
-		It("should allow Memory bursting configurations", func() {
-			// given
-			clusterDef.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("1")
-			cluster := ACluster(clusterDef)
-			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
-
-			// when
-			sidecarContainer := statefulSet.Spec.Template.Spec.Containers[1]
-
-			// then
-			Expect(sidecarContainer.Name).To(Equal("cassandra-sidecar"))
-			Expect(*sidecarContainer.Resources.Requests.Memory()).To(Equal(resource.MustParse("1")))
 		})
 	})
 

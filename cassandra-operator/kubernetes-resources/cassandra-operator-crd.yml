@@ -126,12 +126,38 @@ spec:
                         to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                       type: object
                   type: object
-                sidecarImage:
-                  description: The Docker image for the sidecar container running
-                    on each Cassandra node to expose node status.
-                  type: string
+                sidecar:
+                  description: Sidecar container specification
+                  properties:
+                    image:
+                      description: The Docker image for the sidecar container running
+                        on each Cassandra node to expose node status.
+                      type: string
+                    resources:
+                      description: Resource requirements for the sidecar container
+                      properties:
+                        limits:
+                          additionalProperties:
+                            type: string
+                          description: 'Limits describes the maximum amount of compute
+                            resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                        requests:
+                          additionalProperties:
+                            type: string
+                          description: 'Requests describes the minimum amount of compute
+                            resources required. If Requests is omitted for a container,
+                            it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. More info:
+                            https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                      type: object
+                  required:
+                  - resources
+                  type: object
               required:
               - resources
+              - sidecar
               type: object
             racks:
               items:

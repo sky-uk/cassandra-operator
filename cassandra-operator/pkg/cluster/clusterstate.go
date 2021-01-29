@@ -101,8 +101,11 @@ func (cass *currentClusterStateFinder) buildPodSpecFrom(statefulSet *v1beta2.Sta
 	}
 
 	return &v1alpha1.Pod{
-		Image:             ptr.String(cassandraContainer.Image),
-		SidecarImage:      ptr.String(cassandraSideCarContainer.Image),
+		Image: ptr.String(cassandraContainer.Image),
+		Sidecar: &v1alpha1.Sidecar{
+			Image:     ptr.String(cassandraSideCarContainer.Image),
+			Resources: cassandraSideCarContainer.Resources,
+		},
 		BootstrapperImage: ptr.String(bootstrapperContainer.Image),
 		Resources:         cassandraContainer.Resources,
 		ReadinessProbe:    cass.buildProbeFrom(cassandraContainer.ReadinessProbe),

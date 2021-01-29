@@ -136,9 +136,9 @@ var _ = Describe("Cassandra Helpers", func() {
 				})
 
 				It("should use the specified version of the cassandra snapshot image if one is given", func() {
-					clusterDef.Spec.Pod.SidecarImage = ptr.String("somerepo/some-sidecar-image:v1.0")
+					clusterDef.Spec.Pod.Sidecar.Image = ptr.String("somerepo/some-sidecar-image:v1.0")
 					SetDefaultsForCassandra(clusterDef, nil)
-					Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("somerepo/some-sidecar-image:v1.0"))
+					Expect(*clusterDef.Spec.Pod.Sidecar.Image).To(Equal("somerepo/some-sidecar-image:v1.0"))
 				})
 
 			})
@@ -169,9 +169,9 @@ var _ = Describe("Cassandra Helpers", func() {
 					})
 
 					It("should default the cassandra sidecar image to the latest skyuk image", func() {
-						clusterDef.Spec.Pod.SidecarImage = nil
+						clusterDef.Spec.Pod.Sidecar.Image = nil
 						SetDefaultsForCassandra(clusterDef, nil)
-						Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("skyuk/cassandra-sidecar:latest"))
+						Expect(*clusterDef.Spec.Pod.Sidecar.Image).To(Equal("skyuk/cassandra-sidecar:latest"))
 					})
 				})
 
@@ -208,9 +208,9 @@ var _ = Describe("Cassandra Helpers", func() {
 					})
 
 					It("should default the cassandra sidecar image based on the scheme", func() {
-						clusterDef.Spec.Pod.SidecarImage = nil
+						clusterDef.Spec.Pod.Sidecar.Image = nil
 						SetDefaultsForCassandra(clusterDef, imageDefaultsScheme)
-						Expect(*clusterDef.Spec.Pod.SidecarImage).To(Equal("dockerRegistry/somepath/cassandra-sidecar:v123"))
+						Expect(*clusterDef.Spec.Pod.Sidecar.Image).To(Equal("dockerRegistry/somepath/cassandra-sidecar:v123"))
 					})
 
 				})
@@ -431,7 +431,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			snapshot1.Resources = coreV1.ResourceRequirements{
 				Limits: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("50Mi"),
-					coreV1.ResourceCPU: resource.MustParse("100m"),
+					coreV1.ResourceCPU:    resource.MustParse("100m"),
 				},
 			}
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
@@ -441,7 +441,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			snapshot1.Resources = coreV1.ResourceRequirements{
 				Requests: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("50Mi"),
-					coreV1.ResourceCPU: resource.MustParse("100m"),
+					coreV1.ResourceCPU:    resource.MustParse("100m"),
 				},
 			}
 			Expect(SnapshotPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())
@@ -564,7 +564,7 @@ var _ = Describe("Cassandra Helpers", func() {
 			snapshot1.RetentionPolicy.Resources = coreV1.ResourceRequirements{
 				Limits: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("55Mi"),
-					coreV1.ResourceCPU: resource.MustParse("0"),
+					coreV1.ResourceCPU:    resource.MustParse("0"),
 				},
 			}
 			Expect(SnapshotCleanupPropertiesUpdated(snapshot1, snapshot2)).To(BeTrue())

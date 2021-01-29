@@ -2,16 +2,18 @@ package e2e
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/onsi/gomega"
 	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"k8s.io/api/apps/v1beta2"
 	"k8s.io/api/batch/v1beta1"
 	coreV1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 )
 
 func TheClusterIsDeleted(clusterName string) {
@@ -210,6 +212,44 @@ func TheStatefulSetIsDeletedForRack(namespace, clusterName, rackName string) {
 
 	gomega.Eventually(StatefulSetDeletedSince(namespace, statefulSetName, statefulSet.CreationTimestamp.Time), NodeTerminationDuration, CheckInterval).Should(gomega.BeTrue())
 	log.Infof("StatefulSet %s has been deleted since it was initially created at %s", statefulSetName, statefulSet.CreationTimestamp.Time)
+}
+
+func TheStatefulSetContainerImageNameIsChanged(namespace, statefulSetName string, containerName string, newImageName string) {
+	mutateStatefulSet(namespace, statefulSetName, func(statefulSet *v1beta2.StatefulSet) {
+
+		for i, container := range statefulSet.Spec.Template.Spec.Containers {
+			if container.Name == containerName {
+				statefulSet.Spec.Template.Spec.Containers[i].Image = newImageName
+			}
+		}
+	})
+	log.Infof("Updated imageName for statefulSet %s, container %s, new image name %s", statefulSetName, containerName, newImageName)
+}
+
+func TheStatefulSetContainerResourcesChanged(namespace, statefulSetName string, containerName string, editedResources coreV1.ResourceRequirements) {
+	mutateStatefulSet(namespace, statefulSetName, func(statefulSet *v1beta2.StatefulSet) {
+
+		for i, container := range statefulSet.Spec.Template.Spec.Containers {
+			if container.Name == containerName {
+				statefulSet.Spec.Template.Spec.Containers[i].Resources = editedResources
+			}
+		}
+	})
+	log.Infof("Updated resources for statefulSet %s, container %s, new resources %s", statefulSetName, containerName, &editedResources)
+}
+
+func mutateStatefulSet(namespace, statefulSetName string, mutator func(*v1beta2.StatefulSet)) {
+	statefulSet, getErr := KubeClientset.AppsV1beta2().StatefulSets(namespace).Get(statefulSetName, metaV1.GetOptions{})
+	gomega.Expect(getErr).ToNot(gomega.HaveOccurred())
+	statefulSetBeforeMutation := statefulSet.DeepCopy()
+
+	mutator(statefulSet)
+
+	var statefulSetAfterMutation *v1beta2.StatefulSet
+	statefulSetAfterMutation, err := KubeClientset.AppsV1beta2().StatefulSets(namespace).Update(statefulSet)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	log.Info(spew.Sprintf("Updated statefulset spec %s, before: %+v, \nafter: %+v", statefulSetName, statefulSetBeforeMutation, statefulSetAfterMutation))
 }
 
 func TheServiceIsDeletedFor(namespace, clusterName string) {

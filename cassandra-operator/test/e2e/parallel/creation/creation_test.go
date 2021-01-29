@@ -82,8 +82,19 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 			Racks:      multipleRacksCluster.Racks,
 			Pod: v1alpha1.Pod{
 				BootstrapperImage: CassandraBootstrapperImageName,
-				SidecarImage:      CassandraSidecarImageName,
-				Image:             CassandraImageName,
+				Sidecar: &v1alpha1.Sidecar{
+					Image: CassandraSidecarImageName,
+					Resources: coreV1.ResourceRequirements{
+						Requests: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("50Mi"),
+							coreV1.ResourceCPU:    resource.MustParse("50m"),
+						},
+						Limits: coreV1.ResourceList{
+							coreV1.ResourceMemory: resource.MustParse("50Mi"),
+						},
+					},
+				},
+				Image: CassandraImageName,
 				Resources: coreV1.ResourceRequirements{
 					Requests: coreV1.ResourceList{
 						coreV1.ResourceMemory: resource.MustParse("987Mi"),
@@ -157,7 +168,14 @@ var _ = Context("When a cluster doesn't already exist", func() {
 				ReadinessProbeFailureThreshold: CassandraReadinessProbeFailureThreshold,
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
 				ReadinessProbeSuccessThreshold: 1,
-				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042}})),
+				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042}}),
+			HaveResourcesRequirements(&ResourceRequirementsAssertion{
+				ContainerName: "cassandra-sidecar",
+				MemoryRequest: ptr.String("50Mi"),
+				MemoryLimit:   ptr.String("50Mi"),
+				CPURequest:    ptr.String("50m"),
+				CPULimit:      nil,
+			})),
 		))
 
 		By("creating a StatefulSet for each rack")
@@ -297,7 +315,12 @@ var _ = Context("When a cluster definition does not specify custom images", func
 		// given
 		clusterName := AClusterName()
 		AClusterWithName(clusterName).
-			AndPodSpec(PodSpec().WithoutBootstrapperImageName().WithoutSidecarImageName().Build()).
+			AndPodSpec(PodSpec().WithoutBootstrapperImageName().
+				WithSidecar(apis.ASidecar().
+					WithDefaults().
+					WithoutSidecarImageName().
+					Build(),
+				).Build()).
 			AndRacks([]v1alpha1.Rack{RackWithEmptyDir("a", 1)}).
 			WithoutCustomConfig().
 			IsDefined()

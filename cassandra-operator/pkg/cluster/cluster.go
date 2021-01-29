@@ -72,9 +72,6 @@ const (
 )
 
 var (
-	maxSidecarMemoryRequest    resource.Quantity
-	sidecarMemoryLimit         resource.Quantity
-	maxSidecarCPURequest       resource.Quantity
 	initContainerMemoryRequest resource.Quantity
 	operatorManagedVolumes     map[string]bool
 	alphanumericChars          *regexp.Regexp
@@ -83,9 +80,6 @@ var (
 
 func init() {
 	initContainerMemoryRequest = resource.MustParse("100Mi")
-	maxSidecarMemoryRequest = resource.MustParse("50Mi")
-	sidecarMemoryLimit = resource.MustParse("50Mi")
-	maxSidecarCPURequest = resource.MustParse("100m")
 	operatorManagedVolumes = make(map[string]bool)
 	operatorManagedVolumes[configurationVolumeName] = true
 	operatorManagedVolumes[extraLibVolumeName] = true
@@ -465,7 +459,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 func (c *Cluster) createCassandraSidecarContainer(rack *v1alpha1.Rack) v1.Container {
 	return v1.Container{
 		Name:  cassandraSidecarContainerName,
-		Image: *c.definition.Spec.Pod.SidecarImage,
+		Image: *c.definition.Spec.Pod.Sidecar.Image,
 		Ports: []v1.ContainerPort{
 			{
 				Name:          "api",
@@ -478,21 +472,7 @@ func (c *Cluster) createCassandraSidecarContainer(rack *v1alpha1.Rack) v1.Contai
 			"--log-level=info",
 			fmt.Sprintf("--health-server-port=%d", healthServerPort),
 		},
-		Resources: v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceCPU: minQuantity(
-					*c.definition.Spec.Pod.Resources.Requests.Cpu(),
-					maxSidecarCPURequest,
-				),
-				v1.ResourceMemory: minQuantity(
-					*c.definition.Spec.Pod.Resources.Requests.Memory(),
-					maxSidecarMemoryRequest,
-				),
-			},
-			Limits: v1.ResourceList{
-				v1.ResourceMemory: sidecarMemoryLimit,
-			},
-		},
+		Resources: c.definition.Spec.Pod.Sidecar.Resources,
 	}
 }
 

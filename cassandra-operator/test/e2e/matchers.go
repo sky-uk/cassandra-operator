@@ -167,8 +167,15 @@ func HaveInitContainer(initContainerName string, expectation ContainerSpecExpect
 	return &haveContainer{
 		containerName: initContainerName,
 		expectation:   expectation,
-		containers: func(p coreV1.Pod) []coreV1.Container {
-			return p.Spec.InitContainers
+		containers: func(resource interface{}) []coreV1.Container {
+			switch resource := resource.(type) {
+			case coreV1.Pod:
+				return resource.Spec.InitContainers
+			case v1beta2.StatefulSet:
+				return resource.Spec.Template.Spec.InitContainers
+			default:
+				panic("Kubernetes Resource is unknown and Containers cannot be matched against")
+			}
 		},
 	}
 }
@@ -180,8 +187,15 @@ func HaveContainer(containerName string, expectation ContainerSpecExpectation) t
 	return &haveContainer{
 		containerName: containerName,
 		expectation:   expectation,
-		containers: func(p coreV1.Pod) []coreV1.Container {
-			return p.Spec.Containers
+		containers: func(resource interface{}) []coreV1.Container {
+			switch resource := resource.(type) {
+			case coreV1.Pod:
+				return resource.Spec.Containers
+			case v1beta2.StatefulSet:
+				return resource.Spec.Template.Spec.Containers
+			default:
+				panic("Kubernetes Resource is unknown and Containers cannot be matched against")
+			}
 		},
 	}
 }
@@ -214,13 +228,12 @@ type ContainerExpectation struct {
 type haveContainer struct {
 	containerName string
 	expectation   ContainerSpecExpectation
-	containers    func(coreV1.Pod) []coreV1.Container
+	containers    func(interface{}) []coreV1.Container
 }
 
 func (matcher *haveContainer) Match(actual interface{}) (success bool, err error) {
 	lr := actual.(*kubernetesResource)
-	pod := lr.Resource.(coreV1.Pod)
-	containers := matcher.containers(pod)
+	containers := matcher.containers(lr.Resource)
 	var container coreV1.Container
 	containerNames := sets.NewString()
 	for _, c := range containers {
@@ -875,18 +888,23 @@ type haveResourcesRequirements struct {
 	expected *ResourceRequirementsAssertion
 }
 
-func extractPodSpec(outerResource interface{}) coreV1.PodSpec {
-	switch outerResource.(type) {
+func extractContainers(outerResource *kubernetesResource) []coreV1.Container {
+	switch resource := outerResource.Resource.(type) {
 	case batch.CronJob:
-		return outerResource.(batch.CronJob).Spec.JobTemplate.Spec.Template.Spec
+		return resource.Spec.JobTemplate.Spec.Template.Spec.Containers
+	case v1beta2.StatefulSet:
+		return resource.Spec.Template.Spec.Containers
+	case coreV1.Pod:
+		return resource.Spec.Containers
 	default:
-		return outerResource.(coreV1.Pod).Spec
+		panic("Kubernetes Resource is unknown and Containers cannot be matched against")
 	}
 }
 
 func (h haveResourcesRequirements) Match(actual interface{}) (success bool, err error) {
-	podSpec := extractPodSpec(actual.(*kubernetesResource).Resource)
-	container := h.findContainer(podSpec, h.expected.ContainerName)
+	resource := actual.(*kubernetesResource)
+	containers := extractContainers(resource)
+	container := h.findContainer(containers, h.expected.ContainerName)
 
 	if container == nil {
 		return false, fmt.Errorf("expected a container with name %s", h.expected.ContainerName)
@@ -923,8 +941,8 @@ func (h haveResourcesRequirements) areQuantityEqual(expected *string, resourceLi
 	return true, nil
 }
 
-func (h haveResourcesRequirements) findContainer(podSpec coreV1.PodSpec, containerName string) *coreV1.Container {
-	for _, c := range podSpec.Containers {
+func (h haveResourcesRequirements) findContainer(containers []coreV1.Container, containerName string) *coreV1.Container {
+	for _, c := range containers {
 		if c.Name == containerName {
 			return &c
 		}

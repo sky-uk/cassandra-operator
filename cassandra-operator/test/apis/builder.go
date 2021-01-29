@@ -25,9 +25,9 @@ type CassandraSpecBuilder struct {
 
 type PodSpecBuilder struct {
 	resources                               *coreV1.ResourceRequirements
+	sidecar                                 *v1alpha1.Sidecar
 	image                                   *string
 	bootstrapperImage                       *string
-	sidecarImage                            *string
 	cassandraReadinessPeriod                *int32
 	cassandraReadinessTimeout               *int32
 	cassandraInitialDelay                   *int32
@@ -53,6 +53,11 @@ type RetentionPolicySpecBuilder struct {
 	cleanupSchedule     string
 	retentionPeriodDays *int32
 	resources           coreV1.ResourceRequirements
+}
+
+type SidecarSpecBuilder struct {
+	image     *string
+	resources *coreV1.ResourceRequirements
 }
 
 type RackSpecBuilder struct {
@@ -308,10 +313,13 @@ func APod() *PodSpecBuilder {
 }
 
 func (p *PodSpecBuilder) WithDefaults() *PodSpecBuilder {
+
+	var sidecar = ASidecar().WithDefaults().Build()
+
 	return p.
 		WithImageName(ptr.String("cassandra:3.11")).
 		WithBootstrapperImageName(ptr.String("BootstrapperImage")).
-		WithSidecarImageName(ptr.String("SidecarImage")).
+		WithSidecar(sidecar).
 		WithResources(&coreV1.ResourceRequirements{
 			Limits: coreV1.ResourceList{
 				coreV1.ResourceMemory: resource.MustParse("1Gi"),
@@ -337,6 +345,11 @@ func (p *PodSpecBuilder) WithResources(podResources *coreV1.ResourceRequirements
 	return p
 }
 
+func (p *PodSpecBuilder) WithSidecar(sidecar *v1alpha1.Sidecar) *PodSpecBuilder {
+	p.sidecar = sidecar
+	return p
+}
+
 func (p *PodSpecBuilder) WithImageName(image *string) *PodSpecBuilder {
 	p.image = image
 	return p
@@ -349,15 +362,6 @@ func (p *PodSpecBuilder) WithBootstrapperImageName(image *string) *PodSpecBuilde
 
 func (p *PodSpecBuilder) WithoutBootstrapperImageName() *PodSpecBuilder {
 	return p.WithBootstrapperImageName(nil)
-}
-
-func (p *PodSpecBuilder) WithSidecarImageName(image *string) *PodSpecBuilder {
-	p.sidecarImage = image
-	return p
-}
-
-func (p *PodSpecBuilder) WithoutSidecarImageName() *PodSpecBuilder {
-	return p.WithSidecarImageName(nil)
 }
 
 func (p *PodSpecBuilder) WithCassandraInitialDelay(delay int32) *PodSpecBuilder {
@@ -408,7 +412,7 @@ func (p *PodSpecBuilder) WithCassandraReadinessProbeSuccessThreshold(threshold i
 func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
 	return &v1alpha1.Pod{
 		BootstrapperImage: p.bootstrapperImage,
-		SidecarImage:      p.sidecarImage,
+		Sidecar:           p.sidecar,
 		Image:             p.image,
 		Resources:         *p.resources,
 		LivenessProbe: &v1alpha1.Probe{
@@ -425,6 +429,49 @@ func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
 			PeriodSeconds:       p.cassandraReadinessPeriod,
 			TimeoutSeconds:      p.cassandraReadinessTimeout,
 		},
+	}
+}
+
+//
+// SidecarBuilder
+//
+
+func ASidecar() *SidecarSpecBuilder {
+	return &SidecarSpecBuilder{}
+}
+
+func (s *SidecarSpecBuilder) WithDefaults() *SidecarSpecBuilder {
+	s.image = ptr.String("SidecarImage")
+	s.resources = &coreV1.ResourceRequirements{
+		Limits: coreV1.ResourceList{
+			coreV1.ResourceMemory: resource.MustParse("50Mi"),
+		},
+		Requests: coreV1.ResourceList{
+			coreV1.ResourceMemory: resource.MustParse("50Mi"),
+			coreV1.ResourceCPU:    resource.MustParse("0"),
+		},
+	}
+	return s
+}
+
+func (s *SidecarSpecBuilder) WithSidecarImageName(image *string) *SidecarSpecBuilder {
+	s.image = image
+	return s
+}
+
+func (s *SidecarSpecBuilder) WithResources(resources *coreV1.ResourceRequirements) *SidecarSpecBuilder {
+	s.resources = resources
+	return s
+}
+
+func (s *SidecarSpecBuilder) WithoutSidecarImageName() *SidecarSpecBuilder {
+	return s.WithSidecarImageName(nil)
+}
+
+func (s *SidecarSpecBuilder) Build() *v1alpha1.Sidecar {
+	return &v1alpha1.Sidecar{
+		Image:     s.image,
+		Resources: *s.resources,
 	}
 }
 

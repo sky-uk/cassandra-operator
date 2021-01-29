@@ -15,8 +15,8 @@ cleanup() {
 }
 trap "cleanup" EXIT SIGINT
 
-tmp="${output}/cassandra-operator"
-
+tmp="${output}/github.com/sky-uk/cassandra-operator/cassandra-operator"
+mkdir -p ${tmp}
 
 rsync -avvL "${REPO_ROOT}"/ "${tmp}" >/dev/null
 cd "${tmp}"

@@ -110,7 +110,7 @@ func aStuckClusterExists(clusterName string, withCustomConfig bool) {
 	racks := []v1alpha1.Rack{RackWithEmptyDir("a", 1)}
 	podSpec := apis.APod().WithDefaults().
 		WithBootstrapperImageName(ptr.String("cassandra:invalid")).
-		WithSidecarImageName(CassandraSidecarImageName).Build()
+		WithSidecar(apis.ASidecar().WithDefaults().WithSidecarImageName(CassandraSidecarImageName).Build()).Build()
 
 	cluster := AClusterWithName(clusterName).AndRacks(racks).AndPodSpec(podSpec)
 	if withCustomConfig {

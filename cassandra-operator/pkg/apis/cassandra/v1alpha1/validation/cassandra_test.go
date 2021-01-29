@@ -74,6 +74,33 @@ var _ = Describe("ValidateCassandra", func() {
 			},
 		),
 		Entry(
+			"Sidecar cpu request can be provided without cpu limit",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Pod.Sidecar.Resources.Limits, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Sidecar cpu limit can be provided without cpu request",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("151m")
+				delete(c.Spec.Pod.Sidecar.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"Both sidecar cpu request and limit can be omitted",
+			func(c *v1alpha1.Cassandra) {
+				delete(c.Spec.Pod.Sidecar.Resources.Limits, coreV1.ResourceCPU)
+				delete(c.Spec.Pod.Sidecar.Resources.Requests, coreV1.ResourceCPU)
+			},
+		),
+		Entry(
+			"A rack storage class may be nil",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.StorageClassName = nil
+			},
+		),
+		Entry(
 			"A rack storage class may be empty",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Racks[0].Storage[0].PersistentVolumeClaim.StorageClassName = ptr.String("")
@@ -243,6 +270,29 @@ var _ = Describe("ValidateCassandra", func() {
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("151Mi")
 				c.Spec.Pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("150Mi")
+			},
+		),
+		Entry(
+			"Pod.Resources.Sidecar.Requests.Memory must be > 0",
+			"spec.Pod.Sidecar.Resources.Requests.Memory: Invalid value: \"0\": must be > 0",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceMemory] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Sidecar cpu request > cpu limit",
+			"spec.Pod.Sidecar.Resources.Requests.Cpu: Invalid value: \"151m\": must not be greater than spec.Pod.Sidecar.Resources.Limits.Cpu (150m)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.MustParse("151m")
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("150m")
+			},
+		),
+		Entry(
+			"Sidecar memory request > memory limit",
+			"spec.Pod.Sidecar.Resources.Requests.Memory: Invalid value: \"151Mi\": must not be greater than spec.Pod.Sidecar.Resources.Limits.Memory (150Mi)",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("151Mi")
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("150Mi")
 			},
 		),
 		Entry(
@@ -533,7 +583,7 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 		Entry(
 			"Pod SidecarImage changed",
 			func(c *v1alpha1.Cassandra) {
-				c.Spec.Pod.SidecarImage = ptr.String("foo/bar:baz")
+				c.Spec.Pod.Sidecar.Image = ptr.String("foo/bar:baz")
 			},
 		),
 		Entry(
@@ -578,6 +628,51 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			"Pod Limit Cpu removed",
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Sidecar Requests Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceMemory]
+				quantity.Sub(resource.MustParse("1Mi"))
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Sidecar Limit Memory changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceMemory]
+				quantity.Add(resource.MustParse("1Mi"))
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceMemory] = quantity
+			},
+		),
+		Entry(
+			"Sidecar Request CPU changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU]
+				quantity.Sub(resource.MustParse("2000"))
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Sidecar Limit Cpu changed",
+			func(c *v1alpha1.Cassandra) {
+				quantity := c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceCPU]
+				quantity.Add(resource.MustParse("150"))
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceCPU] = quantity
+			},
+		),
+		Entry(
+			"Sidecar Request Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
+			},
+		),
+		Entry(
+			"Sidecar Limit Cpu removed",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Sidecar.Resources.Limits[coreV1.ResourceCPU] = resource.Quantity{}
+				c.Spec.Pod.Sidecar.Resources.Requests[coreV1.ResourceCPU] = resource.Quantity{}
 			},
 		),
 		Entry(

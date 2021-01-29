@@ -154,10 +154,16 @@ func RackWithEmptyDir(rackName string, replicas int32) v1alpha1.Rack {
 }
 
 func PodSpec() *apis.PodSpecBuilder {
+
+	sidecar := apis.ASidecar().
+		WithDefaults().
+		WithSidecarImageName(CassandraSidecarImageName).
+		Build()
+
 	return apis.APod().
 		WithImageName(CassandraImageName).
 		WithBootstrapperImageName(CassandraBootstrapperImageName).
-		WithSidecarImageName(CassandraSidecarImageName).
+		WithSidecar(sidecar).
 		WithResources(&coreV1.ResourceRequirements{
 			Requests: coreV1.ResourceList{
 				coreV1.ResourceMemory: resource.MustParse(PodMemory),

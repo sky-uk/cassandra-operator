@@ -87,8 +87,19 @@ var _ = Context("Allowable cluster modifications", func() {
 		revisionsBeforeUpdate := statefulSetRevisions(clusterName, racks)
 		TheClusterPodSpecAreChangedTo(Namespace, clusterName, v1alpha1.Pod{
 			BootstrapperImage: CassandraBootstrapperImageName,
-			SidecarImage:      CassandraSidecarImageName,
-			Image:             CassandraImageName,
+			Sidecar: &v1alpha1.Sidecar{
+				Image: CassandraSidecarImageName,
+				Resources: coreV1.ResourceRequirements{
+					Requests: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+						coreV1.ResourceCPU:    resource.MustParse("0"),
+					},
+					Limits: coreV1.ResourceList{
+						coreV1.ResourceMemory: resource.MustParse("50Mi"),
+					},
+				},
+			},
+			Image: CassandraImageName,
 			Resources: coreV1.ResourceRequirements{
 				Requests: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("999Mi"),
@@ -132,6 +143,13 @@ var _ = Context("Allowable cluster modifications", func() {
 				ReadinessProbeTimeout:          DurationSeconds(readinessProbeTimeoutSeconds),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
+			}),
+			HaveResourcesRequirements(&ResourceRequirementsAssertion{
+				ContainerName: "cassandra-sidecar",
+				MemoryRequest: ptr.String("50Mi"),
+				MemoryLimit:   ptr.String("50Mi"),
+				CPURequest:    ptr.String("0"),
+				CPULimit:      nil,
 			}),
 		)))
 

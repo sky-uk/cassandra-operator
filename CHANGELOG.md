@@ -1,4 +1,10 @@
 # Changes
+## 0.85.0-alpha
+
+- [FEATURE] [Provide configuration in cassandra resource for sidecar resources](#243) (@chuckydev)
+- [BREAKING CHANGE] The above introduces a requirement to specify sidecar resource definitions. 
+  We are only incrementing the minor version for this as the project is in alpha state.
+  For details please see the project wiki or the describing issue.
 
 ## 0.84.0-alpha
 

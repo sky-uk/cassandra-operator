@@ -15,9 +15,18 @@ groupVersion="cassandra:v1alpha1"
 cd ${projectDir}
 go mod vendor
 
+if [[ $projectDir != *$basePackage* ]]; then
+  echo "Please ensure cassandra-operator is cloned into github.com/sky-uk/cassandra-operator to ensure generated files are created in the right places"
+  exit 1
+fi
+
 chmod +x ${codeGenDir}/generate-groups.sh
 
+# Ensure that cassandra-operator is cloned under you GOPATH like so
+# $GOPATH/github.com/sky-uk/cassandra-operator
+# This is to ensure code-generator can be run from inside the vendor directory.
 ${codeGenDir}/generate-groups.sh all \
   ${basePackage}/pkg/client ${basePackage}/pkg/apis \
   ${groupVersion} \
-  --go-header-file ${scriptDir}/empty-boilerplate.txt
+  --go-header-file ${scriptDir}/empty-boilerplate.txt \
+  --output-base ${projectDir}/../../../..

@@ -175,6 +175,7 @@ func validateResources(allErrs field.ErrorList, fldPath *field.Path, resources c
 func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = validateResources(allErrs, fldPath, c.Spec.Pod.Resources)
+	allErrs = validateResources(allErrs, fldPath.Child("Sidecar"), c.Spec.Pod.Sidecar.Resources)
 
 	allErrs = append(
 		allErrs,
