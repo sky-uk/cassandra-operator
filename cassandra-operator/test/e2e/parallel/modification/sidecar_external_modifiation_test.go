@@ -106,7 +106,7 @@ var _ = Context("External sidecar statefulset modifications", func() {
 		//when
 		By("Modifying resource fields directly in the rack statefulset resource")
 		modifiedMemory := "60Mi"
-		modifiedCPU := "50m"
+		modifiedCPU := "1m"
 		editedResources := &coreV1.ResourceRequirements{
 			Requests: coreV1.ResourceList{
 				coreV1.ResourceMemory: resource.MustParse(modifiedMemory),

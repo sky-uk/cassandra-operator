@@ -44,7 +44,7 @@ var (
 	NodeRestartDuration                     time.Duration
 	NodeTerminationDuration                 time.Duration
 	Namespace                               string
-	MaxCassandraNodesPerNamespace			int
+	MaxCassandraNodesPerNamespace           int
 )
 
 func init() {

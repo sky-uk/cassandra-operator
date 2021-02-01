@@ -87,7 +87,7 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 					Resources: coreV1.ResourceRequirements{
 						Requests: coreV1.ResourceList{
 							coreV1.ResourceMemory: resource.MustParse("50Mi"),
-							coreV1.ResourceCPU:    resource.MustParse("50m"),
+							coreV1.ResourceCPU:    resource.MustParse("0m"),
 						},
 						Limits: coreV1.ResourceList{
 							coreV1.ResourceMemory: resource.MustParse("50Mi"),
@@ -173,7 +173,7 @@ var _ = Context("When a cluster doesn't already exist", func() {
 				ContainerName: "cassandra-sidecar",
 				MemoryRequest: ptr.String("50Mi"),
 				MemoryLimit:   ptr.String("50Mi"),
-				CPURequest:    ptr.String("50m"),
+				CPURequest:    ptr.String("0"),
 				CPULimit:      nil,
 			})),
 		))
