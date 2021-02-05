@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"k8s.io/api/apps/v1beta2"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -110,6 +111,7 @@ func (cass *currentClusterStateFinder) buildPodSpecFrom(statefulSet *v1beta2.Sta
 		Resources:         cassandraContainer.Resources,
 		ReadinessProbe:    cass.buildProbeFrom(cassandraContainer.ReadinessProbe),
 		LivenessProbe:     cass.buildProbeFrom(cassandraContainer.LivenessProbe),
+		Env:               cass.buildEnvVarsFrom(cassandraContainer.Env),
 	}, nil
 }
 
@@ -173,6 +175,44 @@ func (cass *currentClusterStateFinder) initContainerWithName(name string, statef
 		}
 	}
 	return nil, fmt.Errorf("no init container with name %s found in statefulset %s", name, statefulSet.Name)
+}
+
+func (cass *currentClusterStateFinder) buildEnvVarsFrom(envVars []corev1.EnvVar) *[]v1alpha1.CassEnvVar {
+
+	if envVars == nil {
+		return &[]v1alpha1.CassEnvVar{}
+	}
+
+	envVarsLength := len(envVars)
+	cassEnvVars := make([]v1alpha1.CassEnvVar, envVarsLength)
+	reservedWordsCount := 0
+	i := 0
+	for _, envVar := range envVars {
+		if !v1alpha1helpers.IsAReservedEnvVar(envVar.Name) {
+			addEnvVarToCassEnvVars(envVar, cassEnvVars, i)
+			i++
+		} else {
+			reservedWordsCount++
+		}
+	}
+
+	// If we found reserved words we return the slice without them
+	if reservedWordsCount != 0 {
+		reducedCassEnvVars := cassEnvVars[:envVarsLength-reservedWordsCount]
+		return &reducedCassEnvVars
+	}
+	return &cassEnvVars
+}
+
+func addEnvVarToCassEnvVars(envVar corev1.EnvVar, cassEnvVars []v1alpha1.CassEnvVar, i int) {
+	if envVar.ValueFrom != nil {
+		cassEnvVars[i] = v1alpha1.CassEnvVar{
+			Name:      envVar.Name,
+			ValueFrom: &v1alpha1.CassEnvVarSource{SecretKeyRef: *envVar.ValueFrom.SecretKeyRef},
+		}
+	} else {
+		cassEnvVars[i] = v1alpha1.CassEnvVar{Name: envVar.Name, Value: envVar.Value}
+	}
 }
 
 func (cass *currentClusterStateFinder) buildProbeFrom(probe *corev1.Probe) *v1alpha1.Probe {

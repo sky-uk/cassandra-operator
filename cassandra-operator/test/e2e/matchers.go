@@ -204,6 +204,10 @@ type ContainerSpecExpectation interface {
 	matchContainerSpec(container coreV1.Container) (bool, error)
 }
 
+type ContainerEnvExpectation struct {
+	CassEnvMap map[string]string
+}
+
 type ContainerImageExpectation struct {
 	ImageName string
 }
@@ -223,6 +227,7 @@ type ContainerExpectation struct {
 	ReadinessProbeSuccessThreshold int32
 	ReadinessProbePeriod           time.Duration
 	ReadinessProbeInitialDelay     time.Duration
+	CassEnvMap                     map[string]string
 }
 
 type haveContainer struct {
@@ -336,6 +341,38 @@ func (expectation *ContainerExpectation) matchContainerSpec(container coreV1.Con
 		}
 	}
 
+	envError := matchContainerSpecEnv(expectation.CassEnvMap, container.Env)
+	if envError != nil {
+		return false, envError
+	}
+
+	return true, nil
+}
+
+func matchContainerSpecEnv(expectedMap map[string]string, containerEnv []coreV1.EnvVar) error {
+
+	for _, envVar := range containerEnv {
+		expectedValue, ok := expectedMap[envVar.Name]
+		if !ok {
+			return fmt.Errorf("unexpected env vars found %s found in created container", envVar.Name)
+		}
+
+		if envVar.Value != expectedValue {
+			return fmt.Errorf("expected env var %s value on created container to be %s, but was actually %s", envVar.Name, expectedValue, envVar.Value)
+		}
+	}
+
+	if len(expectedMap) != len(containerEnv) {
+		return fmt.Errorf("expected number of env vars to be %d, but container was created with %d", len(expectedMap), len(containerEnv))
+	}
+	return nil
+}
+
+func (expectation *ContainerEnvExpectation) matchContainerSpec(container coreV1.Container) (bool, error) {
+	envError := matchContainerSpecEnv(expectation.CassEnvMap, container.Env)
+	if envError != nil {
+		return false, envError
+	}
 	return true, nil
 }
 

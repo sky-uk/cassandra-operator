@@ -44,6 +44,56 @@ spec:
                   description: The name of the Docker image used to prepare the configuration
                     for the Cassandra node before it can be started.
                   type: string
+                env:
+                  description: Env variables for the cassandra container
+                  items:
+                    description: EnvVar represents an environment variable the operator
+                      will add to the Cassandra Container This is almost identical
+                      to coreV1.EnvVar, but replaces the type of ValueFrom.
+                    properties:
+                      name:
+                        description: Name of the environment variable. Must be a C_IDENTIFIER.
+                        type: string
+                      value:
+                        description: 'Variable references $(VAR_NAME) are expanded
+                          using the previous defined environment variables in the
+                          container and any service environment variables. If a variable
+                          cannot be resolved, the reference in the input string will
+                          be unchanged. The $(VAR_NAME) syntax can be escaped with
+                          a double $$, ie: $$(VAR_NAME). Escaped references will never
+                          be expanded, regardless of whether the variable exists or
+                          not. Defaults to "".'
+                        type: string
+                      valueFrom:
+                        description: Source for the environment variable's value.
+                          Cannot be used if value is not empty.
+                        properties:
+                          secretKeyRef:
+                            description: Selects a key of a secret in the pod's namespace
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind,
+                                  uid?'
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                        required:
+                        - secretKeyRef
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  type: array
                 image:
                   description: The Docker image to run on each Cassandra node in the
                     cluster. It is recommended to use one of the official Cassandra

@@ -570,11 +570,47 @@ var _ = Describe("creation of stateful sets", func() {
 		})
 	})
 
-	It("should define environment variable for extra classpath in main container", func() {
-		cluster := ACluster(clusterDef)
+	Describe("environment variables", func() {
+		It("should define environment variable for extra classpath in main container without being specified and defaultEnv var in builder", func() {
+			cluster := ACluster(clusterDef)
 
-		statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
-		Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "defaultEnvName", Value: "defaultEnvValue"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(2))
+		})
+
+		It("should define environment variable for extra classpath in main container and nothing else when pod.env is empty", func() {
+			clusterDef.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{}
+			cluster := ACluster(clusterDef)
+
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(1))
+		})
+
+		It("should define environment variable for supplied values and extra classpath", func() {
+			clusterDef.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{{Name: "SomeVal", Value: "SomeOtherVal"}}
+			cluster := ACluster(clusterDef)
+
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "SomeVal", Value: "SomeOtherVal"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(2))
+		})
+
+		It("should define environment variable for supplied secret and extra classpath", func() {
+			secretKeyRef := coreV1.SecretKeySelector{Key: "namespace-secret"}
+			clusterDef.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{
+				{Name: "SomeVal", ValueFrom: &v1alpha1.CassEnvVarSource{SecretKeyRef: secretKeyRef}},
+			}
+			cluster := ACluster(clusterDef)
+
+			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "SomeVal", ValueFrom: &coreV1.EnvVarSource{SecretKeyRef: &secretKeyRef}}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(2))
+		})
 	})
 })
 

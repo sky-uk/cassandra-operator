@@ -2,6 +2,7 @@ package modification
 
 import (
 	"fmt"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
@@ -121,6 +121,9 @@ var _ = Context("Allowable cluster modifications", func() {
 				PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
 				TimeoutSeconds:      ptr.Int32(readinessProbeTimeoutSeconds),
 			},
+			Env: &[]v1alpha1.CassEnvVar{
+				v1alpha1.CassEnvVar{Name: "SomeVarName", Value: "SomeVarVal"},
+			},
 		})
 
 		// then
@@ -143,6 +146,7 @@ var _ = Context("Allowable cluster modifications", func() {
 				ReadinessProbeTimeout:          DurationSeconds(readinessProbeTimeoutSeconds),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
+				CassEnvMap:                     map[string]string{"SomeVarName": "SomeVarVal", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
 			}),
 			HaveResourcesRequirements(&ResourceRequirementsAssertion{
 				ContainerName: "cassandra-sidecar",

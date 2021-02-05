@@ -185,6 +185,10 @@ func validatePodResources(c *v1alpha1.Cassandra, fldPath *field.Path) field.Erro
 		allErrs,
 		validateReadinessProbe(c.Spec.Pod.ReadinessProbe, fldPath.Child("ReadinessProbe"))...,
 	)
+	allErrs = append(
+		allErrs,
+		validateCassEnvVars(c.Spec.Pod.Env, allErrs, fldPath.Child("Env"))...,
+	)
 	return allErrs
 }
 
@@ -382,6 +386,25 @@ func validatePodUpdate(fldPath *field.Path, old, new *v1alpha1.Pod) field.ErrorL
 				),
 			),
 		)
+	}
+	allErrs = validateCassEnvVars(new.Env, allErrs, fldPath)
+	return allErrs
+}
+
+func validateCassEnvVars(envVars *[]v1alpha1.CassEnvVar, allErrs field.ErrorList, fldPath *field.Path) field.ErrorList {
+	if envVars == nil {
+		return allErrs
+	}
+	for _, envVar := range *envVars {
+		if v1alpha1helpers.IsAReservedEnvVar(envVar.Name) {
+			allErrs = append(
+				allErrs,
+				field.Forbidden(
+					fldPath,
+					fmt.Sprintf("spec.Pod.env cannot contain reserved variable with Name: %s", envVar.Name),
+				),
+			)
+		}
 	}
 	return allErrs
 }

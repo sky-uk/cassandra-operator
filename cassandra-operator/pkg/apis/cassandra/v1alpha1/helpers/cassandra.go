@@ -13,6 +13,13 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 )
 
+// IsAReservedEnvVar is used to determine if an Environment Variable has been reserved.
+func IsAReservedEnvVar(envVar string) bool {
+	// String -> bool map should default to false for missing items.
+	isReserved := map[string]bool{"EXTRA_CLASSPATH": true}
+	return isReserved[envVar]
+}
+
 // ImageScheme is used to determine default names for operator components docker images
 type ImageScheme interface {
 	defaultName(imageName string) *string

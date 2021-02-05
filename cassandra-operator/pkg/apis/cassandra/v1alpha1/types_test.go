@@ -30,6 +30,23 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when cpu limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceCPU] = resource.MustParse("1") }),
 			Entry("when memory request value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Requests[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
 			Entry("when memory limit value is the same but using a different amount", func(pod, _ *Pod) { pod.Resources.Limits[coreV1.ResourceMemory] = resource.MustParse("2048Mi") }),
+			Entry("when env vars are in a different order", func(pod, _ *Pod) {
+				pod.Env = &[]CassEnvVar{
+					{Name: "SecretName", ValueFrom: &CassEnvVarSource{SecretKeyRef: coreV1.SecretKeySelector{Key: "secret-key"}}},
+					{Name: "EnvName", Value: "ExplicitEnvValue"}}
+			}),
+			Entry("when both env vars are nil", func(pod *Pod, otherPod *Pod) {
+				pod.Env = nil
+				otherPod.Env = nil
+			}),
+			Entry("when pod env vars is nil and other pod is empty", func(pod *Pod, otherPod *Pod) {
+				pod.Env = nil
+				otherPod.Env = &[]CassEnvVar{}
+			}),
+			Entry("when other pod env vars is nil and pod is empty", func(pod *Pod, otherPod *Pod) {
+				pod.Env = &[]CassEnvVar{}
+				otherPod.Env = nil
+			}),
 		)
 
 		DescribeTable("inequality",
@@ -83,6 +100,19 @@ var _ = Describe("Cassandra Types", func() {
 			Entry("when one readiness probe has a nil failure threshold", func(pod, _ *Pod) { pod.ReadinessProbe.FailureThreshold = nil }),
 			Entry("when one readiness probe has a nil delay", func(pod, _ *Pod) { pod.ReadinessProbe.InitialDelaySeconds = nil }),
 			Entry("when one readiness probe has a nil period", func(pod, _ *Pod) { pod.ReadinessProbe.PeriodSeconds = nil }),
+			Entry("when one pod has no env vars", func(pod, _ *Pod) { pod.Env = &[]CassEnvVar{} }),
+			Entry("when one pod has nil env vars", func(pod, _ *Pod) { pod.Env = nil }),
+			Entry("when other pod has no env vars", func(pod, otherPod *Pod) { otherPod.Env = &[]CassEnvVar{} }),
+			Entry("when other pod has nil env vars", func(pod, otherPod *Pod) { otherPod.Env = nil }),
+			Entry("when one pod is missing an env var", func(pod, _ *Pod) {
+				pod.Env = &[]CassEnvVar{
+					{Name: "EnvName", Value: "ExplicitEnvValue"}}
+			}),
+			Entry("when env vars have same names but different values types", func(pod, _ *Pod) {
+				pod.Env = &[]CassEnvVar{
+					{Name: "SecretName", Value: "SomeOtherVal"},
+					{Name: "EnvName", Value: "ExplicitEnvValue"}}
+			}),
 		)
 	})
 
@@ -468,6 +498,7 @@ func podSpec() *Pod {
 			FailureThreshold:    ptr.Int32(4),
 			TimeoutSeconds:      ptr.Int32(5),
 		},
+		Env: cassandraEnvSpec(),
 	}
 }
 
@@ -560,6 +591,23 @@ func snapshotSpec() *Snapshot {
 				Limits: coreV1.ResourceList{
 					coreV1.ResourceMemory: resource.MustParse("100Mi"),
 					coreV1.ResourceCPU:    resource.MustParse("50m"),
+				},
+			},
+		},
+	}
+}
+
+func cassandraEnvSpec() *[]CassEnvVar {
+	return &[]CassEnvVar{
+		{
+			Name:  "EnvName",
+			Value: "ExplicitEnvValue",
+		},
+		{
+			Name: "SecretName",
+			ValueFrom: &CassEnvVarSource{
+				SecretKeyRef: coreV1.SecretKeySelector{
+					Key: "secret-key",
 				},
 			},
 		},

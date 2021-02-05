@@ -37,6 +37,7 @@ type PodSpecBuilder struct {
 	cassandraLivenessTimeout                *int32
 	cassandraLivenessProbeFailureThreshold  *int32
 	cassandraLivenessProbeSuccessThreshold  *int32
+	env                                     *[]v1alpha1.CassEnvVar
 }
 
 type SnapshotSpecBuilder struct {
@@ -337,7 +338,13 @@ func (p *PodSpecBuilder) WithDefaults() *PodSpecBuilder {
 		WithCassandraReadinessProbeSuccessThreshold(1).
 		WithCassandraReadinessPeriod(2).
 		WithCassandraReadinessProbeFailureThreshold(4).
-		WithCassandraReadinessTimeout(5)
+		WithCassandraReadinessTimeout(5).
+		WithEnv(&[]v1alpha1.CassEnvVar{
+			v1alpha1.CassEnvVar{
+				Name:  "defaultEnvName",
+				Value: "defaultEnvValue",
+			},
+		})
 }
 
 func (p *PodSpecBuilder) WithResources(podResources *coreV1.ResourceRequirements) *PodSpecBuilder {
@@ -409,6 +416,11 @@ func (p *PodSpecBuilder) WithCassandraReadinessProbeSuccessThreshold(threshold i
 	return p
 }
 
+func (p *PodSpecBuilder) WithEnv(envVars *[]v1alpha1.CassEnvVar) *PodSpecBuilder {
+	p.env = envVars
+	return p
+}
+
 func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
 	return &v1alpha1.Pod{
 		BootstrapperImage: p.bootstrapperImage,
@@ -429,6 +441,7 @@ func (p *PodSpecBuilder) Build() *v1alpha1.Pod {
 			PeriodSeconds:       p.cassandraReadinessPeriod,
 			TimeoutSeconds:      p.cassandraReadinessTimeout,
 		},
+		Env: p.env,
 	}
 }
 
