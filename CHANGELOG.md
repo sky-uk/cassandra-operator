@@ -1,4 +1,8 @@
 # Changes
+## 0.85.1-alpha
+
+- [FEATURE] [Add env var block to cassandra pod spec](#252) (@Bez625)
+
 ## 0.85.0-alpha
 
 - [FEATURE] [Provide configuration in cassandra resource for sidecar resources](#243) (@chuckydev)
