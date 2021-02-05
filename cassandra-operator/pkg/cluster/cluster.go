@@ -412,40 +412,44 @@ func getExtraClassPathVar() v1.EnvVar {
 	return v1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}
 }
 
+func addCassEnvVarToEnvVars(cassEnvVar v1alpha1.CassEnvVar, envVars []v1.EnvVar, i int) {
+	envVar := v1.EnvVar{}
+	if cassEnvVar.ValueFrom != nil {
+		envVar = v1.EnvVar{
+			Name:      cassEnvVar.Name,
+			ValueFrom: &v1.EnvVarSource{SecretKeyRef: &cassEnvVar.ValueFrom.SecretKeyRef},
+		}
+	} else {
+		envVar = v1.EnvVar{Name: cassEnvVar.Name, Value: cassEnvVar.Value}
+	}
+	envVars[i] = envVar
+
+}
+
 func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
 
+	// If Spec.Pod.Env is ommitted we can simply create the auto populated env vars.
 	if c.definition.Spec.Pod.Env == nil {
 		return []v1.EnvVar{getExtraClassPathVar()}
 	}
-
+	numOfReservedVariablesToBeAdded := 1 // Only EXTRA_CLASSPATH at this stage
 	specEnvLength := len(*c.definition.Spec.Pod.Env)
-	containerEnvs := make([]v1.EnvVar, specEnvLength)
-	extraClassPresent := false
-	for i, cassEnvVar := range *c.definition.Spec.Pod.Env {
-		envVar := v1.EnvVar{}
-		if cassEnvVar.Name == "EXTRA_CLASSPATH" {
-			extraClassPresent = true
+	containerEnvVars := make([]v1.EnvVar, specEnvLength+numOfReservedVariablesToBeAdded)
+
+	// Iterate over the CassEnvVars on the Cassandra Spec, skipping any reserved variables.
+	// We shouldnt have any reserved env vars at this stage as validation should have caught them.
+	i := 0
+	for _, cassEnvVar := range *c.definition.Spec.Pod.Env {
+		if !v1alpha1helpers.IsAReservedEnvVar(cassEnvVar.Name) {
+			addCassEnvVarToEnvVars(cassEnvVar, containerEnvVars, i)
+			i++
 		}
-		if cassEnvVar.ValueFrom != nil {
-			envVar = v1.EnvVar{
-				Name:      cassEnvVar.Name,
-				ValueFrom: &v1.EnvVarSource{SecretKeyRef: &cassEnvVar.ValueFrom.SecretKeyRef},
-			}
-		} else {
-			envVar = v1.EnvVar{Name: cassEnvVar.Name, Value: cassEnvVar.Value}
-		}
-		containerEnvs[i] = envVar
 	}
 
-	if !extraClassPresent {
-		containerEnvsWithExtra := make([]v1.EnvVar, specEnvLength+1)
-		for i, envVar := range containerEnvs {
-			containerEnvsWithExtra[i] = envVar
-		}
-		containerEnvsWithExtra[specEnvLength] = getExtraClassPathVar()
-		return containerEnvsWithExtra
-	}
-	return containerEnvs
+	// Add env vars we populate. As there is only one simply add at i, if the list grows we can iterate.
+	containerEnvVars[i] = getExtraClassPathVar()
+
+	return containerEnvVars
 }
 
 func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
