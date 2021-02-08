@@ -428,16 +428,12 @@ func addCassEnvVarToEnvVars(cassEnvVar v1alpha1.CassEnvVar, envVars []v1.EnvVar,
 
 func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
 
-	// If Spec.Pod.Env is ommitted we can simply create the auto populated env vars.
-	if c.definition.Spec.Pod.Env == nil {
+	if c.definition.Spec.Pod.Env == nil || len(*c.definition.Spec.Pod.Env) == 0 {
 		return []v1.EnvVar{getExtraClassPathVar()}
 	}
 	numOfReservedVariablesToBeAdded := 1 // Only EXTRA_CLASSPATH at this stage
-	specEnvLength := len(*c.definition.Spec.Pod.Env)
-	containerEnvVars := make([]v1.EnvVar, specEnvLength+numOfReservedVariablesToBeAdded)
+	containerEnvVars := make([]v1.EnvVar, len(*c.definition.Spec.Pod.Env) + numOfReservedVariablesToBeAdded)
 
-	// Iterate over the CassEnvVars on the Cassandra Spec, skipping any reserved variables.
-	// We shouldnt have any reserved env vars at this stage as validation should have caught them.
 	i := 0
 	for _, cassEnvVar := range *c.definition.Spec.Pod.Env {
 		if !v1alpha1helpers.IsAReservedEnvVar(cassEnvVar.Name) {
@@ -446,7 +442,6 @@ func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
 		}
 	}
 
-	// Add env vars we populate. As there is only one simply add at i, if the list grows we can iterate.
 	containerEnvVars[i] = getExtraClassPathVar()
 
 	return containerEnvVars

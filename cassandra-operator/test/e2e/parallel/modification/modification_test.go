@@ -146,7 +146,7 @@ var _ = Context("Allowable cluster modifications", func() {
 				ReadinessProbeTimeout:          DurationSeconds(readinessProbeTimeoutSeconds),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
-				CassEnvMap:                     map[string]string{"SomeVarName": "SomeVarVal", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
+				CassEnv:                        map[string]string{"SomeVarName": "SomeVarVal", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
 			}),
 			HaveResourcesRequirements(&ResourceRequirementsAssertion{
 				ContainerName: "cassandra-sidecar",

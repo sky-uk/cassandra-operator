@@ -205,7 +205,7 @@ type ContainerSpecExpectation interface {
 }
 
 type ContainerEnvExpectation struct {
-	CassEnvMap map[string]string
+	CassEnv map[string]string
 }
 
 type ContainerImageExpectation struct {
@@ -227,7 +227,7 @@ type ContainerExpectation struct {
 	ReadinessProbeSuccessThreshold int32
 	ReadinessProbePeriod           time.Duration
 	ReadinessProbeInitialDelay     time.Duration
-	CassEnvMap                     map[string]string
+	CassEnv                        map[string]string
 }
 
 type haveContainer struct {
@@ -341,7 +341,7 @@ func (expectation *ContainerExpectation) matchContainerSpec(container coreV1.Con
 		}
 	}
 
-	envError := matchContainerSpecEnv(expectation.CassEnvMap, container.Env)
+	envError := matchContainerSpecEnv(expectation.CassEnv, container.Env)
 	if envError != nil {
 		return false, envError
 	}
@@ -369,7 +369,7 @@ func matchContainerSpecEnv(expectedMap map[string]string, containerEnv []coreV1.
 }
 
 func (expectation *ContainerEnvExpectation) matchContainerSpec(container coreV1.Container) (bool, error) {
-	envError := matchContainerSpecEnv(expectation.CassEnvMap, container.Env)
+	envError := matchContainerSpecEnv(expectation.CassEnv, container.Env)
 	if envError != nil {
 		return false, envError
 	}

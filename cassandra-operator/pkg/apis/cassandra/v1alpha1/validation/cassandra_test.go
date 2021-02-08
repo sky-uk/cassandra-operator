@@ -869,6 +869,21 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 				}
 			},
 		),
+		Entry(
+			"Pod.Env Valid EnvVar ValueFrom added",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{
+					v1alpha1.CassEnvVar{
+						Name:  "defaultEnvName",
+						ValueFrom: &v1alpha1.CassEnvVarSource{
+							SecretKeyRef: coreV1.SecretKeySelector{
+								Key: "someKey",
+							},
+						},
+					},
+				}
+			},
+		),
 	)
 	DescribeTable(
 		"forbidden changes",
@@ -945,6 +960,26 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 					v1alpha1.CassEnvVar{
 						Name:  "EXTRA_CLASSPATH",
 						Value: "defaultEnvValue",
+					},
+					v1alpha1.CassEnvVar{
+						Name:  "newEnvVar",
+						Value: "newEnvValue",
+					},
+				}
+			},
+		),
+		Entry(
+			"Pod.Env and reserved variable to env with secret key ref",
+			"spec.Pod.env cannot contain reserved variable with Name: EXTRA_CLASSPATH",
+			func(c *v1alpha1.Cassandra) {
+				c.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{
+					v1alpha1.CassEnvVar{
+						Name:  "EXTRA_CLASSPATH",
+						ValueFrom: &v1alpha1.CassEnvVarSource{
+							SecretKeyRef: coreV1.SecretKeySelector{
+								Key: "aKey",
+							},
+						},
 					},
 					v1alpha1.CassEnvVar{
 						Name:  "newEnvVar",

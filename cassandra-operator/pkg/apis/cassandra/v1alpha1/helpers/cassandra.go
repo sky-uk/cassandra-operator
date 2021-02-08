@@ -15,7 +15,6 @@ import (
 
 // IsAReservedEnvVar is used to determine if an Environment Variable has been reserved.
 func IsAReservedEnvVar(envVar string) bool {
-	// String -> bool map should default to false for missing items.
 	isReserved := map[string]bool{"EXTRA_CLASSPATH": true}
 	return isReserved[envVar]
 }

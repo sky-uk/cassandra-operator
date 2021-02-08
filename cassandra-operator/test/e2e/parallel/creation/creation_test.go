@@ -174,7 +174,7 @@ var _ = Context("When a cluster doesn't already exist", func() {
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
-				CassEnvMap:                     map[string]string{"aDefaultE2EVarName": "aDefaultE2EVarValue", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
+				CassEnv:                        map[string]string{"aDefaultE2EVarName": "aDefaultE2EVarValue", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
 			}),
 			HaveResourcesRequirements(&ResourceRequirementsAssertion{
 				ContainerName: "cassandra-sidecar",
