@@ -12,7 +12,7 @@ All new code, including changes to existing code, should be tested and have a co
 
 The following must be installed on your development machine:
 
-- `go` (>=1.12)
+- `go` (>=1.15)
 - `docker`
 - `jdk-11` or above
 - `gcc` (or `build-essential` package on debian distributions)

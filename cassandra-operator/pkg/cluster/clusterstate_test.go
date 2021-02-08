@@ -27,7 +27,7 @@ var _ = Describe("the cluster state reconstruction", func() {
 		expectedCassandra    *v1alpha1.Cassandra
 		stateFinder          currentClusterStateFinder
 		fakes                *mocks
-		mockedStatefulSets    *v1beta2.StatefulSetList
+		mockedStatefulSets   *v1beta2.StatefulSetList
 	)
 
 	BeforeEach(func() {

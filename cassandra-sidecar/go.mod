@@ -1,6 +1,6 @@
 module github.com/sky-uk/cassandra-operator/cassandra-sidecar
 
-go 1.12
+go 1.15
 
 require (
 	github.com/onsi/ginkgo v1.8.0

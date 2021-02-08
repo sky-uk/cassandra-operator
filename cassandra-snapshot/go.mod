@@ -1,6 +1,6 @@
 module github.com/sky-uk/cassandra-operator/cassandra-snapshot
 
-go 1.12
+go 1.15
 
 require (
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
