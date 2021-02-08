@@ -27,6 +27,7 @@ func TheClusterPodSpecAreChangedTo(namespace, clusterName string, podSpec v1alph
 		spec.Pod.Resources = podSpec.Resources
 		spec.Pod.LivenessProbe = podSpec.LivenessProbe
 		spec.Pod.ReadinessProbe = podSpec.ReadinessProbe
+		spec.Pod.Env = podSpec.Env
 	})
 	log.Infof("Updated pod spec for cluster %s", clusterName)
 }
@@ -36,6 +37,13 @@ func TheClusterPodResourcesSpecAreChangedTo(namespace, clusterName string, podRe
 		spec.Pod.Resources = podResources
 	})
 	log.Infof("Updated pod resources spec for cluster %s", clusterName)
+}
+
+func TheClusterPodEnvVarsAreChangedTo(namespace, clusterName string, envVars *[]v1alpha1.CassEnvVar) {
+	mutateCassandraSpec(namespace, clusterName, func(spec *v1alpha1.CassandraSpec) {
+		spec.Pod.Env = envVars
+	})
+	log.Infof("Updated pod spec for cluster %s", clusterName)
 }
 
 func TheImageImmutablePropertyIsChangedTo(namespace, clusterName, imageName string) {
@@ -224,6 +232,18 @@ func TheStatefulSetContainerImageNameIsChanged(namespace, statefulSetName string
 		}
 	})
 	log.Infof("Updated imageName for statefulSet %s, container %s, new image name %s", statefulSetName, containerName, newImageName)
+}
+
+func TheStatefulSetContainerEnvVarsHaveChanged(namespace, statefulSetName string, containerName string, newEnvVars []coreV1.EnvVar) {
+	mutateStatefulSet(namespace, statefulSetName, func(statefulSet *v1beta2.StatefulSet) {
+
+		for i, container := range statefulSet.Spec.Template.Spec.Containers {
+			if container.Name == containerName {
+				statefulSet.Spec.Template.Spec.Containers[i].Env = newEnvVars
+			}
+		}
+	})
+	log.Infof("Updated envVars for statefulSet %s, container %s", statefulSetName, containerName)
 }
 
 func TheStatefulSetContainerResourcesChanged(namespace, statefulSetName string, containerName string, editedResources coreV1.ResourceRequirements) {

@@ -131,6 +131,30 @@ var _ = Context("forbidden cluster modifications", func() {
 		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
 			FailedValidationMetric(Namespace, multipleNodeCluster.Name, expectedFailedValidations),
 		}))
+	})
 
+	It("should reject any env changes with reserved variable names", func() {
+		// when
+		modificationTime := time.Now()
+		modifiedEnvVars := []v1alpha1.CassEnvVar{
+			v1alpha1.CassEnvVar{Name: "EXTRA_CLASSPATH", Value: "some_value"}, // Purposely setting a reserved variable name
+		}
+		TheClusterPodEnvVarsAreChangedTo(Namespace, multipleNodeCluster.Name, &modifiedEnvVars)
+
+		// then
+		By("recording a warning event about the forbidden change")
+
+		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
+			Type:                 coreV1.EventTypeWarning,
+			Reason:               cluster.InvalidChangeEvent,
+			Message:              "spec.Pod.Env: Forbidden: spec.Pod.env cannot contain reserved variable with Name: EXTRA_CLASSPATH",
+			LastTimestampCloseTo: &modificationTime,
+		}))
+		By("incrementing the failed validation metric for this cluster")
+		Eventually(OperatorMetrics(Namespace), 60*time.Second, CheckInterval).Should(ReportAClusterWith([]MetricAssertion{
+			FailedValidationMetric(Namespace, multipleNodeCluster.Name, expectedFailedValidations),
+		}))
+		By("not restarting any pods")
+		Expect(podEvents.PodsStartedEventCount(PodName(multipleNodeCluster.Name, "a", 0))).To(Equal(1))
 	})
 })

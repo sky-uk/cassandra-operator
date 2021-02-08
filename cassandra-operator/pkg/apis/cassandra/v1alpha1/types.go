@@ -110,8 +110,41 @@ type Pod struct {
 	// Readiness probe for the cassandra container
 	// +optional
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
+	// Env variables for the cassandra container
+	// +optional
+	Env *[]CassEnvVar `json:"env,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,7,rep,name=env"`
 	// Sidecar container specification
 	Sidecar *Sidecar `json:"sidecar"`
+}
+
+// EnvVar represents an environment variable the operator will add to the Cassandra Container
+// This is almost identical to coreV1.EnvVar, but replaces the type of ValueFrom.
+type CassEnvVar struct {
+	// Name of the environment variable. Must be a C_IDENTIFIER.
+	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
+
+	// Optional: no more than one of the following may be specified.
+
+	// Variable references $(VAR_NAME) are expanded
+	// using the previous defined environment variables in the container and
+	// any service environment variables. If a variable cannot be resolved,
+	// the reference in the input string will be unchanged. The $(VAR_NAME)
+	// syntax can be escaped with a double $$, ie: $$(VAR_NAME). Escaped
+	// references will never be expanded, regardless of whether the variable
+	// exists or not.
+	// Defaults to "".
+	// +optional
+	Value string `json:"value,omitempty" protobuf:"bytes,2,opt,name=value"`
+	// Source for the environment variable's value. Cannot be used if value is not empty.
+	// +optional
+	ValueFrom *CassEnvVarSource `json:"valueFrom,omitempty" protobuf:"bytes,3,opt,name=valueFrom"`
+}
+
+// CassEnvVarSource represents a source for the value of an CassEnvVar.
+// This is almost identical to coreV1.EnvVarSource, but is restricted to a required SecretKeyRef
+type CassEnvVarSource struct {
+	// Selects a key of a secret in the pod's namespace
+	SecretKeyRef coreV1.SecretKeySelector `json:"secretKeyRef" protobuf:"bytes,4,name=secretKeyRef"`
 }
 
 // Sidecar is the specification of a sidecar attached to a Cassandra node
@@ -242,6 +275,18 @@ func (c *Cassandra) CustomConfigMapName() string {
 	return fmt.Sprintf("%s-config", c.Name)
 }
 
+// Equal checks the equality of two CassEnvVar.
+func (cev CassEnvVar) Equal(other CassEnvVar) bool {
+	return cmp.Equal(cev.Name, other.Name) &&
+		cmp.Equal(cev.Value, other.Value) &&
+		reflect.DeepEqual(cev.ValueFrom, other.ValueFrom)
+}
+
+// Equal checks the equality of two CassEnvVarSource.
+func (cevs CassEnvVarSource) Equal(other CassEnvVarSource) bool {
+	return reflect.DeepEqual(cevs.SecretKeyRef, other.SecretKeyRef)
+}
+
 // Equal checks equality of two CassandraSpecs. This is useful for checking equality with cmp.Equal
 func (cs CassandraSpec) Equal(other CassandraSpec) bool {
 	return reflect.DeepEqual(cs.Datacenter, other.Datacenter) &&
@@ -289,7 +334,8 @@ func (p Pod) Equal(other Pod) bool {
 		reflect.DeepEqual(p.Image, other.Image) &&
 		reflect.DeepEqual(p.LivenessProbe, other.LivenessProbe) &&
 		reflect.DeepEqual(p.ReadinessProbe, other.ReadinessProbe) &&
-		allResourcesAreEqual(p.Resources, other.Resources)
+		allResourcesAreEqual(p.Resources, other.Resources) &&
+		allEnvVarsEqual(p.Env, other.Env)
 }
 
 // Equal checks equality of two Sidecars. This is useful for checking equality with cmp.Equal
@@ -303,6 +349,29 @@ func allResourcesAreEqual(aResource coreV1.ResourceRequirements, anotherResource
 		resourcesAreEqual(aResource.Limits, anotherResource.Limits, coreV1.ResourceMemory) &&
 		resourcesAreEqual(aResource.Requests, anotherResource.Requests, coreV1.ResourceCPU) &&
 		resourcesAreEqual(aResource.Limits, anotherResource.Limits, coreV1.ResourceCPU)
+}
+
+func isNilOrEmpty(envs *[]CassEnvVar) bool {
+	if envs == nil {
+		return true
+	}
+	if len(*envs) == 0 {
+		return true
+	}
+	return false
+}
+
+func allEnvVarsEqual(envs *[]CassEnvVar, otherEnvs *[]CassEnvVar) bool {
+	if isNilOrEmpty(envs) && isNilOrEmpty(otherEnvs) {
+		return true
+	}
+	if isNilOrEmpty(envs) && !isNilOrEmpty(otherEnvs) {
+		return false
+	}
+	if !isNilOrEmpty(envs) && isNilOrEmpty(otherEnvs) {
+		return false
+	}
+	return reflect.DeepEqual(sortedEnvs(*envs), sortedEnvs(*otherEnvs))
 }
 
 func resourcesAreEqual(resources coreV1.ResourceList, otherResources coreV1.ResourceList, resourceName coreV1.ResourceName) bool {
@@ -325,4 +394,11 @@ func sortedRacks(racks []Rack) []Rack {
 func sortedStrings(strings []string) []string {
 	sort.Strings(strings)
 	return strings
+}
+
+func sortedEnvs(envs []CassEnvVar) []CassEnvVar {
+	sort.SliceStable(envs, func(i, j int) bool {
+		return envs[i].Name > envs[j].Name
+	})
+	return envs
 }

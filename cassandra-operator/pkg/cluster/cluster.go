@@ -408,6 +408,45 @@ func (c *Cluster) objectMetadataWithOwner(name string, extraLabels ...string) me
 	return meta
 }
 
+func getExtraClassPathVar() v1.EnvVar {
+	return v1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}
+}
+
+func addCassEnvVarToEnvVars(cassEnvVar v1alpha1.CassEnvVar, envVars []v1.EnvVar, i int) {
+	envVar := v1.EnvVar{}
+	if cassEnvVar.ValueFrom != nil {
+		envVar = v1.EnvVar{
+			Name:      cassEnvVar.Name,
+			ValueFrom: &v1.EnvVarSource{SecretKeyRef: &cassEnvVar.ValueFrom.SecretKeyRef},
+		}
+	} else {
+		envVar = v1.EnvVar{Name: cassEnvVar.Name, Value: cassEnvVar.Value}
+	}
+	envVars[i] = envVar
+
+}
+
+func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
+
+	if c.definition.Spec.Pod.Env == nil || len(*c.definition.Spec.Pod.Env) == 0 {
+		return []v1.EnvVar{getExtraClassPathVar()}
+	}
+	numOfReservedVariablesToBeAdded := 1 // Only EXTRA_CLASSPATH at this stage
+	containerEnvVars := make([]v1.EnvVar, len(*c.definition.Spec.Pod.Env) + numOfReservedVariablesToBeAdded)
+
+	i := 0
+	for _, cassEnvVar := range *c.definition.Spec.Pod.Env {
+		if !v1alpha1helpers.IsAReservedEnvVar(cassEnvVar.Name) {
+			addCassEnvVarToEnvVars(cassEnvVar, containerEnvVars, i)
+			i++
+		}
+	}
+
+	containerEnvVars[i] = getExtraClassPathVar()
+
+	return containerEnvVars
+}
+
 func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 	return v1.Container{
 		Name:  cassandraContainerName,
@@ -449,9 +488,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 				},
 			},
 		},
-		Env: []v1.EnvVar{
-			{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"},
-		},
+		Env:          c.createContainerEnvVars(),
 		VolumeMounts: c.createVolumeMounts(rack),
 	}
 }

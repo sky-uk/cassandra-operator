@@ -28,4 +28,16 @@ var _ = Context("Cassandra resource validation", func() {
 		Expect(err).To(HaveOccurred(), fmt.Sprintf("Command was: %v \nOutput was %v", command, string(output)))
 		Expect(string(output)).To(ContainSubstring(`spec.racks.replicas in body must be of type integer: "string"`))
 	})
+
+	It("should fail with an invalid env variable from config map in a cassandra spec", func() {
+		command, output, err := Kubectl(Namespace, "apply", "-f", "testdata/invalid-env-fromconfig-spec.yaml")
+		Expect(err).To(HaveOccurred(), fmt.Sprintf("Command was: %v \nOutput was %v", command, string(output)))
+		Expect(string(output)).To(ContainSubstring(`spec.pod.env.valueFrom.secretKeyRef in body is required`))
+	})
+
+	It("should fail with an invalid env variable from field ref map in a cassandra spec", func() {
+		command, output, err := Kubectl(Namespace, "apply", "-f", "testdata/invalid-env-fromfield-spec.yaml")
+		Expect(err).To(HaveOccurred(), fmt.Sprintf("Command was: %v \nOutput was %v", command, string(output)))
+		Expect(string(output)).To(ContainSubstring(`spec.pod.env.valueFrom.secretKeyRef in body is required`))
+	})
 })

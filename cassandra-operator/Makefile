@@ -41,7 +41,7 @@ clean-test-namespace:
 
 install: build go-install push-image
 
-clean-redeploy-test: clean-test-namespace deploy-operator
+clean-redeploy-test: clean-test-namespace install deploy-operator
 
 check-style: fmt vet lint
 

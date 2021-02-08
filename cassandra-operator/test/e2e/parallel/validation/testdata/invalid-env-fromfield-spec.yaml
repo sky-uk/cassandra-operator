@@ -1,0 +1,33 @@
+apiVersion: core.sky.uk/v1alpha1
+kind: Cassandra
+metadata:
+  name: invalidenvcluster
+spec:
+  pod:
+    image: "cassandra:3.11"
+    resources:
+      limits:
+        memory: 10Mi
+      requests:
+        cpu: 0m
+        memory: 10Mi
+    sidecar:
+      image: "cassandra-sidecar:v0.85.0-alpha"
+      resources:
+        limits:
+          memory: 10Mi
+        requests:
+          cpu: 0m
+          memory: 10Mi
+    env:
+      - name: "A FieldRef"
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.pod.image
+  racks:
+  - name: a
+    replicas: 2
+    storage:
+      - path: "/var/log/cassandra"
+        emptyDir: {}
+    zone: eu-west-1a

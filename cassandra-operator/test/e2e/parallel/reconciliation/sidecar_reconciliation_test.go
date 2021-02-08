@@ -1,24 +1,19 @@
-package modification
+package reconciliation
 
 import (
 	"fmt"
-
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/imageversion"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
+	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
-
-	coreV1 "k8s.io/api/core/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Context("External sidecar statefulset modifications", func() {
+var _ = Context("External statefulset sidecar modifications trigger reconciler", func() {
 	var (
 		clusterName   string
 		testStartTime time.Time
@@ -134,13 +129,3 @@ var _ = Context("External sidecar statefulset modifications", func() {
 			ContainElement(HaveResourcesRequirements(originalResourceRequirements)))
 	})
 })
-
-func operatorImageRepositoryAndVersion(namespace string) (operatorRepository, operatorVersion string) {
-	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: "app.kubernetes.io/name=cassandra-operator"})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(pods.Items).To(HaveLen(1))
-	operatorImage := pods.Items[0].Spec.Containers[0].Image
-	operatorRepository = imageversion.RepositoryPath(&operatorImage)
-	operatorVersion = imageversion.Version(&operatorImage)
-	return
-}

@@ -116,8 +116,13 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 					InitialDelaySeconds: ptr.Int32(CassandraInitialDelay),
 					PeriodSeconds:       ptr.Int32(CassandraReadinessPeriod),
 				},
-			},
-		}).IsDefined()
+				Env: &[]v1alpha1.CassEnvVar{
+					v1alpha1.CassEnvVar{
+						Name:  "aDefaultE2EVarName",
+						Value: "aDefaultE2EVarValue",
+					},
+				},
+			}}).IsDefined()
 
 	AClusterWithName(emptyDirCluster.Name).AndRacks(emptyDirCluster.Racks).WithoutCustomConfig().IsDefined()
 }
@@ -168,7 +173,9 @@ var _ = Context("When a cluster doesn't already exist", func() {
 				ReadinessProbeFailureThreshold: CassandraReadinessProbeFailureThreshold,
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
 				ReadinessProbeSuccessThreshold: 1,
-				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042}}),
+				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
+				CassEnv:                        map[string]string{"aDefaultE2EVarName": "aDefaultE2EVarValue", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
+			}),
 			HaveResourcesRequirements(&ResourceRequirementsAssertion{
 				ContainerName: "cassandra-sidecar",
 				MemoryRequest: ptr.String("50Mi"),

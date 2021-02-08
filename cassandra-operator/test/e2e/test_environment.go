@@ -45,6 +45,7 @@ var (
 	NodeTerminationDuration                 time.Duration
 	Namespace                               string
 	MaxCassandraNodesPerNamespace           int
+	CassEnv                                 map[string]string
 )
 
 func init() {

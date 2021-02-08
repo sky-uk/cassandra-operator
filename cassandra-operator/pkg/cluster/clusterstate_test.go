@@ -27,6 +27,7 @@ var _ = Describe("the cluster state reconstruction", func() {
 		expectedCassandra    *v1alpha1.Cassandra
 		stateFinder          currentClusterStateFinder
 		fakes                *mocks
+		mockedStatefulSets    *v1beta2.StatefulSetList
 	)
 
 	BeforeEach(func() {
@@ -189,6 +190,24 @@ var _ = Describe("the cluster state reconstruction", func() {
 			Expect(currentCassandra.Spec.Racks[0].Storage[3].EmptyDir).NotTo(BeNil())
 			Expect(currentCassandra.Spec.Racks[0].Storage[3].PersistentVolumeClaim).To(BeNil())
 			Expect(*currentCassandra.Spec.Racks[0].Storage[3].Path).To(Equal("/emptydir-path-2"))
+		})
+	})
+	Context("when no env vars are defined", func() {
+		BeforeEach(func() {
+			expectedCassandra = aClusterDefinitionWithEmptyDir()
+			expectedCassandra.Spec.Racks[0].Storage[0].Path = ptr.String("/cassandra-storage-path")
+			expectedCassandra.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{}
+			mockedStatefulSets = createStatefulSetsFor(expectedCassandra)
+			fakes.statefulsetsAreFoundIn(clusterNamespaceName, mockedStatefulSets)
+		})
+
+		It("should have EXTRA_CLASSPATH in stateful set but not in cluster state", func() {
+			currentCassandra, err := stateFinder.findClusterStateFor(desiredCassandra)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockedStatefulSets.Items[0].Spec.Template.Spec.Containers[0].Env[0]).
+				To(Equal(corev1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
+			Expect(currentCassandra).To(Equal(expectedCassandra))
+			Expect(currentCassandra.Spec.Pod.Env).To(Equal(&[]v1alpha1.CassEnvVar{}))
 		})
 	})
 })

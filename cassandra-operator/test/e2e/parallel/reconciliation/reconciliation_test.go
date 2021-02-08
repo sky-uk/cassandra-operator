@@ -1,19 +1,49 @@
-package modification
+package reconciliation
 
 import (
 	"fmt"
-	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/imageversion"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test"
 	. "github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e"
+	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/e2e/parallel"
 )
 
-var _ = Context("External cluster modifications", func() {
+var (
+	resources          *parallel.ResourceSemaphore
+	resourcesToReclaim int
+)
+
+func TestReconciliation(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecsWithDefaultAndCustomReporters(t, "E2E Suite (Reconciliation Tests)", test.CreateParallelReporters("e2e_reconciliation"))
+}
+
+var _ = ParallelTestBeforeSuite(func() []TestCluster {
+	// initialise the resources available just once for the entire test suite
+	resources = parallel.NewResourceSemaphore(MaxCassandraNodesPerNamespace)
+	return []TestCluster{}
+}, func(clusterNames []string) {
+	// instantiate the accessor to the resource file for each spec,
+	// so they can make use of it to acquire / release resources
+	resources = parallel.NewUnInitialisedResourceSemaphore(MaxCassandraNodesPerNamespace)
+})
+
+func registerResourcesUsed(size int) {
+	resourcesToReclaim = size
+	resources.AcquireResource(size)
+}
+
+var _ = Context("External cluster modifications trigger reconciler", func() {
 	var (
 		clusterName   string
 		testStartTime time.Time
@@ -257,3 +287,13 @@ var _ = Context("External cluster modifications", func() {
 	})
 
 })
+
+func operatorImageRepositoryAndVersion(namespace string) (operatorRepository, operatorVersion string) {
+	pods, err := KubeClientset.CoreV1().Pods(namespace).List(metaV1.ListOptions{LabelSelector: "app.kubernetes.io/name=cassandra-operator"})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pods.Items).To(HaveLen(1))
+	operatorImage := pods.Items[0].Spec.Containers[0].Image
+	operatorRepository = imageversion.RepositoryPath(&operatorImage)
+	operatorVersion = imageversion.Version(&operatorImage)
+	return
+}
