@@ -432,7 +432,7 @@ func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
 		return []v1.EnvVar{getExtraClassPathVar()}
 	}
 	numOfReservedVariablesToBeAdded := 1 // Only EXTRA_CLASSPATH at this stage
-	containerEnvVars := make([]v1.EnvVar, len(*c.definition.Spec.Pod.Env) + numOfReservedVariablesToBeAdded)
+	containerEnvVars := make([]v1.EnvVar, len(*c.definition.Spec.Pod.Env)+numOfReservedVariablesToBeAdded)
 
 	i := 0
 	for _, cassEnvVar := range *c.definition.Spec.Pod.Env {

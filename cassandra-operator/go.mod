@@ -1,6 +1,6 @@
 module github.com/sky-uk/cassandra-operator/cassandra-operator
 
-go 1.12
+go 1.15
 
 require (
 	github.com/PaesslerAG/gval v0.1.1 // indirect

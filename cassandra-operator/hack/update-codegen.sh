@@ -9,9 +9,16 @@ projectDir="${scriptDir}/.."
 codeGenDir="${projectDir}/vendor/k8s.io/code-generator"
 basePackage="github.com/sky-uk/cassandra-operator/cassandra-operator"
 groupVersion="cassandra:v1alpha1"
-VENDOR_DIR="${projectDir}/vendor"
-GEN_FILE_PATH="/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go"
-CLIENT_PATH="/pkg/client"
+tempDir="$(mktemp -d)"
+generateDeepCopy="/pkg/apis/cassandra/v1alpha1/zz_generated.deepcopy.go"
+pkgClientPath="/pkg/client"
+
+cleanup() {
+  rm -rf "${tempDir}"
+}
+trap "cleanup" EXIT SIGINT
+
+mkdir -p "${tempDir}/${basePackage}}"
 
 # ensure code-generator is available in vendor directory
 # https://github.com/kubernetes/code-generator/issues/57#issuecomment-498310800
@@ -24,9 +31,7 @@ ${codeGenDir}/generate-groups.sh all \
   ${basePackage}/pkg/client ${basePackage}/pkg/apis \
   ${groupVersion} \
   --go-header-file ${scriptDir}/empty-boilerplate.txt \
-  --output-base ${VENDOR_DIR}
+  --output-base ${tempDir}
 
-
-cp "${VENDOR_DIR}/${basePackage}/${GEN_FILE_PATH}" "${projectDir}/${GEN_FILE_PATH}"
-cp -ur "${VENDOR_DIR}/${basePackage}/${CLIENT_PATH}" "${projectDir}/pkg/"
-
+cp "${tempDir}/${basePackage}/${generateDeepCopy}" "${projectDir}/${generateDeepCopy}"
+cp -ur "${tempDir}/${basePackage}/${pkgClientPath}" "${projectDir}/pkg/"

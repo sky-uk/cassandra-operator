@@ -874,7 +874,7 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{
 					v1alpha1.CassEnvVar{
-						Name:  "defaultEnvName",
+						Name: "defaultEnvName",
 						ValueFrom: &v1alpha1.CassEnvVarSource{
 							SecretKeyRef: coreV1.SecretKeySelector{
 								Key: "someKey",
@@ -974,7 +974,7 @@ var _ = Describe("ValidateCassandraUpdate", func() {
 			func(c *v1alpha1.Cassandra) {
 				c.Spec.Pod.Env = &[]v1alpha1.CassEnvVar{
 					v1alpha1.CassEnvVar{
-						Name:  "EXTRA_CLASSPATH",
+						Name: "EXTRA_CLASSPATH",
 						ValueFrom: &v1alpha1.CassEnvVarSource{
 							SecretKeyRef: coreV1.SecretKeySelector{
 								Key: "aKey",
