@@ -33,7 +33,5 @@ ${codeGenDir}/generate-groups.sh all \
   --go-header-file ${scriptDir}/empty-boilerplate.txt \
   --output-base ${tempDir}
 
-
 cp "${tempDir}/${basePackage}/${generateDeepCopy}" "${projectDir}/${generateDeepCopy}"
 cp -ur "${tempDir}/${basePackage}/${pkgClientPath}" "${projectDir}/pkg/"
-
