@@ -39,6 +39,7 @@ before_install:
   - sudo apt-get update
   - sudo apt-get install -y curl rsync
   - BIN_DIR=/usr/local/bin sudo hack/install-system-dependencies.sh
+  - make -f MakefileDocker common-docker-login
 
 # skip script phase which defaults to running `make` for go languages
 script: true

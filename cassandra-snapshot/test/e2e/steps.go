@@ -21,122 +21,12 @@ const (
 )
 
 var (
-	TerminateImmediately = int64(0)
-	securityContext      = &v1.PodSecurityContext{
+	securityContext = &v1.PodSecurityContext{
 		RunAsUser:  ptr.Int64(cluster.UserID),
 		RunAsGroup: ptr.Int64(cluster.GroupID),
 		FSGroup:    ptr.Int64(cluster.GroupID),
 	}
 )
-
-func CassandraPodExistsWithLabels(labelsAndValues ...string) *v1.Pod {
-	podName := fmt.Sprintf("cassandra-pod-%s", randomString(5))
-	labels := make(map[string]string)
-	for i := 0; i < len(labelsAndValues)-1; i += 2 {
-		labels[labelsAndValues[i]] = labelsAndValues[i+1]
-	}
-
-	var pod *v1.Pod
-	var err error
-	if UseMockedImage {
-		pod, err = createCassandraPod(labels, podName)
-	} else {
-		pod, err = createCassandraPodWithCustomConfig(labels, podName)
-	}
-
-	gomega.Expect(err).ToNot(gomega.HaveOccurred())
-	gomega.Eventually(PodIsReady(pod), NodeStartDuration, 2*time.Second).Should(gomega.BeTrue())
-	return pod
-}
-
-func createCassandraPod(labels map[string]string, podName string) (*v1.Pod, error) {
-	return KubeClientset.CoreV1().Pods(Namespace).Create(&v1.Pod{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name:      podName,
-			Namespace: Namespace,
-			Labels:    labels,
-		},
-		Spec: v1.PodSpec{
-			SecurityContext: securityContext,
-			Containers: []v1.Container{
-				{
-					Name:           "cassandra",
-					Image:          CassandraImageName,
-					ReadinessProbe: CassandraReadinessProbe,
-					Resources:      resourceRequirementsOf("50Mi"),
-				},
-			},
-			TerminationGracePeriodSeconds: &TerminateImmediately,
-		},
-	})
-}
-
-func createCassandraPodWithCustomConfig(labels map[string]string, podName string) (*v1.Pod, error) {
-	configMap, err := cassandraConfigMap(Namespace, podName)
-	gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-	return KubeClientset.CoreV1().Pods(Namespace).Create(&v1.Pod{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name:      podName,
-			Namespace: Namespace,
-			Labels:    labels,
-		},
-		Spec: v1.PodSpec{
-			SecurityContext: securityContext,
-			InitContainers: []v1.Container{
-				{
-					Name:      "copy-default-cassandra-config",
-					Image:     CassandraImageName,
-					Command:   []string{"sh", "-c", "cp -vr /etc/cassandra/* /config"},
-					Resources: resourceRequirementsOf("50Mi"),
-					VolumeMounts: []v1.VolumeMount{
-						{Name: "config", MountPath: "/config"},
-					},
-				},
-				{
-					Name:      "copy-custom-config",
-					Image:     "busybox",
-					Command:   []string{"sh", "-c", "cp -rLv /custom-config/* /config"},
-					Resources: resourceRequirementsOf("50Mi"),
-					VolumeMounts: []v1.VolumeMount{
-						{Name: "config", MountPath: "/config"},
-						{Name: "custom-config", MountPath: "/custom-config"},
-					},
-				},
-			},
-			Containers: []v1.Container{
-				{
-					Name:           "cassandra",
-					Image:          CassandraImageName,
-					ReadinessProbe: CassandraReadinessProbe,
-					Resources:      resourceRequirementsOf("1Gi"),
-					VolumeMounts: []v1.VolumeMount{
-						{Name: "config", MountPath: "/etc/cassandra"},
-					},
-				},
-			},
-			TerminationGracePeriodSeconds: &TerminateImmediately,
-			Volumes: []v1.Volume{
-				{
-					Name: "config",
-					VolumeSource: v1.VolumeSource{
-						EmptyDir: &v1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "custom-config",
-					VolumeSource: v1.VolumeSource{
-						ConfigMap: &v1.ConfigMapVolumeSource{
-							LocalObjectReference: v1.LocalObjectReference{
-								Name: configMap.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-}
 
 func PodIsReady(podToCheck *v1.Pod) func() (bool, error) {
 	return func() (bool, error) {

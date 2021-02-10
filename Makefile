@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := all
-.PHONY: all check-style clean-all build-all setup setup-all check-style-all run-local-registry verify-go-mod kind
+.PHONY: all check-style clean-all build-all setup setup-all check-style-all run-local-registry verify-go-mod kind 
 
 TEST_REGISTRY ?= localhost:5000
 POD_START_TIMEOUT ?= 150s

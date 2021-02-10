@@ -121,6 +121,10 @@ func createClustersInParallel(multipleRacksCluster, emptyDirCluster *TestCluster
 						Name:  "aDefaultE2EVarName",
 						Value: "aDefaultE2EVarValue",
 					},
+					v1alpha1.CassEnvVar{
+						Name:  "NODETOOL_ARGS",
+						Value: "-DnodetoolArg=aNodetoolArg",
+					},
 				},
 			}}).IsDefined()
 
@@ -174,7 +178,12 @@ var _ = Context("When a cluster doesn't already exist", func() {
 				ReadinessProbeInitialDelay:     DurationSeconds(CassandraInitialDelay),
 				ReadinessProbeSuccessThreshold: 1,
 				ContainerPorts:                 map[string]int{"internode": 7000, "jmx-exporter": 7070, "cassandra-jmx": 7199, "jolokia": 7777, "client": 9042},
-				CassEnv:                        map[string]string{"aDefaultE2EVarName": "aDefaultE2EVarValue", "EXTRA_CLASSPATH": "/extra-lib/cassandra-seed-provider.jar"},
+				CassEnv: map[string]string{
+					"aDefaultE2EVarName": "aDefaultE2EVarValue",
+					"EXTRA_CLASSPATH":    "/extra-lib/cassandra-seed-provider.jar",
+					"NODETOOL_ARGS":      "-DnodetoolArg=aNodetoolArg",
+				},
+				LifecyclePreStopCommand: []string{"/bin/sh", "-c", "nodetool ${NODETOOL_ARGS} drain"},
 			}),
 			HaveResourcesRequirements(&ResourceRequirementsAssertion{
 				ContainerName: "cassandra-sidecar",

@@ -1,4 +1,4 @@
-.PHONY: common-docker-build common-docker-push common-docker-clean common-docker-release
+.PHONY: common-docker-build common-docker-push common-docker-clean common-docker-release common-docker-login
 
 TEST_REGISTRY ?= localhost:5000
 RELEASE_REGISTRY ?= skyuk
@@ -29,16 +29,17 @@ common-docker-clean:
 	@echo "== common-docker-clean"
 	docker rmi $(dockerTestImage) || true
 
+common-docker-login:
+	@echo "$(DOCKER_PASSWORD)" | docker login -u $(DOCKER_USERNAME) --password-stdin
+
 common-docker-release:
 	@echo "== common-docker-release"
 ifeq ($(strip $(gitTag)),)
 	@echo "Releasing candidate based on rev: $(gitRev). Docker image: $(dockerReleaseCandidateImage)"
-	@echo "$(DOCKER_PASSWORD)" | docker login -u $(DOCKER_USERNAME) --password-stdin
 	docker tag $(dockerTestImage) $(dockerReleaseCandidateImage)
 	docker push $(dockerReleaseCandidateImage)
 else
 	@echo "Releasing based on tag: $(gitTag). Docker image: $(dockerReleaseImage)"
-	@echo "$(DOCKER_PASSWORD)" | docker login -u $(DOCKER_USERNAME) --password-stdin
 	docker pull $(dockerReleaseCandidateImage)
 	docker tag $(dockerReleaseCandidateImage) $(dockerReleaseImage)
 	docker tag $(dockerReleaseCandidateImage) $(dockerReleaseLatestImage)

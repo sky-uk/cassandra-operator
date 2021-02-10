@@ -24,8 +24,42 @@ var _ = Describe("Cleanup", func() {
 	It("should delete any snapshots which are older than the retention period across all pods in the cluster", func() {
 		// given
 		clusterPods := []*v1.Pod{
-			CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
-			CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+		}
+
+		snapshotPod := RunCommandInCassandraSnapshotPod(
+			"mycluster-1",
+			"/cassandra-snapshot", "create",
+			"-L", "debug",
+			"-n", Namespace,
+			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			"-k", "system_auth,system_traces")
+		Eventually(PodIsTerminatedSuccessfully(snapshotPod), NodeTerminationDuration, 2*time.Second).Should(BeTrue())
+
+		BackdateSnapshotsForPods(clusterPods, time.Hour)
+
+		// when
+		cleanupPod := RunCommandInCassandraSnapshotPod(
+			"mycluster-1",
+			"/cassandra-snapshot", "cleanup",
+			"-L", "debug",
+			"-n", Namespace,
+			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			"-r", "30m")
+		Eventually(PodIsTerminatedSuccessfully(cleanupPod), NodeTerminationDuration, 2*time.Second).Should(BeTrue())
+
+		// then
+		for _, pod := range clusterPods {
+			Expect(SnapshotListForPod(pod)).To(HaveLen(0))
+		}
+	})
+
+	It("should delete any snapshots which are older than the retention period when nodetool args are not defined", func() {
+		// given
+		clusterPods := []*v1.Pod{
+			ACassandraPodWithDefaults().WithoutEnvironmentVariables().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().WithoutEnvironmentVariables().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
 		}
 
 		snapshotPod := RunCommandInCassandraSnapshotPod(
@@ -57,7 +91,7 @@ var _ = Describe("Cleanup", func() {
 
 	It("should not delete snapshots which are younger than the retention period", func() {
 		// given
-		clusterPod := CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1")
+		clusterPod := ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1")
 
 		snapshotPod := RunCommandInCassandraSnapshotPod(
 			"mycluster-1",
@@ -89,7 +123,7 @@ var _ = Describe("Cleanup", func() {
 
 	It("should not delete snapshots whose name do not match the naming convention", func() {
 		// given
-		clusterPod := CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1")
+		clusterPod := ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1")
 
 		snapshotPod := RunCommandInCassandraSnapshotPod(
 			"mycluster-1",

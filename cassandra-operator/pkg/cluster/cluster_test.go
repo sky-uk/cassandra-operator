@@ -189,6 +189,21 @@ var _ = Describe("creation of stateful sets", func() {
 		})
 	})
 
+	Describe("Cassandra PreStop Lifecycle Hook", func() {
+		It("should be defined with the correct nodetool argument environment variable", func() {
+			// given
+			cluster := ACluster(clusterDef)
+
+			// when
+			statefulSet := cluster.CreateStatefulSetForRack(&cluster.Racks()[0], nil)
+
+			// then
+			execCommand := statefulSet.Spec.Template.Spec.Containers[0].Lifecycle.PreStop.Exec.Command
+			Expect(execCommand).To(HaveLen(3))
+			Expect(execCommand).To(Equal([]string{"/bin/sh", "-c", "nodetool ${NODETOOL_ARGS} drain"}))
+		})
+	})
+
 	Describe("Storage", func() {
 
 		It("should define emptyDir volumes for configuration and extra libraries", func() {
@@ -577,7 +592,8 @@ var _ = Describe("creation of stateful sets", func() {
 			statefulSet := cluster.CreateStatefulSetForRack(&clusterDef.Spec.Racks[0], nil)
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}))
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "defaultEnvName", Value: "defaultEnvValue"}))
-			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(2))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(coreV1.EnvVar{Name: "NODETOOL_ARGS", Value: "-DnodetoolArg=testArg"}))
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(HaveLen(3))
 		})
 
 		It("should define environment variable for extra classpath in main container and nothing else when pod.env is empty", func() {

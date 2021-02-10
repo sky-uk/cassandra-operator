@@ -484,7 +484,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 		Lifecycle: &v1.Lifecycle{
 			PreStop: &v1.Handler{
 				Exec: &v1.ExecAction{
-					Command: []string{"/bin/sh", "-c", "nodetool drain"},
+					Command: []string{"/bin/sh", "-c", "nodetool ${NODETOOL_ARGS} drain"},
 				},
 			},
 		},

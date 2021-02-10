@@ -25,10 +25,10 @@ var _ = Describe("Create", func() {
 	It("should create a snapshot for each specified keyspace on each node of the cluster", func() {
 		// given
 		snapshotClusterPods := []*v1.Pod{
-			CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
-			CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
 		}
-		noSnapshotClusterPod := CassandraPodExistsWithLabels(OperatorLabel, "mycluster-2", "app", "mycluster-2")
+		noSnapshotClusterPod := ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-2", "app", "mycluster-2")
 
 		// when
 		startTime := time.Now()
@@ -57,9 +57,43 @@ var _ = Describe("Create", func() {
 		Expect(SnapshotListForPod(noSnapshotClusterPod)).To(HaveLen(0))
 	})
 
+	It("should create a snapshot for each specified keyspace on each node of the cluster", func() {
+		// given
+		snapshotClusterPods := []*v1.Pod{
+			ACassandraPodWithDefaults().WithoutEnvironmentVariables().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+			ACassandraPodWithDefaults().WithoutEnvironmentVariables().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1"),
+		}
+		noSnapshotClusterPod := ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-2", "app", "mycluster-2")
+
+		// when
+		startTime := time.Now()
+		snapshotPod := RunCommandInCassandraSnapshotPod(
+			"mycluster-1",
+			"/cassandra-snapshot", "create",
+			"-L", "debug",
+			"-n", Namespace,
+			"-k", "system_auth,system_traces",
+			"-l", fmt.Sprintf("%s=%s,%s=%s", OperatorLabel, "mycluster-1", "app", "mycluster-1"))
+		Eventually(PodIsTerminatedSuccessfully(snapshotPod), NodeTerminationDuration, 2*time.Second).Should(BeTrue())
+		stopTime := time.Now()
+
+		// then
+		for _, pod := range snapshotClusterPods {
+			snapshotsForPod, err := SnapshotListForPod(pod)
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, snapshot := range snapshotsForPod {
+				Expect(snapshot).To(Or(
+					BeForKeyspace("system_auth").AndWithinTimeRange(startTime, stopTime),
+					BeForKeyspace("system_traces").AndWithinTimeRange(startTime, stopTime),
+				))
+			}
+		}
+		Expect(SnapshotListForPod(noSnapshotClusterPod)).To(HaveLen(0))
+	})
 	It("should create a snapshot for all keyspaces when no keyspace is specified", func() {
 		// given
-		cassandraPod := CassandraPodExistsWithLabels(OperatorLabel, "mycluster-1", "app", "mycluster-1")
+		cassandraPod := ACassandraPodWithDefaults().Exists(OperatorLabel, "mycluster-1", "app", "mycluster-1")
 
 		// when
 		startTime := time.Now()

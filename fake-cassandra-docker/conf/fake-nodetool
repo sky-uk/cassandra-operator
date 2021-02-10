@@ -3,13 +3,28 @@ set -e
 
 snapshots_file=/tmp/snapshots
 
-if [ "$1" = "version" ]; then
+args=("$@")
+action_argument=
+
+for (( x=0; x<$#; x++ )); do
+    if [[ "${args[x]}" =~ ^(version|status|snapshot|listsnapshots|clearsnapshot|drain)$ ]];
+    then
+        action_argument=$x
+        break
+    fi
+done
+
+case "${args[action_argument]}" in
+ "version")
     echo "ReleaseVersion: 3.11"
-elif [ "$1" = "status" ]; then
+    ;;
+ "status")
     echo "UN ${NODE_LISTEN_ADDRESS}"
-elif [ "$1" = "snapshot" ]; then
-    snapshot_name=$3
-    shift 3
+    ;;
+ "snapshot")
+    snapshot_name_arg=${action_argument+2}
+    snapshot_name="${args[action_argument + 2]}"
+    shift ${snapshot_name_arg+5}
     keyspace_list=$@
     if [ -z "${keyspace_list}" ]; then
         keyspace_list="system_auth system_traces system_distributed"
@@ -21,15 +36,17 @@ elif [ "$1" = "snapshot" ]; then
     for keyspace in ${keyspace_list}; do
         echo "${snapshot_name} ${keyspace} mytable 0 bytes 0 bytes" >> ${snapshots_file}
     done
-elif [ "$1" = "listsnapshots" ]; then
+    ;;
+ "listsnapshots")
     if [ -e ${snapshots_file} ]; then
         cat ${snapshots_file}
     else
         echo "There are no snapshots"
     fi
-elif [ "$1" = "clearsnapshot" ]; then
-    snapshot_name=$3
-    keyspace=$5
+    ;;
+ "clearsnapshot")
+    snapshot_name="${args[action_argument + 2]}"
+    keyspace="${args[action_argument + 4]}"
     if [ -n "${keyspace}" ]; then
         if [ -e ${snapshots_file} ]; then
             sed -i "/$snapshot_name $keyspace /d" ${snapshots_file}
@@ -37,4 +54,12 @@ elif [ "$1" = "clearsnapshot" ]; then
     else
         rm -f ${snapshots_file}
     fi
-fi
+    ;;
+ "drain")
+    echo "Draining cassandra node"
+    ;;
+  *)
+    echo "No defined nodetool arguments were passed into fake-nodetool"
+    exit 1
+    ;;
+esac

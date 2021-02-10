@@ -1,4 +1,8 @@
 # Changes
+
+## 0.85.2-alpha
+
+- [FEATURE] [Pass through NODETOOL_ARGS to all nodetool commands used in the operator](#254) (@chuckydev)
 ## 0.85.1-alpha
 
 - [FEATURE] [Add env var block to cassandra pod spec](#252) (@Bez625)

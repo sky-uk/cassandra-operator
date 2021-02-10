@@ -344,6 +344,10 @@ func (p *PodSpecBuilder) WithDefaults() *PodSpecBuilder {
 				Name:  "defaultEnvName",
 				Value: "defaultEnvValue",
 			},
+			v1alpha1.CassEnvVar{
+				Name:  "NODETOOL_ARGS",
+				Value: "-DnodetoolArg=testArg",
+			},
 		})
 }
 

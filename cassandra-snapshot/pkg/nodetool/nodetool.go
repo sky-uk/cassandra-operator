@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+const (
+	nodetoolArguments = "NODETOOL_ARGS"
+)
+
 // Nodetool provides an interface to nodetool functions running on Cassandra pods within a Kubernetes cluster.
 type Nodetool struct {
 	kubeClientset *kubernetes.Clientset
@@ -41,21 +45,19 @@ func New(kubeClientset *kubernetes.Clientset, restConfig *rest.Config) *Nodetool
 // a timestamp.
 func (n *Nodetool) CreateSnapshot(snapshotTimestamp time.Time, keyspaces []string, pod *v1.Pod, snapshotCreationTimeout time.Duration) error {
 	snapshotName := strconv.FormatInt(snapshotTimestamp.Unix(), 10)
-	args := []string{"nodetool", "snapshot", "-t", snapshotName}
+
 	log.Infof("Creating Snapshot %s for pod %s and keyspaces %v", snapshotName, pod.Name, keyspaces)
+	command := fmt.Sprintf("nodetool ${%s} snapshot -t %s -- %s", nodetoolArguments, snapshotName, strings.Join(keyspaces, " "))
 
-	for _, ks := range keyspaces {
-		args = append(args, ks)
-	}
-
-	_, err := n.runCommand(pod, snapshotCreationTimeout, args)
+	_, err := n.runCommand(pod, snapshotCreationTimeout, command)
 	return err
 }
 
 // GetSnapshots returns the Snapshots found on a given Pod, filtered through the supplied SnapshotFilter.
 func (n *Nodetool) GetSnapshots(pod *v1.Pod, timeout time.Duration, filter SnapshotFilter) ([]Snapshot, error) {
 	var snapshots []Snapshot
-	output, err := n.runCommand(pod, timeout, []string{"nodetool", "listsnapshots"})
+	command := fmt.Sprintf("nodetool ${%s} listsnapshots", nodetoolArguments)
+	output, err := n.runCommand(pod, timeout, command)
 	if err != nil {
 		return snapshots, fmt.Errorf("error while listing snapshots on pod %s: %v", pod.Name, err)
 	}
@@ -75,11 +77,12 @@ func (n *Nodetool) GetSnapshots(pod *v1.Pod, timeout time.Duration, filter Snaps
 
 // DeleteSnapshot deletes the given Snapshot from the given Pod.
 func (n *Nodetool) DeleteSnapshot(pod *v1.Pod, snapshot *Snapshot, timeout time.Duration) error {
-	_, err := n.runCommand(pod, timeout, []string{"nodetool", "clearsnapshot", "-t", snapshot.Name, "--", snapshot.Keyspace})
+	command := fmt.Sprintf("nodetool ${%s} clearsnapshot -t %s -- %s", nodetoolArguments, snapshot.Name, snapshot.Keyspace)
+	_, err := n.runCommand(pod, timeout, command)
 	return err
 }
 
-func (n *Nodetool) runCommand(pod *v1.Pod, timeout time.Duration, args []string) (string, error) {
+func (n *Nodetool) runCommand(pod *v1.Pod, timeout time.Duration, command string) (string, error) {
 	execRequest := n.kubeClientset.CoreV1().RESTClient().Post().
 		Timeout(timeout).
 		Resource("pods").
@@ -89,6 +92,8 @@ func (n *Nodetool) runCommand(pod *v1.Pod, timeout time.Duration, args []string)
 		Param("stdout", "true").
 		Param("stderr", "true").
 		Param("container", "cassandra")
+
+	args := []string{"/bin/sh", "-c", command}
 
 	for _, arg := range args {
 		execRequest = execRequest.Param("command", arg)

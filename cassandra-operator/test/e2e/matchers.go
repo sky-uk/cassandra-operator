@@ -228,6 +228,7 @@ type ContainerExpectation struct {
 	ReadinessProbePeriod           time.Duration
 	ReadinessProbeInitialDelay     time.Duration
 	CassEnv                        map[string]string
+	LifecyclePreStopCommand        []string
 }
 
 type haveContainer struct {
@@ -328,6 +329,10 @@ func (expectation *ContainerExpectation) matchContainerSpec(container coreV1.Con
 
 	if container.ReadinessProbe.InitialDelaySeconds != int32(expectation.ReadinessProbeInitialDelay.Seconds()) {
 		return false, fmt.Errorf("expected readiness initial delay to be %d, actual %d", int32(expectation.ReadinessProbeInitialDelay.Seconds()), container.ReadinessProbe.InitialDelaySeconds)
+	}
+
+	if expectation.LifecyclePreStopCommand != nil && !reflect.DeepEqual(container.Lifecycle.PreStop.Exec.Command, expectation.LifecyclePreStopCommand) {
+		return false, fmt.Errorf("expected prestop command %s equal %s ", container.Lifecycle.PreStop.Exec.Command, expectation.LifecyclePreStopCommand)
 	}
 
 	for _, port := range container.Ports {
