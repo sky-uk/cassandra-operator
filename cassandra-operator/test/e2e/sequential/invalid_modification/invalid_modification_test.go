@@ -144,7 +144,7 @@ var _ = Context("forbidden cluster modifications", func() {
 		// then
 		By("recording a warning event about the forbidden change")
 
-		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), EventPublicationTimeout, CheckInterval).Should(HaveEvent(EventExpectation{
+		Eventually(CassandraEventsFor(Namespace, multipleNodeCluster.Name), 90*time.Second, CheckInterval).Should(HaveEvent(EventExpectation{
 			Type:                 coreV1.EventTypeWarning,
 			Reason:               cluster.InvalidChangeEvent,
 			Message:              "spec.Pod.Env: Forbidden: spec.Pod.env cannot contain reserved variable with Name: EXTRA_CLASSPATH",
