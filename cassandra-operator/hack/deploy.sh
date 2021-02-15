@@ -30,19 +30,18 @@ function waitForDeployment {
     echo "Deployment is ready"
 }
 
-
 function deployOperator() {
     local operatorImage=$1
     local context=$2
     local namespace=$3
     local ingressHost=$4
+    local k8Resources=$5
     local deployment=cassandra-operator
     local operatorArgs='["--log-level=debug"]'
     local tmpDir=$(mktemp -d)
     local imageVersion=$(echo $operatorImage | grep -o 'v\(.*\)$' | sed s/v//g)
     trap '{ CODE=$?; rm -rf ${tmpDir} ; exit ${CODE}; }' EXIT
 
-    k8Resources="cassandra-operator-rbac.yml cassandra-node-rbac.yml cassandra-operator-deployment.yml cassandra-snapshot.yml cassandra-operator-crd.yml"
     for k8Resource in ${k8Resources}
     do
         sed -e "s@\$TARGET_NAMESPACE@$namespace@g" \
@@ -63,4 +62,11 @@ usage="Usage: CONTEXT=<ctx> IMAGE=<dockerImage> NAMESPACE=<namespace> INGRESS_HO
 : ${NAMESPACE?${usage}}
 : ${INGRESS_HOST?${usage}}
 
-deployOperator ${IMAGE} ${CONTEXT} ${NAMESPACE} ${INGRESS_HOST}
+WITH_CRD=${WITH_CRD:="false"}
+if [ "$WITH_CRD" = "true" ]; then
+  K8RESOURCES="cassandra-operator-rbac.yml cassandra-node-rbac.yml cassandra-operator-deployment.yml cassandra-snapshot.yml cassandra-operator-crd.yml"
+  deployOperator ${IMAGE} ${CONTEXT} ${NAMESPACE} ${INGRESS_HOST} "${K8RESOURCES}"
+else
+  K8RESOURCES="cassandra-operator-rbac.yml cassandra-node-rbac.yml cassandra-operator-deployment.yml cassandra-snapshot.yml"
+  deployOperator ${IMAGE} ${CONTEXT} ${NAMESPACE} ${INGRESS_HOST} "${K8RESOURCES}"
+fi

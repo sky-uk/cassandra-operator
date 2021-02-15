@@ -139,9 +139,14 @@ e2e-test-sequential: ensure-test-report-dir-exists
 docker-image: go-build common-docker-build
 
 push-image: docker-image common-docker-push
+
 deploy-operator:
 	@echo "== deploy-operator"
-	IMAGE=$(IMAGE_TO_DEPLOY) KUBECONFIG=$(KUBECONFIG) CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) INGRESS_HOST=$(NAMESPACE).cassandra-operator.$(DOMAIN) $(projectDir)/hack/deploy.sh
+	IMAGE=$(IMAGE_TO_DEPLOY) KUBECONFIG=$(KUBECONFIG) CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) INGRESS_HOST=$(NAMESPACE).cassandra-operator.$(DOMAIN) WITH_CRD="true" $(projectDir)/hack/deploy.sh
+
+deploy-operator-without-crd:
+	@echo "== deploy-operator-without-crd"
+	IMAGE=$(IMAGE_TO_DEPLOY) KUBECONFIG=$(KUBECONFIG) CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) INGRESS_HOST=$(NAMESPACE).cassandra-operator.$(DOMAIN) WITH_CRD="false" $(projectDir)/hack/deploy.sh
 
 validate-licences:
 	@echo "== validate licences"
