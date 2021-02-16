@@ -46,7 +46,9 @@ go-install:
 	cp -v $(buildDir)/bin/cassandra-sidecar $(shell go env GOPATH)/bin/cassandra-sidecar
 
 fmt:
-	go fmt ./...
+ifneq (, $(shell gofmt -l .))
+	$(error "gofmt found formatting issues: $(shell gofmt -l .). You may want to run `go fmt ./...` from the module folder")
+endif
 
 validate-licences:
 	@echo "== validate licences"
