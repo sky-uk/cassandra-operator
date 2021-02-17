@@ -5,6 +5,7 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/test/apis"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -36,19 +37,19 @@ func TestCluster(t *testing.T) {
 var _ = Describe("identification of custom config maps", func() {
 	It("should look like a custom configmap when it ending with the correct suffix", func() {
 		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config"}}
-		Expect(LooksLikeACassandraConfigMap(&configMap)).To(BeTrue())
+		Expect(looksLikeACassandraConfigMap(&configMap)).To(BeTrue())
 	})
 
 	It("should not look like a custom configmap when not ending with the correct suffix", func() {
 		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-more"}}
-		Expect(LooksLikeACassandraConfigMap(&configMap)).To(BeFalse())
+		Expect(looksLikeACassandraConfigMap(&configMap)).To(BeFalse())
 	})
 
 	It("should identify when a custom config map is not related to any cluster", func() {
 		clusters := map[string]*Cluster{"cluster1": {definition: &v1alpha1.Cassandra{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1"}}}}
 		configMap := coreV1.ConfigMap{ObjectMeta: metaV1.ObjectMeta{Name: "cluster1-config-for-something-else"}}
 
-		Expect(ConfigMapBelongsToAManagedCluster(clusters, &configMap)).To(BeFalse())
+		Expect(configMapBelongsToAManagedCluster(clusters, &configMap)).To(BeFalse())
 	})
 })
 
@@ -1107,6 +1108,21 @@ var _ = Describe("creation of snapshot cleanup job", func() {
 func ACluster(clusterDef *v1alpha1.Cassandra) *Cluster {
 	v1alpha1helpers.SetDefaultsForCassandra(clusterDef, nil)
 	return New(clusterDef)
+}
+
+// configMapBelongsToAManagedCluster determines whether the supplied ConfigMap belongs to a managed cluster
+func configMapBelongsToAManagedCluster(managedClusters map[string]*Cluster, configMap *coreV1.ConfigMap) bool {
+	for _, mc := range managedClusters {
+		if configMap.Name == mc.definition.CustomConfigMapName() {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeACassandraConfigMap determines whether the supplied ConfigMap could belong to a managed cluster
+func looksLikeACassandraConfigMap(configMap *coreV1.ConfigMap) bool {
+	return strings.HasSuffix(configMap.Name, "-config")
 }
 
 //

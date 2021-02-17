@@ -5,10 +5,6 @@ import (
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/hash"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/imageversion"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/util/ptr"
-	"regexp"
-	"strings"
-	"time"
-
 	appsv1 "k8s.io/api/apps/v1beta2"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/api/batch/v1beta1"
@@ -16,59 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"regexp"
+	"strings"
 
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	v1alpha1helpers "github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1/helpers"
-)
-
-const (
-	// UserID is the ID of the operating system user which the various containers provisioned by the operator should
-	// be run as.
-	UserID = int64(999)
-
-	// GroupID is the primary group of the user which runs the containers.
-	GroupID = UserID
-
-	// ApplicationNameLabel is a recommended Kubernetes label applied to all resources created by the operator.
-	ApplicationNameLabel = "app.kubernetes.io/name"
-
-	// ApplicationInstanceLabel is a recommended Kubernetes label applied to all resources created by the operator.
-	ApplicationInstanceLabel = "app.kubernetes.io/instance"
-
-	// ApplicationVersionLabel is a recommended Kubernetes label applied to all resources created by the operator.
-	ApplicationVersionLabel = "app.kubernetes.io/version"
-
-	// ApplicationComponentLabel is a recommended Kubernetes label applied to all resources created by the operator.
-	ApplicationComponentLabel = "app.kubernetes.io/component"
-
-	// ManagedByLabel is a recommended Kubernetes label applied to all resources created by the operator.
-	ManagedByLabel = "app.kubernetes.io/managed-by"
-
-	// ManagedByCassandraOperator is the fixed value for the app.kubernetes.io/managed-by label.
-	ManagedByCassandraOperator = "cassandra-operator"
-
-	// ConfigHashAnnotation gives the name of the annotation that the operator attaches to pods when they have
-	// an associated custom config map.
-	ConfigHashAnnotation = "clusterConfigHash"
-
-	// SnapshotCronJob is the value of app.kubernetes.io/component for snapshot cronjobs
-	SnapshotCronJob = "snapshot"
-
-	// SnapshotCleanupCronJob is the value of app.kubernetes.io/component for snapshot cleanup cronjobs
-	SnapshotCleanupCronJob = "snapshot-cleanup"
-
-	// RackLabel is a label used to identify the rack name in a cluster
-	RackLabel       = "cassandra-operator/rack"
-	customConfigDir = "/custom-config"
-
-	cassandraContainerName             = "cassandra"
-	cassandraBootstrapperContainerName = "cassandra-bootstrapper"
-	cassandraSidecarContainerName      = "cassandra-sidecar"
-
-	configurationVolumeName = "configuration"
-	extraLibVolumeName      = "extra-lib"
-
-	healthServerPort = 8080
 )
 
 var (
@@ -139,6 +87,11 @@ func (c *Cluster) Racks() []v1alpha1.Rack {
 	return c.definition.Spec.Racks
 }
 
+// CustomConfigMapVolumeName returns the custom config map name
+func (c *Cluster) CustomConfigMapVolumeName() string {
+	return fmt.Sprintf("cassandra-custom-config-%s", c.definition.Name)
+}
+
 // CreateStatefulSetForRack creates a StatefulSet based on the rack details
 func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) *appsv1.StatefulSet {
 	sts := &appsv1.StatefulSet{
@@ -174,8 +127,8 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 						c.createCassandraContainer(rack),
 						c.createCassandraSidecarContainer(rack),
 					},
-					Volumes:  c.createPodVolumes(rack),
-					Affinity: c.createAffinityRules(rack),
+					Volumes:  createPodVolumes(rack),
+					Affinity: createAffinityRules(rack, c.QualifiedName()),
 				},
 			},
 
@@ -194,40 +147,6 @@ func (c *Cluster) CreateStatefulSetForRack(rack *v1alpha1.Rack, customConfigMap 
 func (c *Cluster) UpdateStatefulSetToDesiredState(currentStatefulSet *appsv1.StatefulSet, targetRack *v1alpha1.Rack, customConfigMap *v1.ConfigMap) {
 	desiredStatefulSet := c.CreateStatefulSetForRack(targetRack, customConfigMap)
 	currentStatefulSet.Spec = desiredStatefulSet.Spec
-}
-
-func (c *Cluster) createAffinityRules(rack *v1alpha1.Rack) *v1.Affinity {
-	affinity := v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							ApplicationInstanceLabel: c.QualifiedName(),
-							ManagedByLabel:           ManagedByCassandraOperator,
-						},
-					},
-					TopologyKey: "kubernetes.io/hostname",
-				},
-			},
-		},
-		NodeAffinity: &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-				NodeSelectorTerms: []v1.NodeSelectorTerm{
-					{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      "failure-domain.beta.kubernetes.io/zone",
-								Operator: v1.NodeSelectorOpIn,
-								Values:   []string{rack.Zone},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return &affinity
 }
 
 // CreateService creates a headless service for the supplied cluster definition.
@@ -269,7 +188,7 @@ func (c *Cluster) CreateSnapshotJob() *v1beta1.CronJob {
 
 	return c.createCronJob(
 		c.definition.SnapshotJobName(),
-		"snapshot",
+		SnapshotCronJob,
 		v1alpha1.SnapshotServiceAccountName,
 		c.definition.Spec.Snapshot.Schedule,
 		c.CreateSnapshotContainer(),
@@ -408,24 +327,6 @@ func (c *Cluster) objectMetadataWithOwner(name string, extraLabels ...string) me
 	return meta
 }
 
-func getExtraClassPathVar() v1.EnvVar {
-	return v1.EnvVar{Name: "EXTRA_CLASSPATH", Value: "/extra-lib/cassandra-seed-provider.jar"}
-}
-
-func addCassEnvVarToEnvVars(cassEnvVar v1alpha1.CassEnvVar, envVars []v1.EnvVar, i int) {
-	envVar := v1.EnvVar{}
-	if cassEnvVar.ValueFrom != nil {
-		envVar = v1.EnvVar{
-			Name:      cassEnvVar.Name,
-			ValueFrom: &v1.EnvVarSource{SecretKeyRef: &cassEnvVar.ValueFrom.SecretKeyRef},
-		}
-	} else {
-		envVar = v1.EnvVar{Name: cassEnvVar.Name, Value: cassEnvVar.Value}
-	}
-	envVars[i] = envVar
-
-}
-
 func (c *Cluster) createContainerEnvVars() []v1.EnvVar {
 
 	if c.definition.Spec.Pod.Env == nil || len(*c.definition.Spec.Pod.Env) == 0 {
@@ -489,7 +390,7 @@ func (c *Cluster) createCassandraContainer(rack *v1alpha1.Rack) v1.Container {
 			},
 		},
 		Env:          c.createContainerEnvVars(),
-		VolumeMounts: c.createVolumeMounts(rack),
+		VolumeMounts: createVolumeMounts(rack),
 	}
 }
 
@@ -567,79 +468,6 @@ func (c *Cluster) createCassandraDataPersistentVolumeClaimForRack(rack *v1alpha1
 	return persistentVolumeClaim
 }
 
-func (c *Cluster) createVolumeMounts(rack *v1alpha1.Rack) []v1.VolumeMount {
-	mounts := []v1.VolumeMount{
-		{Name: configurationVolumeName, MountPath: v1alpha1.ConfigurationVolumeMountPath},
-		{Name: extraLibVolumeName, MountPath: v1alpha1.ExtraLibVolumeMountPath},
-	}
-
-	for i := range rack.Storage {
-		mounts = append(mounts, v1.VolumeMount{
-			Name:      resourceNameFromPath(*rack.Storage[i].Path),
-			MountPath: *rack.Storage[i].Path,
-		})
-	}
-
-	return mounts
-}
-
-func (c *Cluster) createCustomConfigVolumeMount() v1.VolumeMount {
-	return v1.VolumeMount{
-		Name:      c.customConfigMapVolumeName(),
-		MountPath: customConfigDir,
-	}
-}
-
-func (c *Cluster) createPodVolumes(rack *v1alpha1.Rack) []v1.Volume {
-	volumes := []v1.Volume{
-		emptyDir("configuration"),
-		emptyDir("extra-lib"),
-	}
-
-	for i := range rack.Storage {
-		if rack.Storage[i].EmptyDir != nil {
-			volumes = append(volumes, emptyDir(resourceNameFromPath(*rack.Storage[i].Path)))
-		}
-	}
-	return volumes
-}
-
-func emptyDir(name string) v1.Volume {
-	return v1.Volume{
-		Name:         name,
-		VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}},
-	}
-}
-
-func (c *Cluster) createConfigMapVolume(configMap *v1.ConfigMap) v1.Volume {
-	return v1.Volume{
-		Name: c.customConfigMapVolumeName(),
-		VolumeSource: v1.VolumeSource{
-			ConfigMap: &v1.ConfigMapVolumeSource{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: configMap.Name,
-				},
-			},
-		},
-	}
-}
-
-func createHTTPProbe(probe *v1alpha1.Probe, path string, port int) *v1.Probe {
-	return &v1.Probe{
-		Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
-				Port: intstr.FromInt(port),
-				Path: path,
-			},
-		},
-		InitialDelaySeconds: *probe.InitialDelaySeconds,
-		PeriodSeconds:       *probe.PeriodSeconds,
-		TimeoutSeconds:      *probe.TimeoutSeconds,
-		FailureThreshold:    *probe.FailureThreshold,
-		SuccessThreshold:    *probe.SuccessThreshold,
-	}
-}
-
 // AddCustomConfigVolumeToStatefulSet updates the provided statefulset to mount the configmap as a volume
 func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.StatefulSet, _ *v1alpha1.Rack, customConfigMap *v1.ConfigMap) {
 	if statefulSet.Spec.Template.Annotations == nil {
@@ -647,41 +475,25 @@ func (c *Cluster) AddCustomConfigVolumeToStatefulSet(statefulSet *appsv1.Statefu
 	}
 	statefulSet.Spec.Template.Annotations[ConfigHashAnnotation] = hash.ConfigMapHash(customConfigMap)
 
-	if !c.hasConfigMapVolume(statefulSet) {
-		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, c.createConfigMapVolume(customConfigMap))
+	if !hasConfigMapVolume(statefulSet, c.CustomConfigMapVolumeName()) {
+		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
+			createConfigMapVolume(customConfigMap, c.CustomConfigMapVolumeName()))
 	}
 
 	for i := range statefulSet.Spec.Template.Spec.InitContainers {
 		if statefulSet.Spec.Template.Spec.InitContainers[i].Name == cassandraBootstrapperContainerName &&
-			!c.hasConfigMapVolumeMount(&statefulSet.Spec.Template.Spec.InitContainers[i]) {
-			statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts, c.createCustomConfigVolumeMount())
+			!hasConfigMapVolumeMount(&statefulSet.Spec.Template.Spec.InitContainers[i], c.CustomConfigMapVolumeName()) {
+			statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts,
+				createCustomConfigVolumeMount(c.CustomConfigMapVolumeName()))
 		}
 	}
-}
-
-func (c *Cluster) hasConfigMapVolumeMount(container *v1.Container) bool {
-	for _, mount := range container.VolumeMounts {
-		if mount.Name == c.customConfigMapVolumeName() {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *Cluster) hasConfigMapVolume(statefulSet *appsv1.StatefulSet) bool {
-	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
-		if volume.Name == c.customConfigMapVolumeName() {
-			return true
-		}
-	}
-	return false
 }
 
 // RemoveCustomConfigVolumeFromStatefulSet updates the provided statefulset to unmount the configmap as a volume
 func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.StatefulSet, _ *v1alpha1.Rack, _ *v1.ConfigMap) {
 	var volumesAfterRemoval []v1.Volume
 	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
-		if volume.Name != c.customConfigMapVolumeName() {
+		if volume.Name != c.CustomConfigMapVolumeName() {
 			volumesAfterRemoval = append(volumesAfterRemoval, volume)
 		}
 	}
@@ -693,7 +505,7 @@ func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.St
 	for i := range statefulSet.Spec.Template.Spec.InitContainers {
 		if statefulSet.Spec.Template.Spec.InitContainers[i].Name == cassandraBootstrapperContainerName {
 			for _, volumeMount := range statefulSet.Spec.Template.Spec.InitContainers[i].VolumeMounts {
-				if volumeMount.Name != c.customConfigMapVolumeName() {
+				if volumeMount.Name != c.CustomConfigMapVolumeName() {
 					volumesMountAfterRemoval = append(volumesMountAfterRemoval, volumeMount)
 				}
 			}
@@ -702,9 +514,6 @@ func (c *Cluster) RemoveCustomConfigVolumeFromStatefulSet(statefulSet *appsv1.St
 	}
 }
 
-func (c *Cluster) customConfigMapVolumeName() string {
-	return fmt.Sprintf("cassandra-custom-config-%s", c.definition.Name)
-}
 func (c *Cluster) createInitConfigContainer() v1.Container {
 	memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
 
@@ -713,7 +522,7 @@ func (c *Cluster) createInitConfigContainer() v1.Container {
 		Image:   *c.definition.Spec.Pod.Image,
 		Command: []string{"sh", "-c", "cp -vr /etc/cassandra/* /configuration"},
 		VolumeMounts: []v1.VolumeMount{
-			{Name: "configuration", MountPath: "/configuration"},
+			{Name: configurationVolumeName, MountPath: "/" + configurationVolumeName},
 		},
 		Resources: v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -730,8 +539,8 @@ func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.C
 	memory := minQuantity(*c.definition.Spec.Pod.Resources.Requests.Memory(), initContainerMemoryRequest)
 
 	mounts := []v1.VolumeMount{
-		{Name: "configuration", MountPath: "/configuration"},
-		{Name: "extra-lib", MountPath: "/extra-lib"},
+		{Name: configurationVolumeName, MountPath: "/" + configurationVolumeName},
+		{Name: extraLibVolumeName, MountPath: "/" + extraLibVolumeName},
 	}
 
 	return v1.Container{
@@ -748,39 +557,4 @@ func (c *Cluster) createCassandraBootstrapperContainer(rack *v1alpha1.Rack) v1.C
 		},
 		VolumeMounts: mounts,
 	}
-}
-
-// ConfigMapBelongsToAManagedCluster determines whether the supplied ConfigMap belongs to a managed cluster
-func ConfigMapBelongsToAManagedCluster(managedClusters map[string]*Cluster, configMap *v1.ConfigMap) bool {
-	for _, mc := range managedClusters {
-		if configMap.Name == mc.definition.CustomConfigMapName() {
-			return true
-		}
-	}
-	return false
-}
-
-// LooksLikeACassandraConfigMap determines whether the supplied ConfigMap could belong to a managed cluster
-func LooksLikeACassandraConfigMap(configMap *v1.ConfigMap) bool {
-	return strings.HasSuffix(configMap.Name, "-config")
-}
-
-func durationDays(days *int32) time.Duration {
-	return time.Duration(*days) * time.Hour * 24
-}
-
-func durationSeconds(seconds *int32) time.Duration {
-	return time.Duration(*seconds) * time.Second
-}
-
-func minQuantity(r1, r2 resource.Quantity) resource.Quantity {
-	d := r1.Cmp(r2)
-	if d > 0 {
-		return r2
-	}
-	return r1
-}
-
-func resourceNameFromPath(path string) string {
-	return alphanumericChars.ReplaceAllString(strings.TrimPrefix(path, "/"), "-")
 }
