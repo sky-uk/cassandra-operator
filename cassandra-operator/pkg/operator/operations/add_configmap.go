@@ -22,7 +22,7 @@ type AddCustomConfigOperation struct {
 func (o *AddCustomConfigOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config created for cluster %s", o.cassandra.QualifiedName())
-	for _, rack := range o.cassandra.Spec.Racks {
+	for _, rack := range o.cassandra.SortedRacks() {
 		err := o.statefulSetAccessor.updateStatefulSet(c, o.configMap, &rack, c.AddCustomConfigVolumeToStatefulSet)
 		if err == cluster.ErrReconciliationInterrupted {
 			return true, nil

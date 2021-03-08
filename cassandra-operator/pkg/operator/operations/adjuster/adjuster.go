@@ -58,10 +58,6 @@ func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster 
 	addedRacks, matchedRacks, _ := v1alpha1helpers.MatchRacks(&oldCluster.Spec, &newCluster.Spec)
 	var clusterChanges []ClusterChange
 
-	for _, addedRack := range addedRacks {
-		clusterChanges = append(clusterChanges, ClusterChange{Rack: addedRack, ChangeType: AddRack})
-	}
-
 	if r.podSpecHasChanged(oldCluster, newCluster) || r.rackStorageHasChanged(matchedRacks) {
 		for _, matchedRack := range matchedRacks {
 			clusterChanges = append(clusterChanges, ClusterChange{Rack: matchedRack.New, ChangeType: UpdateRack})
@@ -70,6 +66,10 @@ func (r *Adjuster) ChangesForCluster(oldCluster *v1alpha1.Cassandra, newCluster 
 		for _, matchedRack := range r.scaledUpRacks(matchedRacks) {
 			clusterChanges = append(clusterChanges, ClusterChange{Rack: matchedRack, ChangeType: UpdateRack})
 		}
+	}
+
+	for _, addedRack := range addedRacks {
+		clusterChanges = append(clusterChanges, ClusterChange{Rack: addedRack, ChangeType: AddRack})
 	}
 	return clusterChanges
 }

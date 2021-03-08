@@ -20,7 +20,7 @@ type DeleteCustomConfigOperation struct {
 func (o *DeleteCustomConfigOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config deleted for cluster %s", o.cassandra.QualifiedName())
-	for _, rack := range o.cassandra.Spec.Racks {
+	for _, rack := range o.cassandra.SortedRacks() {
 		err := o.statefulSetAccessor.updateStatefulSet(c, o.configMap, &rack, c.RemoveCustomConfigVolumeFromStatefulSet)
 		if err == cluster.ErrReconciliationInterrupted {
 			return true, nil

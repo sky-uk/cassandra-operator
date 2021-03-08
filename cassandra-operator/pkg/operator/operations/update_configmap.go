@@ -2,6 +2,7 @@ package operations
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/apis/cassandra/v1alpha1"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/cluster"
 	"github.com/sky-uk/cassandra-operator/cassandra-operator/pkg/operator/operations/adjuster"
@@ -22,7 +23,8 @@ type UpdateCustomConfigOperation struct {
 func (o *UpdateCustomConfigOperation) Execute() (bool, error) {
 	c := cluster.New(o.cassandra)
 	o.eventRecorder.Eventf(o.cassandra, v1.EventTypeNormal, cluster.ClusterUpdateEvent, "Custom config updated for cluster %s", o.cassandra.QualifiedName())
-	for _, rack := range o.cassandra.Spec.Racks {
+	for _, rack := range o.cassandra.SortedRacks() {
+		log.Debugf("Updating RACK:  %s", rack.Name)
 		patchChange := o.adjuster.CreateConfigMapHashPatchForRack(&rack, o.configMap)
 		err := o.statefulSetAccessor.patchStatefulSet(c, patchChange)
 		if err == cluster.ErrReconciliationInterrupted {

@@ -275,6 +275,11 @@ func (c *Cassandra) CustomConfigMapName() string {
 	return fmt.Sprintf("%s-config", c.Name)
 }
 
+// SortedRacks returns the racks from the spec sorted by name.
+func (c *Cassandra) SortedRacks() []Rack {
+	return sortedRacks(c.Spec.Racks)
+}
+
 // Equal checks the equality of two CassEnvVar.
 func (cev CassEnvVar) Equal(other CassEnvVar) bool {
 	return cmp.Equal(cev.Name, other.Name) &&
