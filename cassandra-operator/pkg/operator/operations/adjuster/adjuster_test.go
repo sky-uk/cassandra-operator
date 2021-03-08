@@ -325,14 +325,14 @@ var _ = Describe("cluster events", func() {
 			changes := adjuster.ChangesForCluster(oldCluster, newCluster)
 
 			Expect(changes).To(HaveLen(3))
-			Expect(changes[0].ChangeType).To(Equal(AddRack))
-			Expect(changes[0].Rack.Name).To(Equal("c"))
+			Expect(changes[0].ChangeType).To(Equal(UpdateRack))
+			Expect(changes[0].Rack.Name).To(Or(Equal("a"), Equal("b")))
 
 			Expect(changes[1].ChangeType).To(Equal(UpdateRack))
 			Expect(changes[1].Rack.Name).To(Or(Equal("a"), Equal("b")))
 
-			Expect(changes[2].ChangeType).To(Equal(UpdateRack))
-			Expect(changes[2].Rack.Name).To(Or(Equal("a"), Equal("b")))
+			Expect(changes[2].ChangeType).To(Equal(AddRack))
+			Expect(changes[2].Rack.Name).To(Equal("c"))
 		})
 
 		It("should treat a scale up and update as a single update operation", func() {
